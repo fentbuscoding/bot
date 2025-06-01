@@ -5,6 +5,27 @@ from utils.betting import parse_bet
 import discord
 import random
 import asyncio
+from functools import wraps
+from discord.ext import commands
+from cogs.logging.stats_logger import StatsLogger
+
+def log_command(func):
+    """Decorator to log command usage"""
+    @wraps(func)
+    async def wrapper(self, ctx, *args, **kwargs):
+        if hasattr(self, 'stats_logger'):
+            self.stats_logger.log_command_usage(func.__name__)
+        return await func(self, ctx, *args, **kwargs)
+    return wrapper
+
+def logged_command(*args, **kwargs):
+    """Custom command decorator that adds logging"""
+    def decorator(func):
+        # First apply the command decorator
+        cmd = logged_command(*args, **kwargs)(func)
+        # Then apply the logging decorator
+        return log_command(cmd)
+    return decorator
 
 class Economy(commands.Cog):
     def __init__(self, bot):
@@ -12,6 +33,7 @@ class Economy(commands.Cog):
         self.logger = CogLogger(self.__class__.__name__)
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
+        self.stats_logger = StatsLogger()
 
     @commands.command(aliases=['bal', 'cash', 'bb'])
     async def balance(self, ctx, member: discord.Member = None):
@@ -95,6 +117,8 @@ class Economy(commands.Cog):
 
             if await db.update_wallet(ctx.author.id, -amount, ctx.guild.id):
                 if await db.update_bank(ctx.author.id, amount, ctx.guild.id):
+                    # Log successful deposit
+                    self.stats_logger.log_command_usage("deposit")
                     await ctx.reply(f"💰 Deposited **{amount:,}** {self.currency} into your bank!")
                 else:
                     await db.update_wallet(ctx.author.id, amount, ctx.guild.id)

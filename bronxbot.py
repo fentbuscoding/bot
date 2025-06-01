@@ -164,7 +164,8 @@ COG_DATA = {
         "cogs.Utility": "cog",
         # cogs.unique.economy is now split into multiple cogs
         "cogs.economy.Economy": "success",
-        "cogs.economy.Fishing": "success",
+        "cogs.economy.fishing.Fishing": "success",
+        "cogs.economy.fishing.AutoFishing": "success",
         "cogs.economy.Shop": "success",
         "cogs.economy.Trading": "success",
         "cogs.economy.Gambling": "success",
