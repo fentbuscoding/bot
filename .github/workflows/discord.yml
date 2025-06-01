@@ -10,12 +10,13 @@ jobs:
     steps:
       - name: Send Discord Embed via Curl
         run: |
-          # Process the commit message to preserve formatting
-          MESSAGE=$(echo '${{ github.event.head_commit.message }}' | jq -Rs . | sed 's/^"//;s/"$//')
+          # Get the raw commit message and properly escape it
+          RAW_MESSAGE=$(git log -1 --pretty=%B)
+          ESCAPED_MESSAGE=$(echo "$RAW_MESSAGE" | jq -Rs . | sed 's/^"//;s/"$//')
           
           PAYLOAD=$(jq -n --arg author "${{ github.actor }}" \
                           --arg author_avatar "${{ github.actor_avatar_url }}" \
-                          --arg message "$MESSAGE" \
+                          --arg message "$ESCAPED_MESSAGE" \
                           --arg url "${{ github.event.head_commit.url }}" \
                           --arg timestamp "${{ github.event.head_commit.timestamp }}" \
                           --arg version "${{ secrets.VERSION }}" \
