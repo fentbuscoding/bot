@@ -17,6 +17,7 @@ It's mainly written by one dude, but with all the [contributors on github](https
 ## Help
 `.h`, `.help`
 > sends a modal with buttons that allow you to view every command by category
+
 `.invite`, `.support`
 >  get an invite to the BronxBot [support server](https://discord.gg/jvyYWkj3ts)
 
@@ -81,6 +82,7 @@ price *= random.uniform(0.9, 1.1)
 
 `.balance [member]`
 > check your (or a members) wallet, bank & net-worth!
+
 `.bankupgrade`, `.bu`
 > purchase a bankupgrade to increase your bank limit
 
@@ -102,6 +104,7 @@ price *= random.uniform(0.9, 1.1)
 > `.deposit 50%`
 > `.deposit 3e5`
 > `.deposit 1000`
+
 `.withdraw [amount]`, `.w`, `.with`
 > withdraw money from your bank account
 > `.withdraw all`
