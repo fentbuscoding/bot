@@ -25,11 +25,10 @@ jobs:
             --arg message "$RAW_MESSAGE" \
             --arg url "${{ github.event.head_commit.url }}" \
             --arg timestamp "${{ github.event.head_commit.timestamp }}" \
-            --arg version "2.5.0a" \
             '{
               "embeds": [{
                 "title": "🚀 New Update Released!",
-                "description": ("**Version:** $version\n\n" + $message + "\n\n[View Full Changelog](" + $url + ")"),
+                "description": ("**Version:** 2.4.8a\n\n" + $message + "\n\n[View Full Changelog](" + $url + ")"),
                 "color": 5763719,
                 "footer": {
                   "text": ("Pushed by " + $author),
