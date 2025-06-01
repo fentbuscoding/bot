@@ -90,16 +90,44 @@ class Help(commands.Cog, ErrorHandler):
     def __init__(self, bot):
         ErrorHandler.__init__(self)
         self.bot = bot
+        logger.info("Help cog initialized")
     
-    @commands.command(name="invite", aliases=["add"])
+    @commands.command(aliases=['support'])
     async def invite(self, ctx):
-        await ctx.reply(embed=discord.Embed(
-            description=f"[Invite me](https://bronxbot.onrender.com/invite) to your server\nIf that link doesnt work [click here](https://discord.com/oauth2/authorize?client_id=828380019406929962&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbronxbot.onrender.com%2Fcallback&integration_type=0&scope=identify+guilds+bot)",
-            color=discord.Color.green()
-        ))
+        """Get the bot's invite link & support server."""
+        await self._send_invite(ctx)
+    
+    @discord.app_commands.command(name="invite", description="Get the bot's invite link and support server")
+    async def invite_slash(self, interaction: discord.Interaction):
+        """Slash command version of invite"""
+        await self._send_invite(interaction)
+    
+    async def _send_invite(self, ctx_or_interaction):
+        """Shared logic for both command types"""
+        embed = discord.Embed(
+            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts)",
+            color=0x2b2d31
+        )
+        embed.set_footer(text="thanks for using bronx bot!")
+        
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            await ctx_or_interaction.response.send_message(embed=embed)
+        else:
+            await ctx_or_interaction.reply(embed=embed)
 
     @commands.command(name="help", aliases=["h", "commands"])
     async def help(self, ctx, *, command=None):
+        """Show help information for commands"""
+        await self._send_help(ctx, command)
+    
+    @discord.app_commands.command(name="help", description="Show help information for commands")
+    @discord.app_commands.describe(command="The command or category to get help for")
+    async def help_slash(self, interaction: discord.Interaction, command: str = None):
+        """Slash command version of help"""
+        await self._send_help(interaction, command)
+    
+    async def _send_help(self, ctx_or_interaction, command=None):
+        """Shared logic for both command types"""
         if command:
             # Check if it's a cog first
             cog = self.bot.get_cog(command)
@@ -107,39 +135,41 @@ class Help(commands.Cog, ErrorHandler):
                 # Help for a cog
                 commands_list = cog.get_commands()
                 if not commands_list:
-                    return await ctx.reply(embed=discord.Embed(
+                    embed = discord.Embed(
                         description=f"no commands found in `{cog.qualified_name}`",
                         color=discord.Color.red()
-                    ))
+                    )
+                    return await self._respond(ctx_or_interaction, embed)
                 
                 embed = discord.Embed(
                     title=f"{cog.qualified_name} commands",
                     description="\n".join(
-                        f"`{ctx.prefix}{cmd.name} {cmd.signature}` - {cmd.help or 'no description'}"
+                        f"`/{cmd.name} {cmd.signature}` - {cmd.help or 'no description'}"
                         for cmd in sorted(commands_list, key=lambda x: x.name)
                     ),
-                    color=ctx.author.accent_color or discord.Color.blue()
+                    color=self._get_color(ctx_or_interaction)
                 )
                 embed.set_footer(text=f"{len(commands_list)} commands")
-                return await ctx.reply(embed=embed)
+                return await self._respond(ctx_or_interaction, embed)
 
             # Help for specific command
             cmd = self.bot.get_command(command.lower())
             if not cmd:
-                return await ctx.reply(embed=discord.Embed(
+                embed = discord.Embed(
                     description=f"couldn't find command `{command}`",
                     color=discord.Color.red()
-                ))
+                )
+                return await self._respond(ctx_or_interaction, embed)
             
             embed = discord.Embed(
                 description=(
-                    f"`{ctx.prefix}{cmd.name} {cmd.signature}`\n"
+                    f"`/{cmd.name} {cmd.signature}`\n"
                     f"{cmd.help or 'no description'}\n"
                     + (f"\n**aliases:** {', '.join([f'`{a}`' for a in cmd.aliases])}" if cmd.aliases else "")
                 ),
-                color=ctx.author.accent_color or discord.Color.blue()
+                color=self._get_color(ctx_or_interaction)
             )
-            return await ctx.reply(embed=embed)
+            return await self._respond(ctx_or_interaction, embed)
         
         # Paginated help menu
         pages = []
@@ -151,8 +181,10 @@ class Help(commands.Cog, ErrorHandler):
             if cog_name.lower() in ['help', 'jishaku', 'dev', 'moderation', 'votebans', 'stats', 'welcoming']:
                 continue
 
-            if ctx.author.id not in BOT_ADMINS and cog_name.lower() in ['admin', 'owner']:
-                continue
+            if isinstance(ctx_or_interaction, (discord.Interaction, commands.Context)):
+                user_id = ctx_or_interaction.user.id if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author.id
+                if user_id not in BOT_ADMINS and cog_name.lower() in ['admin', 'owner']:
+                    continue
             
             commands_list = [cmd for cmd in cog.get_commands() if not cmd.hidden]
             if not commands_list:
@@ -163,11 +195,11 @@ class Help(commands.Cog, ErrorHandler):
 
             embed = discord.Embed(
                 description=f"**{cog_name.lower()}**\n\n",
-                color=ctx.author.accent_color or discord.Color.blue()
+                color=self._get_color(ctx_or_interaction)
             )
             
             for cmd in sorted(commands_list, key=lambda x: x.name):
-                usage = f"{ctx.prefix}{cmd.name} {cmd.signature}".strip()
+                usage = f"/{cmd.name} {cmd.signature}".strip()
                 description = cmd.help or "no description"
                 if len(description) > 80:
                     description = description[:77] + "..."
@@ -180,16 +212,17 @@ class Help(commands.Cog, ErrorHandler):
         # Overview page
         overview_embed = discord.Embed(
             description=(
-                f"`{ctx.prefix}help <command>` for details\n\n"
+                f"`/help <command>` for details\n\n"
                 f"**commands:** {total_commands}\n"
                 f"**categories:** {len(pages)}"
             ),
-            color=ctx.author.accent_color or discord.Color.blue()
+            color=self._get_color(ctx_or_interaction)
         )
         pages.insert(0, overview_embed)
         
         # Create and send paginator
-        view = HelpPaginator(pages, ctx.author)
+        author = ctx_or_interaction.user if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author
+        view = HelpPaginator(pages, author)
         
         # Add select menu options
         select = view.select_category
@@ -202,9 +235,30 @@ class Help(commands.Cog, ErrorHandler):
             )
         
         view.update_buttons()
-        message = await ctx.reply(embed=pages[0], view=view)
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            message = await ctx_or_interaction.response.send_message(embed=pages[0], view=view)
+            if isinstance(message, discord.InteractionResponse):
+                # Need to fetch the message if it's an interaction response
+                message = await ctx_or_interaction.original_response()
+        else:
+            message = await ctx_or_interaction.reply(embed=pages[0], view=view)
+        
         view.message = message
         view.cog_page_map = cog_page_map
+    
+    def _get_color(self, ctx_or_interaction):
+        """Get the color based on context or interaction"""
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            return ctx_or_interaction.user.accent_color or discord.Color.blue()
+        else:
+            return ctx_or_interaction.author.accent_color or discord.Color.blue()
+    
+    async def _respond(self, ctx_or_interaction, embed):
+        """Respond to either context or interaction"""
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            await ctx_or_interaction.response.send_message(embed=embed)
+        else:
+            await ctx_or_interaction.reply(embed=embed)
 
     @help.error
     async def help_error(self, ctx, error):
@@ -213,11 +267,24 @@ class Help(commands.Cog, ErrorHandler):
             await ctx.reply("❌ Command not found!")
         else:
             await self.handle_error(ctx, error, "help")
+    
+    @help_slash.error
+    async def help_slash_error(self, interaction: discord.Interaction, error):
+        logger.error(f"Help slash command error: {error}")
+        await interaction.response.send_message("An error occurred with the help command.", ephemeral=True)
+
+    @invite_slash.error
+    async def invite_slash_error(self, interaction: discord.Interaction, error):
+        logger.error(f"Invite slash command error: {error}")
+        await interaction.response.send_message("An error occurred with the invite command.", ephemeral=True)
 
 
 async def setup(bot):
     try:
         await bot.add_cog(Help(bot))
+        # Sync commands
+        await bot.tree.sync()
+        logger.info("Help cog loaded and commands synced")
     except Exception as e:
         logger.error(f"Failed to load Help cog: {e}")
         raise e

@@ -541,6 +541,35 @@ class Admin(commands.Cog):
 
     @commands.command()
     @commands.is_owner()
+    async def clearcommands(self, ctx):
+        """Clear all slash commands"""
+        try:
+            # Clear global commands
+            self.bot.tree.clear_commands(guild=None)
+            await ctx.bot.tree.sync()
+            
+            # Clear guild-specific commands
+            cleared_guilds = 0
+            for guild in self.bot.guilds:
+                try:
+                    self.bot.tree.clear_commands(guild=guild)
+                    await ctx.bot.tree.sync(guild=guild)
+                    cleared_guilds += 1
+                except discord.Forbidden:
+                    print(f"Missing permissions in {guild.name} ({guild.id})")
+                    continue
+                except discord.HTTPException as e:
+                    print(f"Error in {guild.name}: {e}")
+                    continue
+            
+            await ctx.send(f"✅ Cleared global commands and {cleared_guilds}/{len(ctx.bot.guilds)} guild commands!")
+        
+        except Exception as e:
+            await ctx.send(f"❌ Error: {type(e).__name__}: {e}")
+            raise e
+
+    @commands.command()
+    @commands.is_owner()
     async def reset_economy(self, ctx, *, confirmation: str = None):
         """Reset everyone's balance, inventory, and economic data (Bot Owner Only)
         Usage: .reset_economy YES I WANT TO RESET EVERYTHING"""

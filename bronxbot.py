@@ -169,6 +169,8 @@ COG_DATA = {
         "cogs.economy.Shop": "success",
         "cogs.economy.Trading": "success",
         "cogs.economy.Gambling": "success",
+        "cogs.economy.Work": "success",
+        "cogs.economy.Bazaar": "success",
     },
     "colors": {
         "error": "\033[31m",      # Red
@@ -415,6 +417,16 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         print(f"Unhandled error in {ctx.command}: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
 
+@bot.command()
+@commands.is_owner()
+async def syncslash(ctx):
+    """Sync slash commands globally"""
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"Synced {len(synced)} commands globally")
+    except Exception as e:
+        await ctx.send(f"Failed to sync commands: {e}")
+
 @bot.command(name="restart", aliases=["reboot"])
 @commands.is_owner()
 async def restart(ctx):
@@ -432,6 +444,17 @@ async def restart(ctx):
         }, f)
     
     os.execv(sys.executable, ['python'] + sys.argv)
+
+@bot.event
+async def on_message(message):
+    """Handle messages"""
+    if message.author.bot:
+        return
+    if message.content.startswith(bot.command_prefix):
+        if message.guild in bot.MAIN_GUILD_IDS:
+            if message.channel.id in [1378156495144751147, 1260347806699491418]:
+                return await message.reply("<#1314685928614264852>")
+    await bot.process_commands(message)
 
 if os.path.exists("data/restart_info.json"):
     try:
