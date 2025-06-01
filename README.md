@@ -1,83 +1,198 @@
-# 🤖 Bronx Bot
+# South Bronx Bot
+> Gambling on steroids, with an economy in its sidehand, fishing around its waist, and a stock market to tie it all together.
 
+South Bronx bot adds a layer of irony to your server other bots fail to bring to the table, it was literally made because the gambling addiction in /furryporn was so bad we made a bot for it, then other servers wanted it, then we came here.
 
-[![Discord Bots](https://top.gg/api/widget/828380019406929962.svg)](https://top.gg/bot/828380019406929962)
-> Because who needs a social life when you can write Discord bots?
+# __What Makes It Different?__
+It's mainly written by one dude, but with all the [contributors on github](https://github.com/bronxbot/bot) (thank you all so much) it's mainly by the people for the people.. But mainly its not for profit, there isn't any premium or cash grab, we do it all for free. For the love of gambling ❤️
 
-A multi-purpose Discord bot that probably won't break your server. (No promises.)
+# BronxBots Features
 
----
+# Accepted Variables
+***Most*** commands that use economic values also accept these:
+`1k = 1000`
+`2.5% = 2.5 percentage of balance or wallet where applicable`
+`2e5 = 200000 scientific notation`
 
-## ✨ Features
+## Help
+`.h`, `.help`
+> sends a modal with buttons that allow you to view every command by category
+`.invite`, `.support`
+>  get an invite to the BronxBot [support server](https://discord.gg/jvyYWkj3ts)
 
-- **Vote-bans**: Democracy in action (timeout edition)
-- **ModMail**: Like email, but with more chaos
-- **Role Sync**: Because copy-paste is too hard
-- **Economy**: Capitalism simulator with games, shops, and leaderboards
-- **Games**: Pretend you're having fun (slots, blackjack, coinflip, and more)
-- **Utility**: Actually useful stuff (rare, but it happens)
-- [**Dashboard**](https://bronxbot.onrender.com/): Setup and manage the bot using a web UI!
+# AutoFishing
+`.auto`
+> opens the initial modal for autofishing
+> *the autofisher modal also has buttons to quickly use these commands!*
 
-See [FEATURES.md](FEATURES.md) for the full feature list (it's longer than your todo list).
+`.auto buy`
+> buy an autofisher
 
----
+`.auto upgrade`
+> upgrade the efficiency of your autofishers
 
-## 🚀 Getting Started
+`.auto deposit <amount>`
+> deposit bronkbuks into your autofishing balance
 
-1. **Clone** this repo
-2. **Install** the dependencies
-3. **Copy** `config.example.json` to `config.json`
-4. **Fill in** your tokens, IDs, and MongoDB URI
-5. **Run** the bot
-6. Watch it crash
-7. Fix the bugs
-8. Repeat steps 6-7 indefinitely
+# Bazaar
+> The bazaar is a marketplace / stock market hybrid that gets its price from its visitors
+**How it works:**
+```python
+visitor_factor = len(self.visitors) * 0.5
+spending_factor = math.log10(max(1, self.total_spent)) * 10
+        
+price = self.stock_base_price + visitor_factor + spending_factor
+        
+# Add some randomness
+price *= random.uniform(0.9, 1.1)
+```
+> - a snippet from the [bazzar.py cog](https://github.com/bronxbot/bot/blob/main/cogs/economy/Bazaar.py) 
 
----
+`.bazaar`
+> View the possible items the bazaar has to offer, buy some stock, or buy some items 
+> *There are buttons on this command to quickly do some of the commands below*
 
-## ⚙️ Configuration
+`.bazaar-buy <item_id> [amount=1]`
+> buy an item from the bazaars shop 
 
-- Edit `config.json` with your Discord bot token, MongoDB URI, and other settings.
-- **Pro tip:** Don't commit your secrets to git. (But you probably will.)
+`.bazaar-stock [amount=1]`
+> buy bazaar stock
 
----
+`.secret-bazaar`
+> for the prestigious.
 
-## 🏗️ Built With
+`.secret-buy <item_id>`
+> for the prestigious to shop.
 
-- **Discord.py** - Because JS was too mainstream
-- **MongoDB** - NoSQL go brrr
-- **Python** - 🐍
-- **Caffeine** - ☕
-- **Regret** - 💀
+# Cypher
+> I got bored and coded a cyphering thing for e2e conversations through discord bots, its doable?
 
----
+`.cypher_test [key] [test]`
+> runs a decryption and encryption test on a shring
 
-## 📝 License
+`.cypher [key] [text]`
+> **RECOMMENDED** run with no arguments to start a private cypher in DMs
 
-This project is licensed under the "Do Whatever You Want But Don't Blame Me" license.
+`.decypher [key] [text]`
+> **RECOMMENDED** run with no arguments to start a private cypher in DMs
 
----
+# Economy
+> The heart and soul of BronxBot lives here, this isn't quite Kansas yet (gambling), but its what makes the bot go. So let's not take it for granted.
 
-## 🤝 Contributing
+`.balance [member]`
+> check your (or a members) wallet, bank & net-worth!
+`.bankupgrade`, `.bu`
+> purchase a bankupgrade to increase your bank limit
 
-1. Fork it
-2. Break it
-3. Fix it
-4. PR it
-5. Watch me ignore it for 3 months
+`.beg`
+> beg someone for money
 
----
+`.work`
+> work for some easy cash
 
-## 💖 Special Thanks
+`.daily`
+> get your daily dose of stimulus money
 
-- Stack Overflow
-- Google
-- ChatGPT
-- That one Indian guy on YouTube
-- Coffee
-- Everyone who reported bugs (and found new ones)
+`.pay [member] [amount]`
+> pay someone money
 
----
+`.deposit [amount]`, `.d`, `.dep`
+> deposit money into your bank account
+> `.deposit all`
+> `.deposit 50%`
+> `.deposit 3e5`
+> `.deposit 1000`
+`.withdraw [amount]`, `.w`, `.with`
+> withdraw money from your bank account
+> `.withdraw all`
+> `.withdraw 50%`
+> `.withdraw 3e5`
+> `.withdraw 1000`
 
-> Made with 💖, caffeine, and questionable code quality  
-> [**Add the Bot to Your Server**](https://bronxbot.onrender.com/invite)
+`.leaderboard [scope=server/global]`,`.lb`
+> show the leaderboard (or global leaderboard by using `.leaderboard global`)
+
+`.rob [victim]`
+> rob somebody
+
+# Interest
+> works by using a base percentage which you can upgrade through a command which eventually requires an item to upgrade
+
+`.interest`, `.i`
+> claim your daily interest from your bank
+
+`.interest_upgrade`,`.iu`
+> upgrade interest level
+
+`.interest_info`,`.ii`
+> get info on your interest rate, among other things..
+
+# Fishing
+`.fish`,`.fs`
+> go fishing
+
+`.fishinv`, `.finv`
+> view the catches 
+
+`.sellfish [fish_id=all]`,`.sf`
+> *Fish Ids = Rarities*
+> **supported ids:**
+> - normal
+> - rare
+> - event
+> - mutated
+> - all
+> sell your fish based on `id`
+
+# Fun
+> Literally slop commands, these just do random things and don't belong anywhere
+
+`.ascii <name>`
+> Sends ascii art
+> *cat, dog, heart, star, shrug, tableflip*
+
+`.8ball [question]`
+> ask the almighty 8ball
+
+`.cooldown`
+> check command cooldowns
+
+`.guess [max_num=100]`
+> starts a higher or lower number guessing game that picks a number in between 1 & max_num
+
+`.hack [user]`
+> totally real hacking simulator
+
+`.lovecalc <user1> <user2>`, `.ship`
+> very real love calculator aswell
+
+`.pick [item1] [item2] [item3] ...`
+> pick a random option from a list
+> for people who are indecisive￼, this is your best friend
+
+`.roll [dice=1d6]`
+> roll a dice
+> format: 2d20 (2 separate 20 dice), 1d6 (one 6 sided dice), etc
+
+`.typingtest [difficulty=easy]`
+> do a typing test
+> **difficulties:**
+> - easy
+> - medium
+> - hard
+
+`.fireworks`
+> enjoy some e-fireworks
+
+# Text Manipulation
+`.mocktext [text]`
+> mOcK sOmE tExT lIkE tHiS
+
+`.tinytext [text]`
+> convert to ᵗⁱⁿʸ ˢᵘᵖᵉʳˢᶜʳⁱᵖᵗ
+
+`.reverse [text]`
+> ʇxǝʇ ruoy esreveɹ
+
+`.owoify [text]`
+> uwu-ify youw text owo *nuzzles*
