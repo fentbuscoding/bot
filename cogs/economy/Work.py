@@ -16,7 +16,7 @@ class Work(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
 
 
-    @commands.command(name="work", aliases=["w"])
+    @commands.command(name="work", aliases=["wrk", "earn"])
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def work(self, ctx):
         """Work for some money"""

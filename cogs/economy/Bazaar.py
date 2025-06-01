@@ -6,6 +6,7 @@ import random
 import asyncio
 import math
 from cogs.logging.logger import CogLogger
+from utils.db import async_db as db
 from datetime import datetime, timedelta
 import hashlib
 
@@ -87,35 +88,29 @@ class Bazaar(commands.Cog):
     
     async def get_all_shop_items(self) -> Dict[str, List[dict]]:
         """Get all items from all shop categories"""
-        shop_items = {}
+        shop_items = defaultdict(list)
         
         # Get items from shop cog if available
         shop_cog = self.bot.get_cog("Shop")
         if shop_cog:
-            shop_items.update({
-                "items": list(shop_cog.SHOP_ITEMS.values()),
-                "rods": [item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "rod"],
-                "bait": [item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "bait"],
-                "upgrades": list(shop_cog.UPGRADE_ITEMS.values()) if hasattr(shop_cog, "UPGRADE_ITEMS") else []
-            })
+            shop_items["items"].extend(shop_cog.SHOP_ITEMS.values())
+            shop_items["rods"].extend([item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "rod"])
+            shop_items["bait"].extend([item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "bait"])
+            if hasattr(shop_cog, "UPGRADE_ITEMS"):
+                shop_items["upgrades"].extend(shop_cog.UPGRADE_ITEMS.values())
         
         # Get items from database collections
-        collections = ["shop_items", "shop_upgrades", "shop_fishing"]
-        
-        for coll_name in collections:
-            try:
-                collection = getattr(self.bot.db.db, coll_name, None)
-                if collection:
-                    items = await collection.find({}).to_list(None)
-                    if coll_name == "shop_fishing":
-                        shop_items["rods"].extend([item for item in items if item.get("type") == "rod"])
-                        shop_items["bait"].extend([item for item in items if item.get("type") == "bait"])
-                    elif coll_name == "shop_items":
-                        shop_items["items"].extend(items)
-                    elif coll_name == "shop_upgrades":
-                        shop_items["upgrades"].extend(items)
-            except Exception as e:
-                self.logger.error(f"Error loading items from {coll_name}: {e}")
+        try:
+            # Get shop items from database
+            shop_items["items"].extend(await db.get_shop_items("items"))
+            shop_items["upgrades"].extend(await db.get_shop_items("upgrades"))
+            
+            # Get fishing items
+            fishing_items = await db.get_shop_items("fishing")
+            shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
+            shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+        except Exception as e:
+            self.logger.error(f"Error loading shop items: {e}")
         
         return shop_items
     
@@ -220,7 +215,7 @@ class Bazaar(commands.Cog):
     async def get_user_stock(self, user_id: int) -> int:
         """Get user's bazaar stock count"""
         try:
-            user = await self.bot.db.users.find_one({"_id": str(user_id)})
+            user = await db.db.users.find_one({"_id": str(user_id)})
             if user:
                 return user.get("bazaar_stock", 0)
             return 0
@@ -231,9 +226,13 @@ class Bazaar(commands.Cog):
     async def add_user_stock(self, user_id: int, amount: int) -> bool:
         """Add bazaar stock to user"""
         try:
-            result = await self.bot.db.users.update_one(
+            # First get current stock
+            current_stock = await self.get_user_stock(user_id)
+            
+            # Update the user's stock
+            result = await db.db.users.update_one(
                 {"_id": str(user_id)},
-                {"$inc": {"bazaar_stock": amount}},
+                {"$set": {"bazaar_stock": current_stock + amount}},
                 upsert=True
             )
             return result.modified_count > 0 or result.upserted_id is not None
@@ -347,7 +346,7 @@ class Bazaar(commands.Cog):
         final_price = base_price - discount_amount
         
         # Check balance
-        balance = await self.bot.db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None)
         if balance < final_price:
             msg = f"❌ Insufficient funds! You need {final_price} {self.currency} but only have {balance}."
             if is_interaction:
@@ -361,7 +360,7 @@ class Bazaar(commands.Cog):
             await interaction_or_ctx.response.defer()
         
         # Deduct money
-        if not await self.bot.db.update_wallet(ctx.author.id, -final_price, ctx.guild.id):
+        if not await db.update_wallet(ctx.author.id, -final_price, ctx.guild.id if hasattr(ctx, 'guild') else None):
             msg = "❌ Failed to process payment. Please try again."
             if is_interaction:
                 await interaction_or_ctx.followup.send(msg, ephemeral=True)
@@ -380,11 +379,11 @@ class Bazaar(commands.Cog):
             "bazaar_item": True
         }
         
-        success = await self.bot.db.add_to_inventory(ctx.author.id, ctx.guild.id, clean_item, amount)
+        success = await db.add_to_inventory(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None, clean_item, amount)
         
         if not success:
             # Refund if failed
-            await self.bot.db.update_wallet(ctx.author.id, final_price, ctx.guild.id)
+            await db.update_wallet(ctx.author.id, final_price, ctx.guild.id if hasattr(ctx, 'guild') else None)
             msg = "❌ Failed to add item to inventory. You have been refunded."
             if is_interaction:
                 await interaction_or_ctx.followup.send(msg, ephemeral=True)
@@ -414,7 +413,7 @@ class Bazaar(commands.Cog):
             inline=False
         )
         
-        new_balance = await self.bot.db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        new_balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None)
         embed.add_field(
             name="Remaining Balance",
             value=f"**{new_balance}** {self.currency}",
@@ -431,104 +430,6 @@ class Bazaar(commands.Cog):
     async def bazaar_stock(self, ctx, amount: int = 1):
         """Buy bazaar stock"""
         await self.handle_stock_purchase(ctx, amount)
-    
-    async def handle_stock_purchase(self, interaction_or_ctx, amount: int = 1):
-        """Handle stock purchase from either interaction or command"""
-        is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
-        ctx = await self.bot.get_context(interaction_or_ctx) if is_interaction else interaction_or_ctx
-        
-        if amount <= 0:
-            msg = "❌ Amount must be positive."
-            if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
-        if amount > 100:
-            msg = "❌ Maximum 100 stock per purchase."
-            if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
-        # Calculate price
-        stock_price = self.calculate_stock_price()
-        total_cost = stock_price * amount
-        
-        # Check balance
-        balance = await self.bot.db.get_wallet_balance(ctx.author.id, ctx.guild.id)
-        if balance < total_cost:
-            msg = f"❌ Insufficient funds! You need {total_cost} {self.currency} but only have {balance}."
-            if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
-        # Confirm purchase
-        if is_interaction:
-            await interaction_or_ctx.response.defer()
-        
-        # Deduct money
-        if not await self.bot.db.update_wallet(ctx.author.id, -total_cost, ctx.guild.id):
-            msg = "❌ Failed to process payment. Please try again."
-            if is_interaction:
-                await interaction_or_ctx.followup.send(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
-        # Add stock
-        if not await self.add_user_stock(ctx.author.id, amount):
-            # Refund if failed
-            await self.bot.db.update_wallet(ctx.author.id, total_cost, ctx.guild.id)
-            msg = "❌ Failed to add stock. You have been refunded."
-            if is_interaction:
-                await interaction_or_ctx.followup.send(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
-        # Update bazaar stats
-        self.total_spent += total_cost
-        
-        # Send success message
-        new_stock = await self.get_user_stock(ctx.author.id)
-        new_discount = self.calculate_discount(new_stock)
-        
-        embed = discord.Embed(
-            title="✅ Stock Purchase Complete",
-            description=f"You bought **{amount}** bazaar stock!",
-            color=0x00ff00
-        )
-        
-        embed.add_field(
-            name="Purchase Details",
-            value=f"Price per Stock: **{stock_price}** {self.currency}\n"
-                 f"Total Cost: **{total_cost}** {self.currency}",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Your New Holdings",
-            value=f"Total Stock: **{new_stock}**\n"
-                 f"Current Discount: **{new_discount*100:.0f}%**",
-            inline=False
-        )
-        
-        if new_stock >= self.stock_threshold:
-            embed.add_field(
-                name="🔓 Secret Shop Unlocked!",
-                value=f"You now have access to the secret bazaar shop with {new_stock} stock!",
-                inline=False
-            )
-        
-        if is_interaction:
-            await interaction_or_ctx.followup.send(embed=embed)
-        else:
-            await ctx.reply(embed=embed)
     
     @commands.command(name="secret-bazaar", aliases=["secretmarket", "sm"])
     @commands.cooldown(1, 30, commands.BucketType.user)
@@ -597,13 +498,13 @@ class Bazaar(commands.Cog):
         
         # Check balance
         price = item["price"]
-        balance = await self.bot.db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None)
         if balance < price:
             await ctx.reply(f"❌ Insufficient funds! You need {price} {self.currency} but only have {balance}.")
             return
         
         # Deduct money
-        if not await self.bot.db.update_wallet(ctx.author.id, -price, ctx.guild.id):
+        if not await db.update_wallet(ctx.author.id, -price, ctx.guild.id if hasattr(ctx, 'guild') else None):
             await ctx.reply("❌ Failed to process payment. Please try again.")
             return
         
@@ -618,11 +519,11 @@ class Bazaar(commands.Cog):
             "secret_item": True
         }
         
-        success = await self.bot.db.add_to_inventory(ctx.author.id, ctx.guild.id, clean_item)
+        success = await db.add_to_inventory(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None, clean_item)
         
         if not success:
             # Refund if failed
-            await self.bot.db.update_wallet(ctx.author.id, price, ctx.guild.id)
+            await db.update_wallet(ctx.author.id, price, ctx.guild.id if hasattr(ctx, 'guild') else None)
             await ctx.reply("❌ Failed to add item to inventory. You have been refunded.")
             return
         
@@ -636,20 +537,134 @@ class Bazaar(commands.Cog):
             color=0x2ecc71
         )
         
-        embed.add_field(
-            name="Price",
-            value=f"**{price}** {self.currency}",
-            inline=True
-        )
+    async def handle_stock_purchase(self, interaction_or_ctx, amount: int = 1):
+        """Handle stock purchase from either interaction or command"""
+        is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
         
-        new_balance = await self.bot.db.get_wallet_balance(ctx.author.id, ctx.guild.id)
-        embed.add_field(
-            name="Remaining Balance",
-            value=f"**{new_balance}** {self.currency}",
-            inline=True
+        if is_interaction:
+            interaction = interaction_or_ctx
+            user = interaction.user
+            guild = interaction.guild
+            respond = interaction.response.send_message
+        else:
+            ctx = interaction_or_ctx
+            user = ctx.author
+            guild = ctx.guild
+            respond = ctx.reply
+
+        if amount <= 0:
+            msg = "❌ Amount must be positive."
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        if amount > 100:
+            msg = "❌ Maximum 100 stock per purchase."
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Calculate price
+        stock_price = self.calculate_stock_price()
+        total_cost = stock_price * amount
+
+        # Check balance
+        balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
+        if balance < total_cost:
+            msg = f"❌ Insufficient funds! You need {total_cost} {self.currency} but only have {balance}."
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # For interactions, defer first
+        if is_interaction:
+            await interaction.response.defer()
+
+        # Deduct money
+        if not await db.update_wallet(user.id, -total_cost, guild.id if guild else None):
+            msg = "❌ Failed to process payment. Please try again."
+            if is_interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Add stock
+        if not await self.add_user_stock(user.id, amount):
+            # Refund if failed
+            await db.update_wallet(user.id, total_cost, guild.id if guild else None)
+            msg = "❌ Failed to add stock. You have been refunded."
+            if is_interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Update bazaar stats
+        self.total_spent += total_cost
+
+        # Get updated user data
+        new_stock = await self.get_user_stock(user.id)
+        new_discount = self.calculate_discount(new_stock)
+        new_balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
+
+        # Create/update embed
+        embed = discord.Embed(
+            title="✅ Stock Purchase Complete",
+            description=f"You bought **{amount}** more bazaar stock!" if hasattr(self, 'last_stock_message') 
+                    else f"You bought **{amount}** bazaar stock!",
+            color=0x00ff00
         )
-        
-        await ctx.reply(embed=embed)
+
+        embed.add_field(
+            name="Purchase Details",
+            value=f"Price per Stock: **{stock_price}** {self.currency}\n"
+                f"Total Cost: **{total_cost}** {self.currency}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Your New Holdings",
+            value=f"Total Stock: **{new_stock}**\n"
+                f"Current Discount: **{new_discount*100:.0f}%**\n"
+                f"Remaining Balance: **{new_balance}** {self.currency}",
+            inline=False
+        )
+
+        if new_stock >= self.stock_threshold:
+            embed.add_field(
+                name="🔓 Secret Shop Unlocked!",
+                value=f"You now have access to the secret bazaar shop with {new_stock} stock!",
+                inline=False
+            )
+
+        try:
+            if hasattr(self, 'last_stock_message') and self.last_stock_message:
+                # Edit the existing message
+                if is_interaction:
+                    await self.last_stock_message.edit(embed=embed)
+                else:
+                    await self.last_stock_message.edit(embed=embed)
+            else:
+                # Send new message and store reference
+                if is_interaction:
+                    msg = await interaction.followup.send(embed=embed)
+                else:
+                    msg = await respond(embed=embed)
+                self.last_stock_message = msg
+        except Exception as e:
+            self.logger.error(f"Error updating stock purchase message: {e}")
+            # Fallback to sending new message if edit fails
+            if is_interaction:
+                await interaction.followup.send(embed=embed)
+            else:
+                await respond(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Bazaar(bot))
