@@ -11,36 +11,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Only fetch the last commit
+          fetch-depth: 1
 
-      - name: Send Discord Embed via Curl
+      - name: Send Discord Embed
         run: |
-          # Get the raw commit message
-          RAW_MESSAGE=$(git log -1 --pretty=%B)
+          # Get raw commit message and convert GitHub formatting to Discord formatting
+          RAW_MESSAGE=$(git log -1 --pretty=%B | sed 's/^> /➡️ /g; s/^- /• /g; s/\\n/\n/g')
           
-          # Escape for JSON and preserve newlines
-          ESCAPED_MESSAGE=$(jq -n --arg msg "$RAW_MESSAGE" '$msg' | sed 's/^"//;s/"$//')
-          
-          PAYLOAD=$(jq -n --arg author "${{ github.actor }}" \
-                          --arg author_avatar "${{ github.actor_avatar_url }}" \
-                          --arg message "$ESCAPED_MESSAGE" \
-                          --arg url "${{ github.event.head_commit.url }}" \
-                          --arg timestamp "${{ github.event.head_commit.timestamp }}" \
-                          --arg version "${{ secrets.VERSION }}" \
-          '{
-            "embeds": [
-              {
-                "description": ("__**New Update**__\nA new update has been released!\n**V" + $version + "**\n" + $message + "\n*[View Full Changelog](" + $url + ")*"),
-                "color": 3101622,
+          # Create Discord payload
+          PAYLOAD=$(jq -n \
+            --arg author "${{ github.actor }}" \
+            --arg author_avatar "${{ github.actor_avatar_url }}" \
+            --arg message "$RAW_MESSAGE" \
+            --arg url "${{ github.event.head_commit.url }}" \
+            --arg timestamp "${{ github.event.head_commit.timestamp }}" \
+            --arg version "2.5.0a" \
+            '{
+              "embeds": [{
+                "title": "🚀 New Update Released!",
+                "description": ("**Version:** $version\n\n" + $message + "\n\n[View Full Changelog](" + $url + ")"),
+                "color": 5763719,
                 "footer": {
-                  "icon_url": $author_avatar,
-                  "text": ("Pushed by " + $author)
+                  "text": ("Pushed by " + $author),
+                  "icon_url": $author_avatar
                 },
                 "timestamp": $timestamp
-              }
-            ]
-          }')
+              }]
+            }')
 
-          curl -X POST -H "Content-Type: application/json" \
+          # Send to Discord
+          curl -X POST \
+            -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
             "${{ secrets.DISCORD_WEBHOOK }}"
