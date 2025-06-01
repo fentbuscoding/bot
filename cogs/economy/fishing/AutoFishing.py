@@ -243,13 +243,6 @@ class AutoFishing(commands.Cog):
         next_autofisher_cost = int(self.BASE_AUTOFISHER_PRICE * (self.AUTOFISHER_PRICE_MULTIPLIER ** autofisher_data['count']))
         next_efficiency_cost = int(self.BASE_EFFICIENCY_UPGRADE_PRICE * (self.EFFICIENCY_PRICE_MULTIPLIER ** (efficiency_level - 1)))
         
-        embed.add_field(
-            name="💸 Upgrade Costs",
-            value=f"**Next Autofisher:** {next_autofisher_cost} {self.currency}\n"
-                  f"**Efficiency Upgrade:** {next_efficiency_cost} {self.currency}",
-            inline=False
-        )
-        
         # Create view with buttons
         view = discord.ui.View(timeout=120)
         self.deposit_amount = 100  # Default deposit amount
