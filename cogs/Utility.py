@@ -56,6 +56,7 @@ class Utility(commands.Cog, ErrorHandler):
             return await ctx.send(f"An error occurred: {e}")
         
         # Send confirmation and delete it after 5 seconds
+        await ctx.message.delete()
         msg = await ctx.send(f"Deleted {len(deleted)} messages (commands and bot messages).")
         await msg.delete(delay=5)
         
@@ -64,6 +65,16 @@ class Utility(commands.Cog, ErrorHandler):
             await ctx.message.delete()
         except:
             pass
+
+    @commands.command(aliases=['support', 'inv'])
+    async def invite(self, ctx):
+        """Get the bot's invite link."""
+        embed = discord.Embed(
+            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts)",
+            color=0x2b2d31
+        )
+        embed.set_footer(text="thanks for using bronx bot!")
+        await ctx.reply(embed=embed)
 
     @commands.command(aliases=['si'])
     async def serverinfo(self, ctx):
