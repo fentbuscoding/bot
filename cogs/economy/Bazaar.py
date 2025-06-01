@@ -64,8 +64,8 @@ class Bazaar(commands.Cog):
         # Current bazaar items
         self.current_items = []
         self.current_secret_items = []
-        self.last_reset = datetime.utcnow()
-        self.secret_last_reset = datetime.utcnow()
+        self.last_reset = datetime.now()
+        self.secret_last_reset = datetime.now()
         
         # Bazaar statistics
         self.visitors = set()
@@ -117,12 +117,12 @@ class Bazaar(commands.Cog):
     def reset_bazaar_items(self):
         """Reset the bazaar items (without database access)"""
         self.current_items = []
-        self.last_reset = datetime.utcnow()
+        self.last_reset = datetime.now()
     
     def reset_secret_shop(self):
         """Reset the secret shop items (without database access)"""
         self.current_secret_items = []
-        self.secret_last_reset = datetime.utcnow()
+        self.secret_last_reset = datetime.now()
     
     @tasks.loop(minutes=15)
     async def reset_bazaar(self):
@@ -155,7 +155,7 @@ class Bazaar(commands.Cog):
                 item["discount"] = discount
                 item["category"] = selected_category
             
-            self.last_reset = datetime.utcnow()
+            self.last_reset = datetime.now()
             self.logger.info(f"Bazaar reset with {len(self.current_items)} {selected_category} items")
             
         except Exception as e:
@@ -181,7 +181,7 @@ class Bazaar(commands.Cog):
                     item["category"] = category
                     self.current_secret_items.append(item)
             
-            self.secret_last_reset = datetime.utcnow()
+            self.secret_last_reset = datetime.now()
             self.logger.info(f"Secret shop reset with {len(self.current_secret_items)} items")
             
         except Exception as e:
@@ -292,7 +292,7 @@ class Bazaar(commands.Cog):
         
         # Add reset time
         next_reset = self.last_reset + timedelta(minutes=self.bazaar_reset_interval)
-        time_left = next_reset - datetime.utcnow()
+        time_left = next_reset - datetime.now()
         minutes_left = max(0, int(time_left.total_seconds() / 60))
         
         embed.set_footer(text=f"Bazaar restocks in {minutes_left} minutes • Buy stock to unlock secret deals!")
@@ -311,33 +311,47 @@ class Bazaar(commands.Cog):
     async def handle_bazaar_purchase(self, interaction_or_ctx, item_id: str = None, amount: int = 1):
         """Handle bazaar purchase from either interaction or command"""
         is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
-        ctx = await self.bot.get_context(interaction_or_ctx) if is_interaction else interaction_or_ctx
         
-        # Find the item
-        item = None
-        for bazaar_item in self.current_items:
-            if bazaar_item.get("id") == item_id or bazaar_item["name"].lower().replace(" ", "_") == item_id.lower():
-                item = bazaar_item
-                break
-        
-        if not item:
-            msg = f"❌ Item `{item_id}` not found in current bazaar offerings."
-            if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
-            else:
-                await ctx.reply(msg)
-            return
-        
+        if is_interaction:
+            # For button interactions, use the interaction directly
+            interaction = interaction_or_ctx
+            user = interaction.user
+            guild = interaction.guild
+            respond = interaction.response.send_message
+            # For button clicks, we need to get the item_id from a modal or other input method
+            # Here we'll just use the first item as an example - you'll need to implement proper item selection
+            if not self.current_items:
+                await respond("❌ No items available in the bazaar right now.", ephemeral=True)
+                return
+            item = self.current_items[0]  # Default to first item - implement proper selection logic
+        else:
+            # For commands, use the normal context
+            ctx = interaction_or_ctx
+            user = ctx.author
+            guild = ctx.guild
+            respond = ctx.reply
+            
+            # Find the item for command-based purchases
+            item = None
+            for bazaar_item in self.current_items:
+                if bazaar_item.get("id") == item_id or bazaar_item["name"].lower().replace(" ", "_") == item_id.lower():
+                    item = bazaar_item
+                    break
+            
+            if not item:
+                await respond(f"❌ Item `{item_id}` not found in current bazaar offerings.")
+                return
+
         if amount <= 0 or amount > 10:
             msg = "❌ Amount must be between 1 and 10."
             if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+                await respond(msg, ephemeral=True)
             else:
-                await ctx.reply(msg)
+                await respond(msg)
             return
-        
+
         # Get user's discount
-        user_stock = await self.get_user_stock(ctx.author.id)
+        user_stock = await self.get_user_stock(user.id)
         user_discount = self.calculate_discount(user_stock)
         
         # Calculate final price with discount
@@ -346,26 +360,26 @@ class Bazaar(commands.Cog):
         final_price = base_price - discount_amount
         
         # Check balance
-        balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None)
+        balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
         if balance < final_price:
             msg = f"❌ Insufficient funds! You need {final_price} {self.currency} but only have {balance}."
             if is_interaction:
-                await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+                await respond(msg, ephemeral=True)
             else:
-                await ctx.reply(msg)
+                await respond(msg)
             return
         
-        # Confirm purchase
+        # For interactions, defer first
         if is_interaction:
-            await interaction_or_ctx.response.defer()
+            await interaction.response.defer()
         
         # Deduct money
-        if not await db.update_wallet(ctx.author.id, -final_price, ctx.guild.id if hasattr(ctx, 'guild') else None):
+        if not await db.update_wallet(user.id, -final_price, guild.id if guild else None):
             msg = "❌ Failed to process payment. Please try again."
             if is_interaction:
-                await interaction_or_ctx.followup.send(msg, ephemeral=True)
+                await interaction.followup.send(msg, ephemeral=True)
             else:
-                await ctx.reply(msg)
+                await respond(msg)
             return
         
         # Add item to inventory
@@ -379,16 +393,16 @@ class Bazaar(commands.Cog):
             "bazaar_item": True
         }
         
-        success = await db.add_to_inventory(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None, clean_item, amount)
+        success = await db.add_to_inventory(user.id, guild.id if guild else None, clean_item, amount)
         
         if not success:
             # Refund if failed
-            await db.update_wallet(ctx.author.id, final_price, ctx.guild.id if hasattr(ctx, 'guild') else None)
+            await db.update_wallet(user.id, final_price, guild.id if guild else None)
             msg = "❌ Failed to add item to inventory. You have been refunded."
             if is_interaction:
-                await interaction_or_ctx.followup.send(msg, ephemeral=True)
+                await interaction.followup.send(msg, ephemeral=True)
             else:
-                await ctx.reply(msg)
+                await respond(msg)
             return
         
         # Update bazaar stats
@@ -413,7 +427,7 @@ class Bazaar(commands.Cog):
             inline=False
         )
         
-        new_balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None)
+        new_balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
         embed.add_field(
             name="Remaining Balance",
             value=f"**{new_balance}** {self.currency}",
@@ -421,9 +435,9 @@ class Bazaar(commands.Cog):
         )
         
         if is_interaction:
-            await interaction_or_ctx.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed)
         else:
-            await ctx.reply(embed=embed)
+            await respond(embed=embed)
     
     @commands.command(name="bazaar-stock", aliases=["bstock"])
     @commands.cooldown(1, 10, commands.BucketType.user)
@@ -468,7 +482,7 @@ class Bazaar(commands.Cog):
         
         # Add reset time
         next_reset = self.secret_last_reset + timedelta(minutes=self.secret_shop_reset_interval)
-        time_left = next_reset - datetime.utcnow()
+        time_left = next_reset - datetime.now()
         minutes_left = max(0, int(time_left.total_seconds() / 60))
         
         embed.set_footer(text=f"Secret shop restocks in {minutes_left} minutes")
