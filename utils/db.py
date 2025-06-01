@@ -229,13 +229,6 @@ class AsyncDatabase:
                     return False
                 return True
 
-    async def update_balance(self, user_id: int, amount: int, guild_id: int = None) -> bool:
-        """Update user's wallet balance, handling both positive and negative amounts"""
-        current = await self.get_wallet_balance(user_id, guild_id)
-        if amount < 0 and abs(amount) > current:  # Check if user has enough for deduction
-            return False
-        return await self.update_wallet(user_id, amount, guild_id)
-
     async def increase_bank_limit(self, user_id: int, amount: int, guild_id: int = None) -> bool:
         """Increase user's bank storage limit"""
         if not await self.ensure_connected():
@@ -513,33 +506,6 @@ class AsyncDatabase:
         
         return result.modified_count > 0
 
-    async def get_fish(self, user_id: int) -> list:
-        """Get user's caught fish"""
-        if not await self.ensure_connected():
-            return []
-        user = await self.db.users.find_one({"_id": str(user_id)})
-        return user.get("fish", []) if user else []
-
-    async def add_fish(self, user_id: int, fish: dict) -> bool:
-        """Add a fish to user's collection"""
-        if not await self.ensure_connected():
-            return False
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$push": {"fish": fish}}
-        )
-        return result.modified_count > 0
-
-    async def get_fishing_items(self, user_id: int) -> dict:
-        """Get user's fishing items (rods and bait)"""
-        if not await self.ensure_connected():
-            return {"rods": [], "bait": []}
-        user = await self.db.users.find_one({"_id": str(user_id)})
-        return {
-            "rods": user.get("fishing_rods", []),
-            "bait": user.get("fishing_bait", [])
-        } if user else {"rods": [], "bait": []}
-
     async def add_fishing_item(self, user_id: int, item: dict, item_type: str) -> bool:
         """Add a fishing item (rod or bait) to user's inventory"""
         if not await self.ensure_connected():
@@ -549,23 +515,6 @@ class AsyncDatabase:
             {"_id": str(user_id)},
             {"$push": {field: item}}
         )
-        return result.modified_count > 0
-
-    async def remove_bait(self, user_id: int, bait_id: str, amount: int = 1) -> bool:
-        """Remove bait from user's inventory after use"""
-        if not await self.ensure_connected():
-            return False
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$inc": {"fishing_bait.$[bait].amount": -amount}},
-            array_filters=[{"bait.id": bait_id}]
-        )
-        if result.modified_count > 0:
-            # Remove the bait entry if amount reaches 0
-            await self.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
-            )
         return result.modified_count > 0
 
     async def init_collections(self):
@@ -720,6 +669,37 @@ class AsyncDatabase:
                     "multiplier": 1.0
                 }
             ])
+        
+        await self.db.users.update_many(
+            {"wallet": {"$exists": False}},
+            {"$set": {"wallet": 0}}
+        )
+        
+        await self.db.users.update_many(
+            {"autofisher": {"$exists": False}},
+            {"$set": {"autofisher": {
+                "count": 0,
+                "efficiency_level": 1,
+                "balance": 0,
+                "last_fish_time": "2000-01-01T00:00:00"
+            }}}
+        )
+        
+        await self.db.users.update_many(
+            {"fishing_rods": {"$exists": False}},
+            {"$set": {"fishing_rods": []}}
+        )
+        
+        await self.db.users.update_many(
+            {"fishing_bait": {"$exists": False}},
+            {"$set": {"fishing_bait": []}}
+        )
+        
+        await self.db.users.update_many(
+            {"fish": {"$exists": False}},
+            {"$set": {"fish": []}}
+        )
+        
         return True
         
     async def get_shop_items(self, shop_type: str, guild_id: int = None) -> list:
@@ -868,16 +848,6 @@ class AsyncDatabase:
             {"$set": {"fish": []}}
         )
         return result.modified_count > 0
-
-    async def remove_fish(self, user_id: int, fish_id: str) -> bool:
-        """Remove a specific fish from user's collection"""
-        if not await self.ensure_connected():
-            return False
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$pull": {"fish": {"id": fish_id}}}
-        )
-        return result.modified_count > 0
     
     async def add_to_inventory(self, user_id: int, guild_id: int, item_data: dict, quantity: int = 1) -> bool:
         """Add an item to user's inventory with quantity support"""
@@ -915,6 +885,147 @@ class AsyncDatabase:
         except Exception as e:
             self.logger.error(f"Failed to add item to inventory: {e}")
             return False
+
+    async def get_balance(self, user_id: int, guild_id: int = None) -> int:
+        """Get user's wallet balance"""
+        if not await self.ensure_connected():
+            return 0
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        return user.get("wallet", 0) if user else 0
+
+    async def update_balance(self, user_id: int, amount: int, guild_id: int = None) -> bool:
+        """Update user's wallet balance"""
+        if not await self.ensure_connected():
+            return False
+            
+        current = await self.get_balance(user_id, guild_id)
+        if amount < 0 and abs(amount) > current:  # Check if user has enough for deduction
+            return False
+            
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$inc": {"wallet": amount}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def set_autofisher_data(self, user_id: int, data: dict) -> bool:
+        """Set user's autofisher data"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"autofisher": data}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def get_autofisher_data(self, user_id: int) -> Optional[dict]:
+        """Get user's autofisher data"""
+        if not await self.ensure_connected():
+            return None
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        return user.get("autofisher") if user else None
+
+    async def update_autofisher_data(self, user_id: int, updates: dict) -> bool:
+        """Update user's autofisher data with specific fields"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {f"autofisher.{k}": v for k, v in updates.items()}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def get_all_autofisher_users(self) -> list:
+        """Get all user IDs that have autofishers"""
+        if not await self.ensure_connected():
+            return []
+        
+        pipeline = [
+            {
+                "$match": {
+                    "autofisher.count": {"$gt": 0}
+                }
+            },
+            {
+                "$project": {
+                    "_id": 1
+                }
+            }
+        ]
+        
+        users = await self.db.users.aggregate(pipeline).to_list(None)
+        return [int(user["_id"]) for user in users]
+
+    async def get_fishing_items(self, user_id: int) -> dict:
+        """Get user's fishing items (rods and bait)"""
+        if not await self.ensure_connected():
+            return {"rods": [], "bait": []}
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        return {
+            "rods": user.get("fishing_rods", []),
+            "bait": user.get("fishing_bait", [])
+        } if user else {"rods": [], "bait": []}
+
+    async def add_bait(self, user_id: int, bait: dict) -> bool:
+        """Add bait to user's inventory"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$push": {"fishing_bait": bait}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def remove_bait(self, user_id: int, bait_id: str, amount: int = 1) -> bool:
+        """Remove bait from user's inventory"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$inc": {"fishing_bait.$[bait].amount": -amount}},
+            array_filters=[{"bait.id": bait_id}]
+        )
+        if result.modified_count > 0:
+            # Remove the bait entry if amount reaches 0
+            await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
+            )
+        return result.modified_count > 0
+
+    async def get_fish(self, user_id: int) -> list:
+        """Get user's caught fish"""
+        if not await self.ensure_connected():
+            return []
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        return user.get("fish", []) if user else []
+
+    async def add_fish(self, user_id: int, fish: dict) -> bool:
+        """Add a fish to user's collection"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$push": {"fish": fish}},
+            upsert=True
+        )
+        return result.modified_count > 0
+
+    async def remove_fish(self, user_id: int, fish_id: str) -> bool:
+        """Remove a specific fish from user's collection"""
+        if not await self.ensure_connected():
+            return False
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$pull": {"fish": {"id": fish_id}}}
+        )
+        return result.modified_count > 0
+
+
 
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""

@@ -15,7 +15,6 @@ class Gambling(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
         self.stats_logger = StatsLogger()
-        self.blocked_channels = [1378156495144751147, 1260347806699491418]
         
         # Card suits and values for blackjack
         self.suits = ["♠", "♥", "♦", "♣"]
@@ -42,16 +41,6 @@ class Gambling(commands.Cog):
             (14, "red"), (31, "black"), (9, "red"), (22, "black"), (18, "red"), (29, "black"), 
             (7, "red"), (28, "black"), (12, "red"), (35, "black"), (3, "red"), (26, "black")
         ]
-    
-    async def cog_check(self, ctx):
-        """Global check for all commands in this cog"""
-        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
-            return await ctx.reply(
-                f"❌ Gambling commands are disabled in this channel. "
-                f"Please use them in another channel."
-                "<#1377534851963555901> is a good place for that."
-            )
-        return True
 
     @commands.command(aliases=['bj', 'blowjob'])
     @commands.cooldown(1, 5, commands.BucketType.user)

@@ -22,7 +22,7 @@ def logged_command(*args, **kwargs):
     """Custom command decorator that adds logging"""
     def decorator(func):
         # First apply the command decorator
-        cmd = commands.command(*args, **kwargs)(func)
+        cmd = logged_command(*args, **kwargs)(func)
         # Then apply the logging decorator
         return log_command(cmd)
     return decorator
@@ -34,19 +34,8 @@ class Economy(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
         self.stats_logger = StatsLogger()
-        self.blocked_channels = [1378156495144751147, 1260347806699491418]
-    
-    async def cog_check(self, ctx):
-        """Global check for all commands in this cog"""
-        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
-            return await ctx.reply(
-                f"❌ Economy commands are disabled in this channel. "
-                f"Please use them in another channel.",
-                "<#1314685928614264852> is a good place for that."
-            )
-        return True
 
-    @logged_command(aliases=['bal', 'cash', 'bb'])
+    @commands.command(aliases=['bal', 'cash', 'bb'])
     async def balance(self, ctx, member: discord.Member = None):
         """Check your balance"""
         member = member or ctx.author
@@ -65,7 +54,7 @@ class Economy(commands.Cog):
         )
         await ctx.reply(embed=embed)
 
-    @logged_command(name="deposit", aliases=["dep", 'd'])
+    @commands.command(name="deposit", aliases=["dep", 'd'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def deposit(self, ctx, amount: str = None):
         """Deposit money into your bank"""
@@ -141,7 +130,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Deposit error: {e}")
             await ctx.reply("An error occurred while processing your deposit.")
 
-    @logged_command(name="withdraw", aliases=["with", 'w'])
+    @commands.command(name="withdraw", aliases=["with", 'w'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def withdraw(self, ctx, amount: str = None):
         """Withdraw money from your bank"""
@@ -207,7 +196,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Withdraw error: {e}")
             await ctx.reply("An error occurred while processing your withdrawal.")
 
-    @logged_command(name="pay", aliases=["transfer", 'p'])
+    @commands.command(name="pay", aliases=["transfer", 'p'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def pay(self, ctx, member: discord.Member, amount: int):
         """Transfer money to another user"""
@@ -222,7 +211,7 @@ class Economy(commands.Cog):
         else:
             await ctx.reply("Insufficient funds!")
 
-    @logged_command()
+    @commands.command()
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily(self, ctx):
         """Claim your daily reward"""
@@ -230,7 +219,7 @@ class Economy(commands.Cog):
         await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
         await ctx.reply(f"Daily reward claimed! +**{amount}** {self.currency}")
 
-    @logged_command()
+    @commands.command()
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def beg(self, ctx):
         """Beg for money"""
@@ -238,7 +227,7 @@ class Economy(commands.Cog):
         await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
         await ctx.reply(f"you got +**{amount}** {self.currency}")
 
-    @logged_command()
+    @commands.command()
     @commands.cooldown(1, 3600, commands.BucketType.user)
     async def work(self, ctx):
         """Work for some money"""
@@ -246,7 +235,7 @@ class Economy(commands.Cog):
         await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
         await ctx.reply(f"You worked and earned **{amount}** {self.currency}")
 
-    @logged_command()
+    @commands.command()
     @commands.cooldown(1, 300, commands.BucketType.user)
     async def rob(self, ctx, victim: discord.Member):
         """Attempt to rob someone"""
@@ -269,7 +258,7 @@ class Economy(commands.Cog):
         await db.update_wallet(ctx.author.id, stolen, ctx.guild.id)
         await ctx.reply(f"You stole **{stolen}** {self.currency} from {victim.mention}!")
 
-    @logged_command(aliases=['lb', 'glb'])
+    @commands.command(aliases=['lb', 'glb'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def leaderboard(self, ctx, scope: str = "server"):
         """View the richest users"""
@@ -446,7 +435,7 @@ class Economy(commands.Cog):
         return 0
 
 
-    @logged_command(aliases=['interest', 'i'])
+    @commands.command(aliases=['interest', 'i'])
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def claim_interest(self, ctx):
         """Claim your daily interest"""
@@ -457,7 +446,7 @@ class Economy(commands.Cog):
             await ctx.reply("❌ Failed to claim interest. Try again later.")
 
     
-    @logged_command(aliases=['interest_info', 'ii'])
+    @commands.command(aliases=['interest_info', 'ii'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def interest_status(self, ctx):
         """Check your current interest rate and level"""
@@ -500,7 +489,7 @@ class Economy(commands.Cog):
         
         await ctx.reply(embed=embed)
 
-    @logged_command(aliases=['upgrade_interest', 'iu'])
+    @commands.command(aliases=['upgrade_interest', 'iu'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def interest_upgrade(self, ctx):
         """Upgrade your daily interest rate"""
@@ -589,7 +578,7 @@ class Economy(commands.Cog):
         embed, view, max_reached = await create_upgrade_embed(ctx.author.id)
         await ctx.reply(embed=embed, view=view if not max_reached else None)
 
-    @logged_command(aliases=['upgrade_bank', 'bu'])
+    @commands.command(aliases=['upgrade_bank', 'bu'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def bankupgrade(self, ctx):
         """Upgrade your bank capacity (price scales with current limit)"""
