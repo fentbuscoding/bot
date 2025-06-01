@@ -142,7 +142,13 @@ class BronxBot(commands.AutoShardedBot):
         await self.wait_until_ready()
 
 
-bot = BronxBot(command_prefix='.', intents=intents, shard_count=2, case_insensitive=True)
+bot = BronxBot(
+    command_prefix='.',
+    intents=intents,
+    shard_count=2,
+    case_insensitive=True,
+    application_id=config["CLIENT_ID"]  # <-- Add this line
+)
 bot.remove_command('help')
 
 # loading config
