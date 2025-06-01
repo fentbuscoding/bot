@@ -417,6 +417,16 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         print(f"Unhandled error in {ctx.command}: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
 
+@bot.command()
+@commands.is_owner()
+async def syncslash(ctx):
+    """Sync slash commands globally"""
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"Synced {len(synced)} commands globally")
+    except Exception as e:
+        await ctx.send(f"Failed to sync commands: {e}")
+
 @bot.command(name="restart", aliases=["reboot"])
 @commands.is_owner()
 async def restart(ctx):
