@@ -53,7 +53,7 @@ class Gambling(commands.Cog):
             )
         return True
 
-    @commands.command(aliases=['bj'])
+    @commands.command(aliases=['bj', 'blowjob'])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def blackjack(self, ctx, bet: str):
         """Play blackjack against the dealer"""
