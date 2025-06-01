@@ -343,7 +343,7 @@ class VoteBans(commands.Cog):
         """Check if the guild has permission to use this cog's commands"""
         return ctx.guild.id in self.main_guilds
 
-    @commands.command(name="vban", aliases=["voteban", "vote", "kill", "vb", "ban"])
+    @commands.command(name="vban", aliases=["voteban", "kill", "vb", "ban"])
     async def voteban(self, ctx, user: discord.Member=None, *, reason="No reason provided"):
         if not user:
             embed = discord.Embed(
