@@ -4,10 +4,15 @@ from utils.db import async_db as db
 from utils.betting import parse_bet
 import discord
 import random
+import json
 import asyncio
+import datetime
 from functools import wraps
 from discord.ext import commands
 from cogs.logging.stats_logger import StatsLogger
+
+with open('data/config.json', 'r') as f:
+    data = json.load(f)
 
 def log_command(func):
     """Decorator to log command usage"""
@@ -667,6 +672,67 @@ class Economy(commands.Cog):
         
         embed, view = await create_upgrade_embed(ctx.author.id, ctx.guild.id)
         await ctx.reply(embed=embed, view=view)
+
+    @commands.command()
+    async def voteinfo(self, ctx):
+        """Get information about voting rewards"""
+        embed = discord.Embed(
+            title="Vote Rewards",
+            description=(
+                f"Vote for our bot on Top.gg every 12 hours to receive rewards!\n\n"
+                f"**Reward:** 1,000 {self.currency}\n"
+                f"[**Vote Here**](https://top.gg/bot/{self.bot.user.id}/vote)\n\n"
+                f"Use `{ctx.prefix}checkvote` to see if you can claim your reward!"
+            ),
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+
+    @commands.command(aliases=['vote', 'votereward'])
+    async def checkvote(self, ctx):
+        """Check if you've voted and claim your reward"""
+        if not data['top_gg']:
+            return await ctx.send("Vote rewards are currently disabled in this server.")
+        # Check if user has voted in the last 12 hours
+        headers = {
+            "Authorization": data['top_ggtoken']
+        }
+        
+        try:
+            async with self.bot.session.get(
+                f"https://top.gg/api/bots/{self.bot.user.id}/check",
+                params={"userId": ctx.author.id},
+                headers=headers
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('voted', 0) == 1:
+                        # Check if they've already claimed today
+                        last_vote = await db.db.users.find_one({
+                            "_id": str(ctx.author.id),
+                            "last_vote_reward": {"$gte": datetime.datetime.now() - datetime.timedelta(hours=12)}
+                        })
+                        
+                        if last_vote:
+                            return await ctx.send("You've already claimed your vote reward in the last 12 hours!")
+                        
+                        # Give reward
+                        reward_amount = 1000
+                        await db.update_wallet(ctx.author.id, reward_amount, ctx.guild.id)
+                        await db.db.users.update_one(
+                            {"_id": str(ctx.author.id)},
+                            {"$set": {"last_vote_reward": datetime.datetime.now()}},
+                            upsert=True
+                        )
+                        
+                        return await ctx.send(f"Thanks for voting! You've received {reward_amount} {self.currency}!")
+                    else:
+                        return await ctx.send(f"You haven't voted yet! Vote here: https://top.gg/bot/{self.bot.user.id}/vote")
+                else:
+                    return await ctx.send("Couldn't check your vote status. Please try again later.")
+        except Exception as e:
+            self.logger.error(f"Vote check error: {e}")
+            return await ctx.send("An error occurred while checking your vote status.")
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

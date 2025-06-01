@@ -353,11 +353,11 @@ async def on_guild_join(guild):
             "• Basic utility commands (!help)\n"
             "• Fun commands and games\n"
             "• Moderation tools\n\n"
-            "*The bot is still in active development, so feel free to suggest new features!*\n\n"
+            "*The bot is still in [active development](https://github.com/bronxbot/bot), so feel free to [suggest](https://github.com/bronxbot/bot) new features!*\n\n"
            
             "• Use .help to see available commands\n"
             "• Use .help <command> for detailed info\n"
-            "• Join the [support server](https://discord.gg/furryporn)\n\n"
+            "• Join the [support server](https://discord.gg/jvyYWkj3ts)\n\n"
             "Have fun! 🎉"
         ),
         color=discord.Color.blue()
