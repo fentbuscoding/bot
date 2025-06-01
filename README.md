@@ -259,3 +259,66 @@ self.slot_symbols = [
 `.emojify [text]`
 > turn text into 🔤 regional 🔤 indicators
 
+# Trading System
+
+`.trade offer @user`
+> Start a trade with another user.
+
+`.trade add item <item_id> [amount]`
+> Add one or more items to your trade offer.
+
+`.trade add money <amount>`
+> Add currency to your trade offer.
+
+`.trade remove item <item_id> [amount]`
+> Remove items from your trade offer.
+
+`.trade remove money <amount>`
+> Remove currency from your trade offer.
+
+`.trade show`
+> Show your current trade offer.
+
+`.trade send`
+> Send your trade offer for confirmation.
+
+`.trade cancel`
+> Cancel your current trade.
+
+`.trade history [user]`
+> View your (or another user's) recent trades.
+
+`.trade stats [user]`
+> View trading statistics for yourself or another user.
+
+`.trade leaderboard`
+> See the top traders in the server.
+
+---
+
+# Marketplace (NEW)
+
+`.market list <item_id> <price> [amount]`
+> List items for sale on the player marketplace.
+
+`.market buy <listing_id> [amount]`
+> Buy items from the marketplace.
+
+`.market remove <listing_id>`
+> Remove your listing from the marketplace.
+
+`.market`
+> View the current marketplace listings.
+
+---
+
+
+# Security & Anti-Abuse (NEW)
+
+- Trade cooldowns and scam warnings are now in place to protect users from spam and unfair trades.
+
+---
+
+**Tip:**  
+You can always use `.help` or `.h` to see all available commands and their usage!
+
