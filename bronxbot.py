@@ -162,8 +162,8 @@ COG_DATA = {
         "cogs.bronx.VoteBans": "other", 
         "cogs.bronx.Welcoming": "other",
         "cogs.unique.Multiplayer": "fun", 
-        "cogs.Fun": "fun",
-        "cogs.Giveaway": "fun",
+        "cogs.fun.Fun": "fun",
+        "cogs.fun.Text": "fun",
         "cogs.unique.SyncRoles": "success", 
         "cogs.Help": "success", 
         "cogs.ModMail": "success", 
@@ -173,6 +173,7 @@ COG_DATA = {
         "cogs.economy.fishing.Fishing": "success",
         "cogs.economy.fishing.AutoFishing": "success",
         "cogs.economy.Shop": "success",
+        "cogs.economy.Giveaway": "success",
         "cogs.economy.Trading": "success",
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
@@ -356,7 +357,7 @@ async def on_guild_join(guild):
             "**What I can do:**\n"
             "• Customizable welcome messages\n"
             "• Economy & *Fake* Gambling\n"
-            "• Basic utility commands (!help)\n"
+            "• Basic utility commands (.help)\n"
             "• Fun commands and games\n"
             "• Moderation tools\n\n"
             "*The bot is still in [active development](https://github.com/bronxbot/bot), so feel free to [suggest](https://github.com/bronxbot/bot) new features!*\n\n"

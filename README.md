@@ -266,3 +266,148 @@ Difficulty levels: 1-30
 `.emojify [text]`
 > turn text into 🔤 regional 🔤 indicators
 
+# Giveaway commands
+Add comment
+More actions
+
+
+`.giveaway donate [amount]`
+> Donate to server balance
+
+
+`.giveaway balance`
+> Check server balance
+
+
+`.giveaway list`
+> View active giveaways
+
+# Multiplayer
+> Fun multiplayer commands you can play with your friends
+
+`.rockpaperscissors3 [opponent] [games=3]`
+> Best 2 out of 3 rock-paper-scissors
+> Can be extended to any amount of games if need be
+
+`.rollfight [opponent]`
+> Challenge someone to a dice duel (highest roll wins)
+
+`.slotbattle [opponent]`
+> Challenge someone to a slot battle! Winner takes all, or the house wins if both lose
+
+`.twentyone [opponent]`
+> Take turns counting to 21 (who says 21 loses)
+
+`.word_chain [opponent]`
+> Play a word chain game! Each word must start with the last letter of the prev...
+
+`.yachtdice [opponent]`
+> Play a simplified Yacht dice game
+
+
+# Shop
+
+`.buy [args]`
+> Buy items from the shop
+
+`.daily-deals`
+> Show today's special deals
+
+`.globalshop`
+> View available items in the global shop
+
+`.inventory`
+> View your inventory
+
+`.search <query>`
+> Search for items across all shop categories
+
+`.shop_menu [category]`
+> View shop items by category
+
+`.shopstats`
+> View shop statistics and trends
+
+`.use <item_id>`
+> Use an item from your inventory
+
+`.wishlist [action] [item_id]`
+> Manage your wishlist
+
+
+# UtilityAdd commentMore actions
+
+`.afk [reason=AFK]`
+> set your AFK status
+
+`.avatar [user]`
+> Show a user's avatar
+
+`.banner [user]`
+> Show a user's banner.
+
+`.botinfo`
+> Show bot statistics and info.
+
+`.calculate <expression>`
+> Evaluate a math expression (basic operations only)
+
+`.cleanup [limit=100]`
+> Deletes all command messages and bot messages in the channel
+
+`.countdown <future_time>`
+> calculate time remaining
+
+`.emojiinfo <emoji>`
+> Show info about a custom emoji.
+
+`.emojisteal <emoji>`
+> Add an emoji to this server
+
+`.firstmessage [channel]`
+> Fetch a channel's first message.
+
+`.hexcolor <hex_code>`
+> Show a color preview
+
+`.lottery [max_num=100] [picks=6]`
+> generate lottery numbers
+
+`.multipoll <question> [options...]`
+> Create a poll with multiple options. Example: .multipoll "Favorite?" "Red" "Blue" "green"
+
+`.ping`
+> Show bot latency
+
+`.poll <question>`
+> Create a yes or no poll
+
+`.remind [time]`
+> Set a reminder. Example: .remind 10m Take a break!
+
+`.roleinfo <role>`
+> Show info about a role
+
+`.serverbanner`
+> Get the server's banner
+
+`.servericon`
+> Get the servers icon
+
+`.serverinfo`
+> Get information about the server
+
+`.snipe`
+> Show the last deleted message (Within 1 hour of it being deleted)
+
+`.timestamp [style=f]`
+> Generate Discord timestamps
+
+`.tinyurl <url>`
+> Shorten a URL using TinyURL
+
+`.uptime`
+> Show bot uptime
+
+`.userinfo [user]`
+> Get information about the user (Accout creation, roles, ID, etc)
