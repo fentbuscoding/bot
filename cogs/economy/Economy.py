@@ -228,14 +228,6 @@ class Economy(commands.Cog):
         await ctx.reply(f"you got +**{amount}** {self.currency}")
 
     @commands.command()
-    @commands.cooldown(1, 3600, commands.BucketType.user)
-    async def work(self, ctx):
-        """Work for some money"""
-        amount = random.randint(50, 200)
-        await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
-        await ctx.reply(f"You worked and earned **{amount}** {self.currency}")
-
-    @commands.command()
     @commands.cooldown(1, 300, commands.BucketType.user)
     async def rob(self, ctx, victim: discord.Member):
         """Attempt to rob someone"""
@@ -313,15 +305,21 @@ class Economy(commands.Cog):
             users = users[:10]
             
             content = []
-            total_wealth = 0
+            total_wealth = sum(user["total"] for user in users)
             position_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
             
             for i, user in enumerate(users, 1):
                 total = user["total"]
                 formatted_amount = "{:,}".format(total)
                 position = position_emojis.get(i, f"`{i}.`")
-                content.append(f"{position} {user['member'].display_name} • **{formatted_amount}** {self.currency}")
-                total_wealth += total
+                
+                # Add percentage for top 3
+                percentage_text = ""
+                if i <= 3 and total_wealth > 0:
+                    percentage = (total / total_wealth) * 100
+                    percentage_text = f" ***({percentage:.1f}%)***"
+                
+                content.append(f"{position} {user['member'].display_name} • **{formatted_amount}** {self.currency} {percentage_text}")
             
             embed = discord.Embed(
                 title=f"💰 Richest Users in {ctx.guild.name}",
@@ -371,20 +369,26 @@ class Economy(commands.Cog):
                 ))
             
             content = []
-            total_wealth = 0
+            total_wealth = sum(user['total'] for user in users)
             position_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
             
             for i, user in enumerate(users, 1):
                 user_id = int(user['_id'])
                 total = user['total']
-                total_wealth += total
                 
                 member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id)
                 
                 if member:
                     position = position_emojis.get(i, f"`{i}.`")
                     display_name = getattr(member, 'display_name', member.name)
-                    content.append(f"{position} {display_name} • **{total:,}** {self.currency}")
+                    
+                    # Add percentage for top 3
+                    percentage_text = ""
+                    if i <= 3 and total_wealth > 0:
+                        percentage = (total / total_wealth) * 100
+                        percentage_text = f" **({percentage:.1f}%)**"
+                    
+                    content.append(f"{position} {display_name} • **{total:,}**{percentage_text} {self.currency}")
             
             if not content:
                 return await ctx.reply(embed=discord.Embed(

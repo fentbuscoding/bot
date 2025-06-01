@@ -812,9 +812,47 @@ class Shop(commands.Cog):
                     upsert=True
                 )
                 return result.modified_count > 0 or result.upserted_id is not None
-                
         except Exception as e:
             self.logger.error(f"Failed to purchase {item.get('name', 'unknown')}: {e}")
+            return False
+
+    async def update_bait_amount(user_id: int, bait_id: str, amount: int) -> bool:
+        try:
+            result = await db.users.update_one(
+                {"_id": str(user_id), "fishing_items.bait.id": bait_id},
+                {"$inc": {"fishing_items.bait.$.amount": amount}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            return False
+            
+    async def remove_bait(user_id: int, bait_id: str) -> bool:
+        try:
+            # First check if user has this bait
+            user = await db.users.find_one(
+                {"_id": str(user_id), "fishing_items.bait.id": bait_id},
+                {"fishing_items.bait.$": 1}
+            )
+            
+            if not user or not user.get("fishing_items", {}).get("bait"):
+                return False
+                
+            bait = user["fishing_items"]["bait"][0]
+            if bait["amount"] <= 1:
+                # Remove the bait entirely if amount is 1 or less
+                result = await db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$pull": {"fishing_items.bait": {"id": bait_id}}}
+                )
+            else:
+                # Decrement the amount
+                result = await db.users.update_one(
+                    {"_id": str(user_id), "fishing_items.bait.id": bait_id},
+                    {"$inc": {"fishing_items.bait.$.amount": -1}}
+                )
+                
+            return result.modified_count > 0
+        except Exception as e:
             return False
 
     async def _send_purchase_results(self, ctx, successful: list, failed: list, total_spent: int):

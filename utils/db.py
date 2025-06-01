@@ -1025,7 +1025,82 @@ class AsyncDatabase:
         )
         return result.modified_count > 0
 
+    async def get_fishing_items(self, user_id: int) -> dict:
+        """Get all fishing items (rods and bait) for a user"""
+        if not await self.ensure_connected():
+            return {"rods": [], "bait": []}
+        
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        if not user:
+            return {"rods": [], "bait": []}
+        
+        return {
+            "rods": user.get("fishing_rods", []),
+            "bait": user.get("fishing_bait", [])
+        }
 
+    async def update_bait_amount(self, user_id: int, bait_id: str, amount: int) -> bool:
+        """Update the amount of a specific bait type"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            # First check if the bait exists
+            existing_bait = await self.db.users.find_one(
+                {"_id": str(user_id), "fishing_bait.id": bait_id},
+                {"fishing_bait.$": 1}
+            )
+            
+            if not existing_bait:
+                return False
+                
+            # Update the amount
+            result = await self.db.users.update_one(
+                {"_id": str(user_id), "fishing_bait.id": bait_id},
+                {"$inc": {"fishing_bait.$.amount": amount}}
+            )
+            
+            # Remove the bait if amount reaches 0 or below
+            if result.modified_count > 0:
+                await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
+                )
+            
+            return result.modified_count > 0
+        except Exception as e:
+            self.logger.error(f"Failed to update bait amount: {e}")
+            return False
+
+    async def add_fishing_item(self, user_id: int, item: dict, item_type: str) -> bool:
+        """Add a fishing item (rod or bait) to user's inventory"""
+        if not await self.ensure_connected():
+            return False
+        
+        field = "fishing_rods" if item_type == "rod" else "fishing_bait"
+        
+        try:
+            # For bait, check if it already exists
+            if item_type == "bait":
+                existing_bait = await self.db.users.find_one(
+                    {"_id": str(user_id), "fishing_bait.id": item["id"]},
+                    {"fishing_bait.$": 1}
+                )
+                
+                if existing_bait:
+                    # Update amount if bait exists
+                    return await self.update_bait_amount(user_id, item["id"], item.get("amount", 1))
+            
+            # Add new item if it doesn't exist
+            result = await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$push": {field: item}},
+                upsert=True
+            )
+            return result.modified_count > 0 or result.upserted_id is not None
+        except Exception as e:
+            self.logger.error(f"Failed to add fishing item: {e}")
+            return False
 
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""

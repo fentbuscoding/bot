@@ -169,6 +169,8 @@ COG_DATA = {
         "cogs.economy.Shop": "success",
         "cogs.economy.Trading": "success",
         "cogs.economy.Gambling": "success",
+        "cogs.economy.Work": "success",
+        "cogs.economy.Bazaar": "success",
     },
     "colors": {
         "error": "\033[31m",      # Red
