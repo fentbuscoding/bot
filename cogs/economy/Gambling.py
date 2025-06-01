@@ -1,5 +1,6 @@
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
+from cogs.logging.stats_logger import StatsLogger
 from utils.db import async_db as db
 import discord
 import random
@@ -13,6 +14,8 @@ class Gambling(commands.Cog):
         self.logger = CogLogger(self.__class__.__name__)
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
+        self.stats_logger = StatsLogger()
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
         
         # Card suits and values for blackjack
         self.suits = ["♠", "♥", "♦", "♣"]
@@ -39,6 +42,16 @@ class Gambling(commands.Cog):
             (14, "red"), (31, "black"), (9, "red"), (22, "black"), (18, "red"), (29, "black"), 
             (7, "red"), (28, "black"), (12, "red"), (35, "black"), (3, "red"), (26, "black")
         ]
+    
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            return await ctx.reply(
+                f"❌ Gambling commands are disabled in this channel. "
+                f"Please use them in another channel."
+                "<#1377534851963555901> is a good place for that."
+            )
+        return True
 
     @commands.command(aliases=['bj'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -59,7 +72,7 @@ class Gambling(commands.Cog):
                 return await ctx.reply("❌ Invalid bet amount!")
 
             if parsed_bet <= 0:
-                return await ctx.reply("❌ Bet amount must be greater than 0! \n-# *(Do you have $0 in your wallet?)*")
+                return await ctx.reply("❌ Bet amount must be greater than 0!")
 
             if parsed_bet > wallet:
                 self.active_games.remove(ctx.author.id)
@@ -75,6 +88,7 @@ class Gambling(commands.Cog):
             
             if player_bj and dealer_bj:
                 # Push - return bet
+                self.stats_logger.log_command_usage("blackjack")  # Log usage
                 self.active_games.remove(ctx.author.id)
                 return await ctx.send(embed=self._blackjack_embed(
                     "Push! Both have Blackjack",
@@ -88,6 +102,8 @@ class Gambling(commands.Cog):
                 # Player wins 3:2
                 winnings = int(parsed_bet * 1.5)
                 await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
+                self.stats_logger.log_command_usage("blackjack")  # Log usage
+                self.stats_logger.log_economy_transaction(ctx.author.id, "blackjack", winnings, True)  # Log win
                 self.active_games.remove(ctx.author.id)
                 return await ctx.send(embed=self._blackjack_embed(
                     "Blackjack! You win!",
@@ -100,6 +116,8 @@ class Gambling(commands.Cog):
             elif dealer_bj:
                 # Dealer wins
                 await db.update_wallet(ctx.author.id, -parsed_bet, ctx.guild.id)
+                self.stats_logger.log_command_usage("blackjack")  # Log usage
+                self.stats_logger.log_economy_transaction(ctx.author.id, "blackjack", parsed_bet, False)  # Log loss
                 self.active_games.remove(ctx.author.id)
                 return await ctx.send(embed=self._blackjack_embed(
                     "Dealer has Blackjack! You lose!",
@@ -390,7 +408,7 @@ class Gambling(commands.Cog):
                 return await ctx.reply("❌ Invalid bet amount!")
 
             if parsed_bet <= 0:
-                return await ctx.reply("❌ Bet amount must be greater than 0! \n-# *(Do you have $0 in your wallet?)*")
+                return await ctx.reply("❌ Bet amount must be greater than 0!")
 
             if parsed_bet > wallet:
                 self.active_games.remove(ctx.author.id)
@@ -398,6 +416,7 @@ class Gambling(commands.Cog):
                 
             # Deduct bet immediately
             await db.update_wallet(ctx.author.id, -parsed_bet, ctx.guild.id)
+            self.stats_logger.log_command_usage("crash")  # Log command usage
             
             # Create crash game
             view = self._crash_view(ctx.author.id, parsed_bet, wallet - parsed_bet)
@@ -541,7 +560,7 @@ class Gambling(commands.Cog):
                 return await ctx.reply("❌ Invalid bet amount!")
                 
             if parsed_bet <= 0:
-                return await ctx.reply("❌ Bet amount must be greater than 0! \n-# *(Do you have $0 in your wallet?)*")
+                return await ctx.reply("❌ Bet amount must be greater than 0!")
 
             if parsed_bet > wallet:
                 return await ctx.reply("❌ You don't have enough money for that bet!")
@@ -576,12 +595,15 @@ class Gambling(commands.Cog):
             if win:
                 winnings = parsed_bet
                 outcome = f"**You won {parsed_bet:,}** {self.currency}!"
+                self.stats_logger.log_economy_transaction(ctx.author.id, "coinflip", winnings, True)  # Log win
             else:
                 winnings = -parsed_bet
                 outcome = f"**You lost {parsed_bet:,}** {self.currency}!"
+                self.stats_logger.log_economy_transaction(ctx.author.id, "coinflip", parsed_bet, False)  # Log loss
                 
             # Update balance
             await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
+            self.stats_logger.log_command_usage("coinflip")  # Log command usage
             
             # Send result
             embed = discord.Embed(
@@ -617,13 +639,14 @@ class Gambling(commands.Cog):
                 return await ctx.reply("❌ Invalid bet amount!")
             
             if parsed_bet <= 0:
-                return await ctx.reply("❌ Bet amount must be greater than 0! \n-# *(Do you have $0 in your wallet?)*")
+                return await ctx.reply("❌ Bet amount must be greater than 0!")
         
             if parsed_bet > wallet:
                 return await ctx.reply("❌ You don't have enough money for that bet!")
                 
             # Deduct bet
             await db.update_wallet(ctx.author.id, -parsed_bet, ctx.guild.id)
+            self.stats_logger.log_command_usage("slots")  # Log command usage
             
             # Spin the slots
             reels = []
@@ -666,6 +689,9 @@ class Gambling(commands.Cog):
             # Update balance if won
             if winnings > 0:
                 await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
+                self.stats_logger.log_economy_transaction(ctx.author.id, "slots", winnings, True)  # Log win
+            else:
+                self.stats_logger.log_economy_transaction(ctx.author.id, "slots", parsed_bet, False)  # Log loss
                 
             # Create slot display
             slot_display = " | ".join(reels)
@@ -747,6 +773,12 @@ class Gambling(commands.Cog):
                         )
                         
                     outcome = f"**You won!** All items doubled!"
+                    self.stats_logger.log_economy_transaction(
+                        ctx.author.id, 
+                        "doubleornothing", 
+                        sum(item.get("value", 0) for item in items_to_bet), 
+                        True
+                    )  # Log win (approximate value)
                 else:
                     # Remove the items
                     for item in items_to_bet:
@@ -758,14 +790,23 @@ class Gambling(commands.Cog):
                         )
                         
                     outcome = "**You lost!** All items are gone!"
+                    self.stats_logger.log_economy_transaction(
+                        ctx.author.id, 
+                        "doubleornothing", 
+                        sum(item.get("value", 0) for item in items_to_bet), 
+                        False
+                    )  # Log loss (approximate value)
                     
+                # Log command usage
+                self.stats_logger.log_command_usage("doubleornothing")
+                
                 # Create result embed
                 item_names = ", ".join([item.get("name", "Unknown") for item in items_to_bet])
                 
                 embed = discord.Embed(
                     title="🎲 Double or Nothing",
                     description=f"You bet: **{item_names}**\n\n"
-                              f"{outcome}",
+                            f"{outcome}",
                     color=0x2ecc71 if win else 0xe74c3c
                 )
                 
@@ -793,7 +834,7 @@ class Gambling(commands.Cog):
             embed = discord.Embed(
                 title="🎲 Double or Nothing",
                 description=f"You're about to bet:\n**{item_names}**\n\n"
-                          f"50% chance to double them, 50% chance to lose them all!",
+                        f"50% chance to double them, 50% chance to lose them all!",
                 color=0xf39c12
             )
             
@@ -978,9 +1019,11 @@ class Gambling(commands.Cog):
             if win:
                 winnings = parsed_bet * multiplier
                 outcome = f"**You won {winnings:,}** {self.currency}!"
+                self.stats_logger.log_economy_transaction(ctx.author.id, "roulette", winnings, True)  # Log win
             else:
                 winnings = -parsed_bet
                 outcome = f"**You lost {parsed_bet:,}** {self.currency}!"
+                self.stats_logger.log_economy_transaction(ctx.author.id, "roulette", parsed_bet, False)  # Log loss
                 
             # Update balance
             if winnings > 0:
