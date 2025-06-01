@@ -66,16 +66,6 @@ class Utility(commands.Cog, ErrorHandler):
         except:
             pass
 
-    @commands.command(aliases=['support'])
-    async def invite(self, ctx):
-        """Get the bot's invite link & support server."""
-        embed = discord.Embed(
-            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts)",
-            color=0x2b2d31
-        )
-        embed.set_footer(text="thanks for using bronx bot!")
-        await ctx.reply(embed=embed)
-
     @commands.command(aliases=['si'])
     async def serverinfo(self, ctx):
         guild = ctx.guild
