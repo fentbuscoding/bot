@@ -10,6 +10,72 @@ from utils.db import async_db as db
 from datetime import datetime, timedelta
 import hashlib
 
+class ItemSelectModal(discord.ui.Modal):
+    def __init__(self, cog, items):
+        super().__init__(title="Bazaar Purchase", timeout=120)
+        self.cog = cog
+        self.items = items
+        
+        # Create a view to hold our select menu
+        self.select_view = discord.ui.View(timeout=120)
+        
+        # Create the select menu
+        self.item_select = discord.ui.Select(
+            placeholder="Select an item to purchase...",
+            options=[
+                discord.SelectOption(
+                    label=f"{item['name']}",
+                    description=f"{item['price']} (Save {int(item['discount']*100)}%)",
+                    value=str(idx),
+                    emoji="🛒" if idx == 0 else "📦"
+                ) for idx, item in enumerate(items)
+            ]
+        )
+        self.select_view.add_item(self.item_select)
+        
+        # Add amount input
+        self.amount = discord.ui.TextInput(
+            label="Purchase Amount (1-10)",
+            placeholder="Enter how many you want to buy...",
+            default="1",
+            min_length=1,
+            max_length=2,
+            required=True
+        )
+        self.add_item(self.amount)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            item_idx = int(self.item_select.values[0])
+            amount = int(self.amount.value)
+            
+            if amount < 1 or amount > 10:
+                await interaction.response.send_message(
+                    "❌ Amount must be between 1-10.", 
+                    ephemeral=True
+                )
+                return
+                
+            selected_item = self.items[item_idx]
+            await self.cog.handle_bazaar_purchase(
+                interaction,
+                selected_item.get("id", selected_item["name"].lower().replace(" ", "_")),
+                amount
+            )
+            
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Please enter a valid number between 1-10.",
+                ephemeral=True
+            )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # This makes sure the select menu gets processed
+        if interaction.data.get("custom_id") == self.item_select.custom_id:
+            await self.item_select.callback(interaction)
+            return False
+        return True
+
 class BazaarView(discord.ui.View):
     def __init__(self, cog, timeout=180):
         super().__init__(timeout=timeout)
@@ -18,7 +84,20 @@ class BazaarView(discord.ui.View):
         
     @discord.ui.button(label="🛒 Buy Items", style=discord.ButtonStyle.primary)
     async def buy_items(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.cog.handle_bazaar_purchase(interaction)
+        if not self.cog.current_items:
+            await interaction.response.send_message("❌ No items available in the bazaar right now.", ephemeral=True)
+            return
+        
+        # First send the select menu
+        modal = ItemSelectModal(self.cog, self.cog.current_items)
+        await interaction.response.send_message(
+            "Select an item to purchase:", 
+            view=modal.select_view, 
+            ephemeral=True
+        )
+        
+        # Then send the modal for amount
+        await interaction.followup.send_modal(modal)
         
     @discord.ui.button(label="📈 Buy Stock", style=discord.ButtonStyle.secondary)
     async def buy_stock(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -312,36 +391,35 @@ class Bazaar(commands.Cog):
         """Handle bazaar purchase from either interaction or command"""
         is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
         
+        # Get context based on input type
         if is_interaction:
-            # For button interactions, use the interaction directly
             interaction = interaction_or_ctx
             user = interaction.user
             guild = interaction.guild
             respond = interaction.response.send_message
-            # For button clicks, we need to get the item_id from a modal or other input method
-            # Here we'll just use the first item as an example - you'll need to implement proper item selection
-            if not self.current_items:
-                await respond("❌ No items available in the bazaar right now.", ephemeral=True)
-                return
-            item = self.current_items[0]  # Default to first item - implement proper selection logic
         else:
-            # For commands, use the normal context
             ctx = interaction_or_ctx
             user = ctx.author
             guild = ctx.guild
             respond = ctx.reply
-            
-            # Find the item for command-based purchases
-            item = None
-            for bazaar_item in self.current_items:
-                if bazaar_item.get("id") == item_id or bazaar_item["name"].lower().replace(" ", "_") == item_id.lower():
-                    item = bazaar_item
-                    break
-            
-            if not item:
-                await respond(f"❌ Item `{item_id}` not found in current bazaar offerings.")
-                return
 
+        # Find the item
+        item = None
+        for bazaar_item in self.current_items:
+            if (bazaar_item.get("id") == item_id or 
+                bazaar_item["name"].lower().replace(" ", "_") == item_id.lower()):
+                item = bazaar_item
+                break
+        
+        if not item:
+            msg = f"❌ Item `{item_id}` not found in current bazaar offerings."
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Validate amount
         if amount <= 0 or amount > 10:
             msg = "❌ Amount must be between 1 and 10."
             if is_interaction:
@@ -362,7 +440,12 @@ class Bazaar(commands.Cog):
         # Check balance
         balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
         if balance < final_price:
-            msg = f"❌ Insufficient funds! You need {final_price} {self.currency} but only have {balance}."
+            # Calculate max affordable amount
+            max_affordable = min(10, balance // (item["price"] * (1 - user_discount)))
+            msg = (f"❌ Insufficient funds! You need {final_price} {self.currency} "
+                f"but only have {balance}.")
+            if max_affordable > 0:
+                msg += f"\n💡 You can afford up to {max_affordable} of this item."
             if is_interaction:
                 await respond(msg, ephemeral=True)
             else:
@@ -390,7 +473,8 @@ class Bazaar(commands.Cog):
             "price": item["price"],
             "value": item["price"],
             "type": item.get("type", "item"),
-            "bazaar_item": True
+            "bazaar_item": True,
+            "discounted_price": final_price // amount
         }
         
         success = await db.add_to_inventory(user.id, guild.id if guild else None, clean_item, amount)
@@ -408,36 +492,67 @@ class Bazaar(commands.Cog):
         # Update bazaar stats
         self.total_spent += final_price
         
-        # Send success message
+        # Create success embed
         embed = discord.Embed(
-            title="✅ Purchase Complete",
+            title=f"✅ {'Purchase' if amount == 1 else 'Bulk Purchase'} Complete",
             description=f"You bought **{amount}x {item['name']}** from the bazaar!",
             color=0x00ff00
         )
         
-        price_text = []
-        price_text.append(f"Base Price: **{item['price'] * amount}** {self.currency}")
-        if user_discount > 0:
-            price_text.append(f"Discount ({user_discount*100:.0f}%): **-{discount_amount}** {self.currency}")
-        price_text.append(f"Total Paid: **{final_price}** {self.currency}")
+        # Price breakdown
+        price_text = [
+            f"• Base Price: **{item['price'] * amount}** {self.currency}",
+            f"• Your Discount ({user_discount*100:.0f}%): **-{discount_amount}** {self.currency}",
+            f"• Total Paid: **{final_price}** {self.currency}",
+            f"• Price Per Item: **{final_price // amount}** {self.currency}"
+        ]
         
         embed.add_field(
-            name="Price Breakdown",
+            name="💰 Price Breakdown",
             value="\n".join(price_text),
             inline=False
         )
         
+        # Add remaining balance
         new_balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
         embed.add_field(
-            name="Remaining Balance",
+            name="💳 Remaining Balance",
             value=f"**{new_balance}** {self.currency}",
             inline=True
         )
         
-        if is_interaction:
-            await interaction.followup.send(embed=embed)
-        else:
-            await respond(embed=embed)
+        # Add stock info if they have any
+        if user_stock > 0:
+            embed.add_field(
+                name="📈 Your Bazaar Stock",
+                value=f"**{user_stock}** (Current discount: {user_discount*100:.0f}%)",
+                inline=True
+            )
+        
+        # Add secret shop hint if close to threshold
+        if self.stock_threshold - user_stock <= 50 and user_stock < self.stock_threshold:
+            embed.add_field(
+                name="🔍 Secret Shop Hint",
+                value=f"Just {self.stock_threshold - user_stock} more stock needed to unlock!",
+                inline=False
+            )
+        
+        # Try to edit previous message if exists
+        try:
+            if hasattr(self, 'last_purchase_message') and self.last_purchase_message:
+                await self.last_purchase_message.edit(embed=embed)
+            else:
+                if is_interaction:
+                    msg = await interaction.followup.send(embed=embed)
+                else:
+                    msg = await respond(embed=embed)
+                self.last_purchase_message = msg
+        except Exception as e:
+            self.logger.error(f"Error updating purchase message: {e}")
+            if is_interaction:
+                await interaction.followup.send(embed=embed)
+            else:
+                await respond(embed=embed)
     
     @commands.command(name="bazaar-stock", aliases=["bstock"])
     @commands.cooldown(1, 10, commands.BucketType.user)
