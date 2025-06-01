@@ -904,17 +904,18 @@ class Gambling(commands.Cog):
                 
             # Parse choice
             choice = choice.lower()
+            # In the valid_choices dictionary, change the multipliers for red/black/even/odd from 1 to 2
             valid_choices = {
-                "red": ("color", 1, "Red"),
-                "black": ("color", 1, "Black"),
+                "red": ("color", 2, "Red"),        # Changed from 1 to 2
+                "black": ("color", 2, "Black"),    # Changed from 1 to 2
                 "green": ("color", 35, "Green (0)"),
-                "even": ("even", 1, "Even"),
-                "odd": ("odd", 1, "Odd"),
+                "even": ("even", 2, "Even"),      # Changed from 1 to 2
+                "odd": ("odd", 2, "Odd"),          # Changed from 1 to 2
                 "1st12": ("dozen", 2, "1st 12"),
                 "2nd12": ("dozen", 2, "2nd 12"),
                 "3rd12": ("dozen", 2, "3rd 12"),
-                "1-18": ("half", 1, "1-18"),
-                "19-36": ("half", 1, "19-36")
+                "1-18": ("half", 2, "1-18"),       # Changed from 1 to 2
+                "19-36": ("half", 2, "19-36")      # Changed from 1 to 2
             }
             
             # Check for number bet
