@@ -10,8 +10,8 @@ jobs:
     steps:
       - name: Send Discord Embed via Curl
         run: |
-          # Escape the commit message to preserve newlines and markdown
-          MESSAGE=$(echo '${{ github.event.head_commit.message }}' | jq -Rs . | sed 's/^"//;s/"$//')
+          # Properly escape newlines and markdown in the commit message
+          MESSAGE=$(echo '${{ github.event.head_commit.message }}' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
           
           PAYLOAD=$(jq -n --arg author "${{ github.actor }}" \
                           --arg author_avatar "${{ github.actor_avatar_url }}" \
