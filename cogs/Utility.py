@@ -35,7 +35,7 @@ class Utility(commands.Cog, ErrorHandler):
         embed.set_image(url=user.display_avatar.url)
         await ctx.reply(embed=embed)
 
-    @commands.command(name='cleanup', aliases=['c7u'])
+    @commands.command(name='cleanup', aliases=['cu'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     async def cleanup(self, ctx, limit: Optional[int] = 100):
