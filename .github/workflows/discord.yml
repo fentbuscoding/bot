@@ -8,11 +8,18 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch the last commit
+
       - name: Send Discord Embed via Curl
         run: |
-          # Get the raw commit message and properly escape it
+          # Get the raw commit message
           RAW_MESSAGE=$(git log -1 --pretty=%B)
-          ESCAPED_MESSAGE=$(echo "$RAW_MESSAGE" | jq -Rs . | sed 's/^"//;s/"$//')
+          
+          # Escape for JSON and preserve newlines
+          ESCAPED_MESSAGE=$(jq -n --arg msg "$RAW_MESSAGE" '$msg' | sed 's/^"//;s/"$//')
           
           PAYLOAD=$(jq -n --arg author "${{ github.actor }}" \
                           --arg author_avatar "${{ github.actor_avatar_url }}" \
