@@ -66,9 +66,9 @@ class Utility(commands.Cog, ErrorHandler):
         except:
             pass
 
-    @commands.command(aliases=['support', 'inv'])
+    @commands.command(aliases=['support'])
     async def invite(self, ctx):
-        """Get the bot's invite link."""
+        """Get the bot's invite link & support server."""
         embed = discord.Embed(
             description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts)",
             color=0x2b2d31
