@@ -433,6 +433,17 @@ async def restart(ctx):
     
     os.execv(sys.executable, ['python'] + sys.argv)
 
+@bot.event
+async def on_message(message):
+    """Handle messages"""
+    if message.author.bot:
+        return
+    if message.content.startswith(bot.command_prefix):
+        if message.guild in bot.MAIN_GUILD_IDS:
+            if message.channel.id in [1378156495144751147, 1260347806699491418]:
+                return await message.reply("<#1314685928614264852>")
+    await bot.process_commands(message)
+
 if os.path.exists("data/restart_info.json"):
     try:
         with open("data/restart_info.json", "r") as f:
