@@ -348,15 +348,15 @@ class VoteBans(commands.Cog):
         if not user:
             embed = discord.Embed(
                 title="Vote Ban",
-                description="""
+                description=f"""
                 **Usage:**
-                `!vban <user> <reason>`
+                `{ctx.prefix}vban <user> <reason>`
                 > *vb, voteban, vote, kill, ban, vban*
                 
                 **Example:**
-                `!vban ks.net gay`
-                `!vban @ks.net gay`
-                `!vban 814226043924643880 still gay`
+                `{ctx.prefix}vban ks.net gay`
+                `{ctx.prefix}vban @ks.net gay`
+                `{ctx.prefix}vban 814226043924643880 still gay`
                 """,
                 color=discord.Colour.random(),
                 timestamp=datetime.now()
