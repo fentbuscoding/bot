@@ -1,7 +1,7 @@
 # 🤖 Bronx Bot
 
 
-[![Discord Bots](https://top.gg/api/widget/828380019406929962.svg)(https://top.gg/bot/828380019406929962)
+[![Discord Bots](https://top.gg/api/widget/828380019406929962.svg)(https://top.gg/bot/828380019406929962)]
 > Because who needs a social life when you can write Discord bots?
 
 A multi-purpose Discord bot that probably won't break your server. (No promises.)
