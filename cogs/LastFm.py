@@ -3,13 +3,15 @@ from discord.ext import commands
 import aiohttp
 import os
 import json
+import asyncio
 from urllib.parse import urlencode
 from collections import Counter
+from typing import Optional, Tuple
 
 DATA_PATH = "data/lastfm_links.json"
 EMOJI_PATH = "data/lastfm_emojis.json"
 
-def get_lastfm_api_key():
+def get_lastfm_api_key() -> Optional[str]:
     key = os.getenv("LASTFM_API_KEY")
     if key:
         return key
@@ -22,7 +24,7 @@ def get_lastfm_api_key():
             continue
     return None
 
-def get_lastfm_api_secret():
+def get_lastfm_api_secret() -> Optional[str]:
     secret = os.getenv("LASTFM_API_SECRET")
     if secret:
         return secret
@@ -38,7 +40,7 @@ def get_lastfm_api_secret():
 LASTFM_API_KEY = get_lastfm_api_key()
 LASTFM_API_SECRET = get_lastfm_api_secret()
 
-def load_links():
+def load_links() -> dict:
     if not os.path.exists(DATA_PATH):
         return {}
     try:
@@ -47,12 +49,12 @@ def load_links():
     except Exception:
         return {}
 
-def save_links(links):
+def save_links(links: dict):
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     with open(DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(links, f, indent=2)
 
-def load_emojis():
+def load_emojis() -> dict:
     if not os.path.exists(EMOJI_PATH):
         return {}
     try:
@@ -61,7 +63,7 @@ def load_emojis():
     except Exception:
         return {}
 
-def save_emojis(emojis):
+def save_emojis(emojis: dict):
     os.makedirs(os.path.dirname(EMOJI_PATH), exist_ok=True)
     with open(EMOJI_PATH, "w", encoding="utf-8") as f:
         json.dump(emojis, f, indent=2)
@@ -73,10 +75,27 @@ def generate_api_sig(params, secret):
     import hashlib
     return hashlib.md5(sig.encode("utf-8")).hexdigest()
 
+def create_embed(
+    title: str,
+    description: str,
+    color: discord.Color = discord.Color.blurple(),
+    url: Optional[str] = None,
+    thumbnail: Optional[str] = None,
+    author: Optional[Tuple[str, str]] = None,
+    footer: Optional[Tuple[str, str]] = None
+) -> discord.Embed:
+    embed = discord.Embed(title=title, description=description, color=color, url=url)
+    if thumbnail:
+        embed.set_thumbnail(url=thumbnail)
+    if author:
+        embed.set_author(name=author[0], icon_url=author[1])
+    if footer:
+        embed.set_footer(text=footer[0], icon_url=footer[1])
+    return embed
+
 class LastFM(commands.Cog):
     """
-    🎵 Last.fm Integration
-    Authenticate and link your Discord account to Last.fm, and view your music stats.
+    🎵 Last.fm Integration — link your Discord and view music stats.
     """
 
     def __init__(self, bot):
@@ -84,37 +103,35 @@ class LastFM(commands.Cog):
         self.links = load_links()
         self.emojis = load_emojis()
 
-    def get_auth_url(self, discord_id):
+    def get_auth_url(self, discord_id: int) -> str:
         params = {
             "api_key": LASTFM_API_KEY,
-            # Use localhost with a port for local development/callback
             "cb": f"http://localhost:5000/api/lastfm/callback?discord_id={discord_id}"
         }
         return f"https://www.last.fm/api/auth/?{urlencode(params)}"
 
-    def set_linked_user(self, discord_id, session_key, username):
+    def set_linked_user(self, discord_id: int, session_key: str, username: str):
         self.links[str(discord_id)] = {"session": session_key, "username": username}
         save_links(self.links)
 
-    def remove_linked_user(self, discord_id):
+    def remove_linked_user(self, discord_id: int):
         if str(discord_id) in self.links:
             del self.links[str(discord_id)]
             save_links(self.links)
 
-    def get_linked_user(self, discord_id):
+    def get_linked_user(self, discord_id: int) -> Tuple[Optional[str], Optional[str]]:
         entry = self.links.get(str(discord_id))
         if isinstance(entry, dict):
             return entry.get("username"), entry.get("session")
         return None, None
 
-    def get_guild_emojis(self, guild_id):
-        # Returns a tuple of (emoji1, emoji2) or default if not set
+    def get_guild_emojis(self, guild_id: int) -> Tuple[str, str]:
         emojis = self.emojis.get(str(guild_id), ["🎶", "❤️"])
         if isinstance(emojis, list) and len(emojis) == 2:
             return tuple(emojis)
         return ("🎶", "❤️")
 
-    def set_guild_emojis(self, guild_id, emoji1, emoji2):
+    def set_guild_emojis(self, guild_id: int, emoji1: str, emoji2: str):
         self.emojis[str(guild_id)] = [emoji1, emoji2]
         save_emojis(self.emojis)
 
@@ -130,39 +147,59 @@ class LastFM(commands.Cog):
             payload["user"] = username
         if session_key:
             payload["sk"] = session_key
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=payload) as resp:
-                try:
-                    return await resp.json()
-                except Exception:
-                    return {}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=payload) as resp:
+                    try:
+                        data = await resp.json()
+                        # Last.fm API sometimes returns error in JSON
+                        if "error" in data:
+                            return {"error": data.get("message", "Unknown Last.fm error")}
+                        return data
+                    except Exception as e:
+                        return {"error": f"Failed to decode response: {e}"}
+        except Exception as e:
+            return {"error": f"Request failed: {e}"}
 
     # QOL: cooldowns, error handling, simple aliases
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.reply(f"⏳ Slow down! Try again in {error.retry_after:.1f}s.")
+            await ctx.reply("⏳ Slow down! Try again soon.")
         elif isinstance(error, commands.MissingPermissions):
             await ctx.reply("❌ You don't have permission to use this command.")
+        elif isinstance(error, commands.UserInputError):
+            await ctx.reply("❌ Invalid input. Please check your command usage.")
+        elif isinstance(error, aiohttp.ClientError):
+            await ctx.reply("❌ Network error while contacting Last.fm.")
         else:
             await ctx.reply(f"❌ Error: {error}")
 
+    async def get_user_and_session(self, ctx, user: Optional[discord.Member]) -> Tuple[Optional[str], Optional[str], str, str]:
+        if user:
+            username, session_key = self.get_linked_user(user.id)
+            display_name = user.display_name
+            avatar = user.display_avatar.url
+        else:
+            username, session_key = self.get_linked_user(ctx.author.id)
+            display_name = ctx.author.display_name
+            avatar = ctx.author.display_avatar.url
+        return username, session_key, display_name, avatar
+
     @commands.command(aliases=["link"])
     async def fmlink(self, ctx):
-        """Authenticate your Discord account with Last.fm."""
+        """Link your Discord to Last.fm."""
         if not LASTFM_API_KEY or not LASTFM_API_SECRET:
             return await ctx.reply("❌ Last.fm API key/secret not set.")
         url = self.get_auth_url(ctx.author.id)
-        embed = discord.Embed(
-            title="Last.fm Authentication",
-            description=(
-                f"**1.** [Click here to authorize with Last.fm]({url})\n"
-                "**2.** After authorizing, you'll see a success message in your browser.\n"
-                "**3.** You can now use all Last.fm commands in Discord!\n\n"
-                "If you have any issues, make sure your bot and API server are running."
-            ),
-            color=discord.Color.orange()
+        embed = create_embed(
+            "Last.fm Authentication",
+            f"**1.** [Click here to authorize with Last.fm]({url})\n"
+            "**2.** After authorizing, you'll see a success message in your browser.\n"
+            "**3.** You can now use all Last.fm commands in Discord!\n\n"
+            "If you have any issues, make sure your bot and API server are running.",
+            color=discord.Color.orange(),
+            footer=("Your account will be linked automatically after you authorize.", ctx.author.display_avatar.url)
         )
-        embed.set_footer(text="Your account will be linked automatically after you authorize.")
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["unlink"])
@@ -188,139 +225,114 @@ class LastFM(commands.Cog):
     @commands.command(aliases=["np"])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def fm(self, ctx, user: discord.Member = None):
-        """Show now playing/last played track for a user. Adds two custom emojis as reactions."""
-        if not LASTFM_API_KEY:
-            return await ctx.reply("❌ Last.fm API key not set.")
-        if user:
-            username, session_key = self.get_linked_user(user.id)
-            display_name = user.display_name
-            avatar = user.display_avatar.url
-        else:
-            username, session_key = self.get_linked_user(ctx.author.id)
-            display_name = ctx.author.display_name
-            avatar = ctx.author.display_avatar.url
+        """Show now playing/last played track for a user."""
+        try:
+            username, session_key, display_name, avatar = await self.get_user_and_session(ctx, user)
+            if not username or not session_key:
+                return await ctx.reply(f"{display_name} has not linked their Last.fm account. Use `.fmlink` to link.")
 
-        if not username or not session_key:
-            return await ctx.reply(f"{display_name} has not linked their Last.fm account. Use `.fmlink` to link.")
-
-        data = await self.get_lastfm_data("user.getrecenttracks", username, session_key, limit=1)
-        tracks = data.get("recenttracks", {}).get("track", [])
-        if not tracks:
-            return await ctx.reply("No recent tracks found.")
-        track = tracks[0]
-        artist = track["artist"]["#text"]
-        name = track["name"]
-        url = track.get("url", "")
-        album = track.get("album", {}).get("#text", "")
-        now_playing = track.get("@attr", {}).get("nowplaying", False)
-        embed = discord.Embed(
-            title=f"{'🎵 Now Playing' if now_playing else 'Last Played'}: {name}",
-            description=f"**Artist:** {artist}\n**Album:** {album or 'N/A'}",
-            url=url,
-            color=discord.Color.green() if now_playing else discord.Color.blue()
-        )
-        if track.get("image"):
-            embed.set_thumbnail(url=track["image"][-1]["#text"])
-        embed.set_author(name=display_name, icon_url=avatar)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
-        msg = await ctx.reply(embed=embed)
-
-        # Add two custom emojis as reactions (guild configurable)
-        if ctx.guild:
-            emoji1, emoji2 = self.get_guild_emojis(ctx.guild.id)
-            try:
-                await msg.add_reaction(emoji1)
-                await msg.add_reaction(emoji2)
-            except discord.HTTPException:
-                pass
+            data = await self.get_lastfm_data("user.getrecenttracks", username, session_key, limit=1)
+            if "error" in data:
+                return await ctx.reply(f"❌ Last.fm error: {data['error']}")
+            tracks = data.get("recenttracks", {}).get("track", [])
+            if not tracks:
+                return await ctx.reply("No recent tracks found.")
+            track = tracks[0]
+            artist = track["artist"]["#text"]
+            name = track["name"]
+            url = track.get("url", "")
+            album = track.get("album", {}).get("#text", "")
+            now_playing = track.get("@attr", {}).get("nowplaying", False)
+            embed = create_embed(
+                f"{'🎵 Now Playing' if now_playing else 'Last Played'}: {name}",
+                f"**Artist:** {artist}\n**Album:** {album or 'N/A'}",
+                color=discord.Color.green() if now_playing else discord.Color.blue(),
+                url=url,
+                thumbnail=track["image"][-1]["#text"] if track.get("image") else None,
+                author=(display_name, avatar),
+                footer=(f"Requested by {ctx.author}", ctx.author.display_avatar.url)
+            )
+            msg = await ctx.reply(embed=embed)
+            if ctx.guild:
+                emoji1, emoji2 = self.get_guild_emojis(ctx.guild.id)
+                try:
+                    await msg.add_reaction(emoji1)
+                    await msg.add_reaction(emoji2)
+                except discord.HTTPException:
+                    pass
+        except Exception as e:
+            await ctx.reply(f"❌ Unexpected error: {e}")
 
     @commands.command(aliases=["artists"])
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def fmtopartists(self, ctx, user: discord.Member = None, limit: int = 5):
-        """Show top Last.fm artists."""
-        if not LASTFM_API_KEY:
-            return await ctx.reply("❌ Last.fm API key not set.")
-        if user:
-            username, session_key = self.get_linked_user(user.id)
-            display_name = user.display_name
-        else:
-            username, session_key = self.get_linked_user(ctx.author.id)
-            display_name = ctx.author.display_name
-
+        """Show top artists."""
+        username, session_key, display_name, _ = await self.get_user_and_session(ctx, user)
         if not username or not session_key:
             return await ctx.reply(f"{display_name} has not linked their Last.fm account. Use `.fmlink` to link.")
-
         data = await self.get_lastfm_data("user.gettopartists", username, session_key, limit=limit)
         artists = data.get("topartists", {}).get("artist", [])
         if not artists:
             return await ctx.reply("No top artists found.")
         msg = "\n".join([f"**{i+1}.** [{a['name']}](https://last.fm/music/{a['name'].replace(' ', '+')}) (`{a['playcount']} plays`)" for i, a in enumerate(artists)])
-        embed = discord.Embed(
-            title=f"Top {limit} artists for {username}",
-            description=msg,
-            color=discord.Color.purple()
+        embed = create_embed(
+            f"Top {limit} artists for {username}",
+            msg,
+            color=discord.Color.purple(),
+            footer=(f"Requested by {ctx.author}", ctx.author.display_avatar.url)
         )
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["tracks"])
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def fmtoptracks(self, ctx, user: discord.Member = None, limit: int = 5):
-        """Show top Last.fm tracks."""
-        if not LASTFM_API_KEY:
-            return await ctx.reply("❌ Last.fm API key not set.")
-        if user:
-            username, session_key = self.get_linked_user(user.id)
-            display_name = user.display_name
-        else:
-            username, session_key = self.get_linked_user(ctx.author.id)
-            display_name = ctx.author.display_name
-
+        """Show top tracks."""
+        username, session_key, display_name, _ = await self.get_user_and_session(ctx, user)
         if not username or not session_key:
             return await ctx.reply(f"{display_name} has not linked their Last.fm account. Use `.fmlink` to link.")
-
         data = await self.get_lastfm_data("user.gettoptracks", username, session_key, limit=limit)
         tracks = data.get("toptracks", {}).get("track", [])
         if not tracks:
             return await ctx.reply("No top tracks found.")
         msg = "\n".join([f"**{i+1}.** [{t['name']}](https://last.fm/music/{t['artist']['name'].replace(' ', '+')}/_/{t['name'].replace(' ', '+')}) by {t['artist']['name']} (`{t['playcount']} plays`)" for i, t in enumerate(tracks)])
-        embed = discord.Embed(
-            title=f"Top {limit} tracks for {username}",
-            description=msg,
-            color=discord.Color.purple()
+        embed = create_embed(
+            f"Top {limit} tracks for {username}",
+            msg,
+            color=discord.Color.purple(),
+            footer=(f"Requested by {ctx.author}", ctx.author.display_avatar.url)
         )
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["album"])
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def fmalbum(self, ctx, *, album: str):
-        """Show info about an album."""
+        """Show album info."""
         if not LASTFM_API_KEY:
             return await ctx.reply("❌ Last.fm API key not set.")
-        # Try to get artist and album from input
         if " - " in album:
             artist, album_name = album.split(" - ", 1)
         else:
-            await ctx.reply("Please use the format: `.fmalbum artist - album`")
-            return
+            return await ctx.reply("Please use the format: `.fmalbum artist - album`")
         params = {"artist": artist.strip(), "album": album_name.strip()}
         data = await self.get_lastfm_data("album.getinfo", **params)
         albuminfo = data.get("album")
         if not albuminfo:
             return await ctx.reply("Album not found.")
-        embed = discord.Embed(
-            title=f"{albuminfo.get('name', 'Unknown Album')}",
-            url=albuminfo.get("url", ""),
+        embed = create_embed(
+            albuminfo.get('name', 'Unknown Album'),
+            f"**Artist:** {albuminfo.get('artist', 'N/A')}\n"
+            f"**Listeners:** `{albuminfo.get('listeners', 'N/A')}`\n"
+            f"**Playcount:** `{albuminfo.get('playcount', 'N/A')}`",
             color=discord.Color.gold(),
-            description=f"**Artist:** {albuminfo.get('artist', 'N/A')}\n"
-                        f"**Listeners:** `{albuminfo.get('listeners', 'N/A')}`\n"
-                        f"**Playcount:** `{albuminfo.get('playcount', 'N/A')}`"
+            url=albuminfo.get("url", ""),
+            thumbnail=albuminfo["image"][-1]["#text"] if albuminfo.get("image") else None
         )
-        if albuminfo.get("image"):
-            embed.set_thumbnail(url=albuminfo["image"][-1]["#text"])
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["artist"])
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def fmartist(self, ctx, *, artist: str):
-        """Show info about an artist."""
+        """Show artist info."""
         if not LASTFM_API_KEY:
             return await ctx.reply("❌ Last.fm API key not set.")
         data = await self.get_lastfm_data("artist.getinfo", artist=artist)
@@ -328,97 +340,104 @@ class LastFM(commands.Cog):
         if not artistinfo:
             return await ctx.reply("Artist not found.")
         bio = artistinfo.get("bio", {}).get("summary", "")
-        embed = discord.Embed(
-            title=f"{artistinfo.get('name', 'Unknown Artist')}",
-            url=artistinfo.get("url", ""),
+        embed = create_embed(
+            artistinfo.get('name', 'Unknown Artist'),
+            f"**Listeners:** `{artistinfo.get('stats', {}).get('listeners', 'N/A')}`\n"
+            f"**Playcount:** `{artistinfo.get('stats', {}).get('playcount', 'N/A')}`\n\n"
+            f"{bio[:500]}{'...' if len(bio) > 500 else ''}",
             color=discord.Color.gold(),
-            description=f"**Listeners:** `{artistinfo.get('stats', {}).get('listeners', 'N/A')}`\n"
-                        f"**Playcount:** `{artistinfo.get('stats', {}).get('playcount', 'N/A')}`\n\n"
-                        f"{bio[:500]}{'...' if len(bio) > 500 else ''}"
+            url=artistinfo.get("url", ""),
+            thumbnail=artistinfo["image"][-1]["#text"] if artistinfo.get("image") else None
         )
-        if artistinfo.get("image"):
-            embed.set_thumbnail(url=artistinfo["image"][-1]["#text"])
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["recent"])
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def fmrecent(self, ctx, user: discord.Member = None, count: int = 5):
-        """Show the last N tracks a user played."""
-        if not LASTFM_API_KEY:
-            return await ctx.reply("❌ Last.fm API key not set.")
-        if user:
-            username, session_key = self.get_linked_user(user.id)
-            display_name = user.display_name
-        else:
-            username, session_key = self.get_linked_user(ctx.author.id)
-            display_name = ctx.author.display_name
-
+        """Show recent tracks."""
+        username, session_key, display_name, _ = await self.get_user_and_session(ctx, user)
         if not username or not session_key:
             return await ctx.reply(f"{display_name} has not linked their Last.fm account. Use `.fmlink` to link.")
-
         data = await self.get_lastfm_data("user.getrecenttracks", username, session_key, limit=count)
         tracks = data.get("recenttracks", {}).get("track", [])
         if not tracks:
             return await ctx.reply("No recent tracks found.")
         msg = "\n".join([f"**{i+1}.** [{t['name']}](https://last.fm/music/{t['artist']['#text'].replace(' ', '+')}/_/{t['name'].replace(' ', '+')}) by {t['artist']['#text']}" for i, t in enumerate(tracks)])
-        embed = discord.Embed(
-            title=f"Last {count} tracks for {username}",
-            description=msg,
+        embed = create_embed(
+            f"Last {count} tracks for {username}",
+            msg,
             color=discord.Color.blurple()
         )
         await ctx.reply(embed=embed)
 
     @commands.command(aliases=["servertop"])
+    @commands.cooldown(1, 10, commands.BucketType.guild)
     async def fmservertop(self, ctx, limit: int = 5):
-        """Show the most played artists among all linked users in the server."""
+        """Show server's most played artists."""
         if ctx.guild is None:
             return await ctx.reply("This command can only be used in a server.")
         usernames = [self.get_linked_user(m.id)[0] for m in ctx.guild.members if self.get_linked_user(m.id)[0]]
         if not usernames:
             return await ctx.reply("No users in this server have linked their Last.fm accounts.")
-        artist_counter = Counter()
-        for username in usernames:
-            data = await self.get_lastfm_data("user.gettopartists", username, limit=limit)
-            artists = data.get("topartists", {}).get("artist", [])
-            for a in artists:
-                artist_counter[a["name"]] += int(a.get("playcount", 0))
-        if not artist_counter:
-            return await ctx.reply("No artist data found for this server.")
-        top = artist_counter.most_common(limit)
-        msg = "\n".join([f"**{i+1}.** {name} (`{plays} plays`)" for i, (name, plays) in enumerate(top)])
-        embed = discord.Embed(
-            title=f"Server Top {limit} Artists",
-            description=msg,
-            color=discord.Color.blurple()
-        )
-        await ctx.reply(embed=embed)
 
-    @commands.command(aliases=["leaderboard", "topscrobblers"])
+        async def fetch_artists(username):
+            await asyncio.sleep(0.1)  # small delay to avoid rate limits
+            data = await self.get_lastfm_data("user.gettopartists", username, limit=limit)
+            return data.get("topartists", {}).get("artist", [])
+
+        async with ctx.typing():
+            # Fetch all users' top artists concurrently
+            all_artists_lists = await asyncio.gather(*(fetch_artists(u) for u in usernames))
+            artist_counter = Counter()
+            for artists in all_artists_lists:
+                for a in artists:
+                    artist_counter[a["name"]] += int(a.get("playcount", 0))
+            if not artist_counter:
+                return await ctx.reply("No artist data found for this server.")
+            top = artist_counter.most_common(limit)
+            msg = "\n".join([f"**{i+1}.** {name} (`{plays} plays`)" for i, (name, plays) in enumerate(top)])
+            embed = create_embed(
+                f"Server Top {limit} Artists",
+                msg,
+                color=discord.Color.blurple()
+            )
+            await ctx.reply(embed=embed)
+
+    @commands.command(aliases=["topscrobblers"])
+    @commands.cooldown(1, 10, commands.BucketType.guild)
     async def fmleaderboard(self, ctx):
-        """Show the top scrobblers in the server."""
+        """Show top scrobblers in the server."""
         if ctx.guild is None:
             return await ctx.reply("This command can only be used in a server.")
-        leaderboard = []
-        for member in ctx.guild.members:
-            username, _ = self.get_linked_user(member.id)
-            if username:
-                data = await self.get_lastfm_data("user.getinfo", username)
-                playcount = int(data.get("user", {}).get("playcount", 0))
-                leaderboard.append((member.display_name, playcount))
-        if not leaderboard:
+        members = [m for m in ctx.guild.members if self.get_linked_user(m.id)[0]]
+        if not members:
             return await ctx.reply("No users in this server have linked their Last.fm accounts.")
-        leaderboard.sort(key=lambda x: x[1], reverse=True)
-        msg = "\n".join([f"**{i+1}.** {name} (`{plays} plays`)" for i, (name, plays) in enumerate(leaderboard[:10])])
-        embed = discord.Embed(
-            title="Top Scrobblers in This Server",
-            description=msg,
-            color=discord.Color.blurple()
-        )
-        await ctx.reply(embed=embed)
+
+        async def fetch_playcount(member):
+            await asyncio.sleep(0.1)  # small delay to avoid rate limits
+            username, _ = self.get_linked_user(member.id)
+            data = await self.get_lastfm_data("user.getinfo", username)
+            playcount = int(data.get("user", {}).get("playcount", 0))
+            return (member.display_name, playcount)
+
+        async with ctx.typing():
+            leaderboard = await asyncio.gather(*(fetch_playcount(m) for m in members))
+            leaderboard = [entry for entry in leaderboard if entry[1] > 0]
+            if not leaderboard:
+                return await ctx.reply("No users in this server have linked their Last.fm accounts.")
+            leaderboard.sort(key=lambda x: x[1], reverse=True)
+            msg = "\n".join([f"**{i+1}.** {name} (`{plays} plays`)" for i, (name, plays) in enumerate(leaderboard[:10])])
+            embed = create_embed(
+                "Top Scrobblers in This Server",
+                msg,
+                color=discord.Color.blurple()
+            )
+            await ctx.reply(embed=embed)
 
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def fmsetemojis(self, ctx, emoji1: str, emoji2: str):
-        """Set the two emojis used for reactions on .fm command (admin/owner only)."""
+        """Set the two emojis used for .fm reactions (admin only)."""
         if ctx.guild is None:
             return await ctx.reply("This command can only be used in a server.")
         try:
@@ -436,6 +455,29 @@ class LastFM(commands.Cog):
             return await ctx.reply("This command can only be used in a server.")
         emoji1, emoji2 = self.get_guild_emojis(ctx.guild.id)
         await ctx.reply(f"The current .fm reaction emojis for this server are: {emoji1} {emoji2}")
+
+    @commands.command()
+    async def fmhelp(self, ctx):
+        """Show all Last.fm commands."""
+        embed = discord.Embed(
+            title="🎵 Last.fm Commands",
+            description=(
+                "**.fm [user]** — Now playing/last played track\n"
+                "**.fmtopartists [user] [limit]** — Top artists\n"
+                "**.fmtoptracks [user] [limit]** — Top tracks\n"
+                "**.fmalbum artist - album** — Album info\n"
+                "**.fmartist artist** — Artist info\n"
+                "**.fmrecent [user] [count]** — Recent tracks\n"
+                "**.fmservertop [limit]** — Server's top artists\n"
+                "**.fmleaderboard** — Server's top scrobblers\n"
+                "**.fmsetemojis emoji1 emoji2** — Set .fm emojis (admin)\n"
+                "**.fmemojis** — Show current .fm emojis\n"
+                "**.fmlink / .fmunlink** — Link/unlink your account\n"
+                "**.fmwho [user]** — See who is linked\n"
+            ),
+            color=discord.Color.blurple()
+        )
+        await ctx.reply(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(LastFM(bot))
