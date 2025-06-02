@@ -2,7 +2,7 @@ name: Discord Notification
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   notify:
@@ -27,12 +27,34 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "URL=https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           echo "TIMESTAMP=$(git log -1 --pretty=%cI)" >> $GITHUB_OUTPUT
+          echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+
+      - name: Set Discord Webhook URL
+        id: webhook
+        run: |
+          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+            echo "WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}" >> $GITHUB_OUTPUT
+          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
+            if [ -n "${{ secrets.DISCORD_DEV_WEBHOOK }}" ]; then
+              echo "WEBHOOK=${{ secrets.DISCORD_DEV_WEBHOOK }}" >> $GITHUB_OUTPUT
+            else
+              echo "WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "WEBHOOK=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Send Discord Embed
+        if: steps.webhook.outputs.WEBHOOK != ''
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ steps.webhook.outputs.WEBHOOK }}
         run: |
           MESSAGE=$(echo "${{ steps.commit.outputs.MESSAGE }}" | sed 's/^> /➡️ /g; s/^- /• /g')
+          BRANCH="${{ github.ref_name }}"
+          COLOR=5763719
+          if [[ "$BRANCH" == "dev" ]]; then
+            COLOR=16753920
+          fi
           PAYLOAD=$(jq -n \
             --arg author "${{ steps.commit.outputs.AUTHOR }}" \
             --arg author_avatar "${{ steps.commit.outputs.AUTHOR_AVATAR }}" \
@@ -40,14 +62,13 @@ jobs:
             --arg url "${{ steps.commit.outputs.URL }}" \
             --arg timestamp "${{ steps.commit.outputs.TIMESTAMP }}" \
             --arg sha "${{ steps.commit.outputs.SHA }}" \
+            --arg branch "$BRANCH" \
+            --argjson color "$COLOR" \
             '{
               "embeds": [{
-                "title": "🚀 New Update Released!",
-
+                "title": ("🚀 New Update Released! (" + $branch + ")"),
                 "description": ("**Commit:** [`" + $sha[0:7] + "`](" + $url + ")\n\n" + $message),
-
-
-                "color": 5763719,
+                "color": $color,
                 "footer": {
                   "text": ("Pushed by " + $author),
                   "icon_url": $author_avatar
