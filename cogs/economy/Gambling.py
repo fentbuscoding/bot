@@ -429,9 +429,9 @@ class Gambling(commands.Cog):
         increment = 0.1
         crash_point = random.uniform(1.1, 2.0)  # Determine crash point first
         
-        # 1 in 1000 chance for big multiplier
+        # 1 in 1000 chance for a big multiplier
         if random.random() < 0.001:
-            crash_point = random.uniform(100.0, 1000.0)
+            crash_point = random.uniform(10.0, 1000000.0)
         
         while True:
             # First check if we've reached crash point
@@ -480,7 +480,7 @@ class Gambling(commands.Cog):
                 self.active_games.remove(ctx.author.id)
                 return
                 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.75)
 
     def _crash_view(self, user_id: int, bet: int, current_balance: int):
         """Create the crash game view with cashout button"""
@@ -951,7 +951,7 @@ class Gambling(commands.Cog):
             message = await ctx.reply(embed=embed)
             
             # Animation sequence
-            spin_duration = 3  # seconds
+            spin_duration = 5  # seconds
             spin_steps = 10
             delay = spin_duration / spin_steps
             

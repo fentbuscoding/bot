@@ -1,4 +1,4 @@
-import discord
+import discord 
 from discord.ext import commands
 import aiohttp
 import os
@@ -36,9 +36,12 @@ def get_lastfm_api_secret() -> Optional[str]:
         except Exception:
             continue
     return None
+with open("data/config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
 
 LASTFM_API_KEY = get_lastfm_api_key()
 LASTFM_API_SECRET = get_lastfm_api_secret()
+#TODO: Migrate this to mongo
 
 def load_links() -> dict:
     if not os.path.exists(DATA_PATH):
@@ -106,7 +109,7 @@ class LastFM(commands.Cog):
     def get_auth_url(self, discord_id: int) -> str:
         params = {
             "api_key": LASTFM_API_KEY,
-            "cb": f"https://your-production-domain.com/api/lastfm/callback?discord_id={discord_id}"
+            "cb": f"https://bronxbot.onrender.com/api/lastfm/callback?discord_id={discord_id}"
         }
         return f"https://www.last.fm/api/auth/?{urlencode(params)}"
 

@@ -248,6 +248,7 @@ class Economy(commands.Cog):
             fine = int((random.random() * 0.3 + 0.1) * victim_bal)
 
             await db.update_wallet(ctx.author.id, -fine, ctx.guild.id)
+            await db.update_wallet(victim.id, fine, ctx.guild.id)
             return await ctx.reply(f"You got caught and paid **{fine}** {self.currency} in fines!")
         
         stolen = int(victim_bal * random.uniform(0.1, 0.5))
