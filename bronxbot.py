@@ -145,7 +145,7 @@ class BronxBot(commands.AutoShardedBot):
 bot = BronxBot(
     command_prefix='.',
     intents=intents,
-    shard_count=2,
+    shard_count=round(config['GUILD_COUNT']/20),  # a shard for every 20 servers
     case_insensitive=True,
     application_id=config["CLIENT_ID"]  # <-- Add this line
 )

@@ -88,20 +88,16 @@ class BazaarView(discord.ui.View):
             await interaction.response.send_message("❌ No items available in the bazaar right now.", ephemeral=True)
             return
         
-        # First send the select menu
         modal = ItemSelectModal(self.cog, self.cog.current_items)
-        await interaction.response.send_message(
-            "Select an item to purchase:", 
-            view=modal.select_view, 
-            ephemeral=True
-        )
-        
-        # Then send the modal for amount
-        await interaction.followup.send_modal(modal)
+        await interaction.response.send_modal(modal)
         
     @discord.ui.button(label="📈 Buy Stock", style=discord.ButtonStyle.secondary)
     async def buy_stock(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.handle_stock_purchase(interaction)
+        
+    @discord.ui.button(label="📉 Sell Stock", style=discord.ButtonStyle.secondary)
+    async def sell_stock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.handle_stock_sale(interaction)
         
     @discord.ui.button(label="🗑️ Close", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -225,7 +221,7 @@ class Bazaar(commands.Cog):
             num_items = random.randint(3, 5)
             self.current_items = random.sample(category_items, min(num_items, len(category_items)))
             
-            # Apply bazaar-specific modifications
+            # Apply bazaar specific modifications
             for item in self.current_items:
                 # Apply random discount (10-30%)
                 discount = random.uniform(0.1, 0.3)
@@ -340,8 +336,9 @@ class Bazaar(commands.Cog):
         embed = discord.Embed(
             title="🛒 The Wandering Bazaar",
             description=f"*Exotic goods from distant lands*\n\n"
-                      f"Your Bazaar Stock: **{user_stock}** (Discount: **{user_discount*100:.0f}%**)\n"
-                      f"Current Stock Price: **{self.calculate_stock_price()}** {self.currency}",
+                    f"Your Bazaar Stock: **{user_stock}** (Discount: **{user_discount*100:.0f}%**)\n"
+                    f"Current Stock Price: **{self.calculate_stock_price()}** {self.currency}\n"
+                    f"Sell Price: **{int(self.calculate_stock_price() * 0.8)}** {self.currency} (80%)",
             color=0x9b59b6
         )
         
@@ -381,12 +378,142 @@ class Bazaar(commands.Cog):
         message = await ctx.reply(embed=embed, view=view)
         view.message = message
     
-    @commands.command(name="bazaar-buy", aliases=["bbuy"])
+    @commands.command(name="bazaarbuy", aliases=["bbuy"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def bazaar_buy(self, ctx, item_id: str, amount: int = 1):
         """Buy an item from the bazaar"""
         await self.handle_bazaar_purchase(ctx, item_id, amount)
     
+    @commands.command(name="bazaarsell", aliases=["bsell"])
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def bazaar_sell(self, ctx, amount: int = 1):
+        """Sell your bazaar stock"""
+        await self.handle_stock_sale(ctx, amount)
+    
+    async def handle_stock_sale(self, interaction_or_ctx, amount: int = 1):
+        """Handle stock sale from either interaction or command"""
+        is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
+        
+        if is_interaction:
+            interaction = interaction_or_ctx
+            user = interaction.user
+            guild = interaction.guild
+            respond = interaction.response.send_message
+        else:
+            ctx = interaction_or_ctx
+            user = ctx.author
+            guild = ctx.guild
+            respond = ctx.reply
+
+        if amount <= 0:
+            msg = "❌ Amount must be positive."
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Get user's current stock
+        current_stock = await self.get_user_stock(user.id)
+        
+        if current_stock < amount:
+            msg = f"❌ You only have {current_stock} stock to sell!"
+            if is_interaction:
+                await respond(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Calculate sale price (80% of current stock price)
+        stock_price = int(self.calculate_stock_price() * 0.8)
+        total_gain = stock_price * amount
+
+        # For interactions, defer first
+        if is_interaction:
+            await interaction.response.defer()
+
+        # Add money to wallet
+        if not await db.update_wallet(user.id, total_gain, guild.id if guild else None):
+            msg = "❌ Failed to process sale. Please try again."
+            if is_interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Remove stock
+        result = await db.db.users.update_one(
+            {"_id": str(user.id)},
+            {"$set": {"bazaar_stock": current_stock - amount}}
+        )
+        
+        if result.modified_count == 0:
+            # Refund if failed
+            await db.update_wallet(user.id, -total_gain, guild.id if guild else None)
+            msg = "❌ Failed to remove stock. Transaction cancelled."
+            if is_interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await respond(msg)
+            return
+
+        # Get updated user data
+        new_stock = current_stock - amount
+        new_discount = self.calculate_discount(new_stock)
+        new_balance = await db.get_wallet_balance(user.id, guild.id if guild else None)
+
+        # Create embed
+        embed = discord.Embed(
+            title="✅ Stock Sale Complete",
+            description=f"You sold **{amount}** bazaar stock!",
+            color=0x00ff00
+        )
+
+        embed.add_field(
+            name="Sale Details",
+            value=f"Price per Stock: **{stock_price}** {self.currency}\n"
+                f"Total Gain: **{total_gain}** {self.currency}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Your New Holdings",
+            value=f"Remaining Stock: **{new_stock}**\n"
+                f"Current Discount: **{new_discount*100:.0f}%**\n"
+                f"New Balance: **{new_balance}** {self.currency}",
+            inline=False
+        )
+
+        # Check if they lost secret shop access
+        if new_stock < self.stock_threshold and current_stock >= self.stock_threshold:
+            embed.add_field(
+                name="🔒 Secret Shop Lost",
+                value=f"You no longer meet the {self.stock_threshold} stock requirement for secret shop access!",
+                inline=False
+            )
+
+        try:
+            if hasattr(self, 'last_stock_message') and self.last_stock_message:
+                # Edit the existing message
+                if is_interaction:
+                    await self.last_stock_message.edit(embed=embed)
+                else:
+                    await self.last_stock_message.edit(embed=embed)
+            else:
+                # Send new message and store reference
+                if is_interaction:
+                    msg = await interaction.followup.send(embed=embed)
+                else:
+                    msg = await respond(embed=embed)
+                self.last_stock_message = msg
+        except Exception as e:
+            self.logger.error(f"Error updating stock sale message: {e}")
+            # Fallback to sending new message if edit fails
+            if is_interaction:
+                await interaction.followup.send(embed=embed)
+            else:
+                await respond(embed=embed)
+
     async def handle_bazaar_purchase(self, interaction_or_ctx, item_id: str = None, amount: int = 1):
         """Handle bazaar purchase from either interaction or command"""
         is_interaction = isinstance(interaction_or_ctx, discord.Interaction)
@@ -554,7 +681,7 @@ class Bazaar(commands.Cog):
             else:
                 await respond(embed=embed)
     
-    @commands.command(name="bazaar-stock", aliases=["bstock"])
+    @commands.command(name="bazaarstock", aliases=["bstock"])
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def bazaar_stock(self, ctx, amount: int = 1):
         """Buy bazaar stock"""
