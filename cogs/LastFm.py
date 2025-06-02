@@ -106,7 +106,7 @@ class LastFM(commands.Cog):
     def get_auth_url(self, discord_id: int) -> str:
         params = {
             "api_key": LASTFM_API_KEY,
-            "cb": f"https://your-production-domain.com/api/lastfm/callback?discord_id={discord_id}"
+            "cb": f"https://bronxbot.onrender.com/api/lastfm/callback?discord_id={discord_id}"
         }
         return f"https://www.last.fm/api/auth/?{urlencode(params)}"
 
