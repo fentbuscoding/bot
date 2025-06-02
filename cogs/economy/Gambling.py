@@ -951,7 +951,7 @@ class Gambling(commands.Cog):
             message = await ctx.reply(embed=embed)
             
             # Animation sequence
-            spin_duration = 3  # seconds
+            spin_duration = 5  # seconds
             spin_steps = 10
             delay = spin_duration / spin_steps
             
