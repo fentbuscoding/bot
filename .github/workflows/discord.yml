@@ -43,7 +43,7 @@ jobs:
             '{
               "embeds": [{
                 "title": "🚀 New Update Released!",
-                "description": ("**Commit:** [`" + $sha[0:7] + "`](" + $url + ")\n\n" + $message),
+                "description": ("**Version:** 2.4.8b\n\n" + $message + "\n\n[View Full Changelog](" + $url + ")"),
                 "color": 5763719,
                 "footer": {
                   "text": ("Pushed by " + $author),
