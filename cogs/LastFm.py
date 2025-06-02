@@ -1,3 +1,6 @@
+with open("data/config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+
 import discord
 from discord.ext import commands
 import aiohttp
