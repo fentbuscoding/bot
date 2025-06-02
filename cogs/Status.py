@@ -45,7 +45,7 @@ class Status(commands.Cog):
         pages = []
         overview = discord.Embed(
             title="🔋 Shard Status",
-            color=getattr(ctx.author, "color", discord.Color.blue())
+            color=getattr(ctx.author, "color", discord.Color.blurple())
         )
 
         total_guilds = sum(s['guild_count'] for s in self.shard_stats.values())
@@ -63,17 +63,18 @@ class Status(commands.Cog):
             "**Shard Status**\n"
         )
 
-        # Add short status for first few shards
-        for shard_id, stats in list(self.shard_stats.items())[:3]:
+        # Add short status for all shards (up to 10, then paginate)
+        max_inline = 5
+        for shard_id, stats in list(self.shard_stats.items())[:max_inline]:
             status = stats.get('status', 'offline')
             emoji = "🟢" if status == "online" else "🔴"
             overview.description += (
-                f"{emoji} Shard {shard_id}: `{stats['guild_count']} servers` | "
+                f"{emoji} Shard `{shard_id}`: `{stats['guild_count']} servers` | "
                 f"`{stats['latency']:.1f}ms`\n"
             )
 
-        if len(self.shard_stats) > 3:
-            overview.description += "*Use the arrows to see more shards*"
+        if len(self.shard_stats) > max_inline:
+            overview.description += f"*Use the arrows to see more shards*"
 
         pages.append(overview)
 
@@ -82,7 +83,7 @@ class Status(commands.Cog):
         for i in range(0, len(shards), 5):
             embed = discord.Embed(
                 title="🔋 Shard Details",
-                color=getattr(ctx.author, "color", discord.Color.blue())
+                color=getattr(ctx.author, "color", discord.Color.blurple())
             )
 
             for shard_id, stats in shards[i:i+5]:
@@ -106,9 +107,9 @@ class Status(commands.Cog):
 
             pages.append(embed)
 
+        # Improved paginator: disables buttons if only one page
         view = HelpPaginator(pages, ctx.author)
         view.update_buttons()
-        # Only add the view if it has a select menu with options
         has_select = hasattr(view, "select") and getattr(view.select, "options", None)
         if has_select and view.select.options:
             message = await ctx.reply(embed=pages[0], view=view)
@@ -135,6 +136,14 @@ class Status(commands.Cog):
         self.logger.warning(f"Shard {shard_id} disconnected")
         if shard_id in self.shard_stats:
             self.shard_stats[shard_id]['status'] = 'offline'
+
+    @commands.Cog.listener()
+    async def on_shard_resumed(self, shard_id):
+        """Track when a shard resumes."""
+        self.logger.info(f"Shard {shard_id} resumed")
+        if shard_id in self.shard_stats:
+            self.shard_stats[shard_id]['status'] = 'online'
+            self.shard_stats[shard_id]['last_seen'] = discord.utils.utcnow()
 
 async def setup(bot):
     await bot.add_cog(Status(bot))

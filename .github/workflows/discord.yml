@@ -43,7 +43,10 @@ jobs:
             '{
               "embeds": [{
                 "title": "🚀 New Update Released!",
+
                 "description": ("**Commit:** [`" + $sha[0:7] + "`](" + $url + ")\n\n" + $message),
+
+
                 "color": 5763719,
                 "footer": {
                   "text": ("Pushed by " + $author),
@@ -52,4 +55,5 @@ jobs:
                 "timestamp": $timestamp
               }]
             }')
+
           curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
