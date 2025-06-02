@@ -198,41 +198,6 @@ def get_guild_settings(guild_id: str):
         print(f"Error getting guild settings: {e}")
         return {}
 
-def get_user_balance(user_id: str):
-    """Get user balance from database"""
-    if not MONGODB_AVAILABLE or not db:
-        return {'balance': 0, 'bank': 0}
-    
-    try:
-        user_data = db.users.find_one({"_id": str(user_id)})
-        if user_data:
-            return {
-                'balance': user_data.get('balance', 0),
-                'bank': user_data.get('bank', 0)
-            }
-        return {'balance': 0, 'bank': 0}
-    except Exception as e:
-        print(f"Error getting user balance: {e}")
-        return {'balance': 0, 'bank': 0}
-
-def get_guild_stats(guild_id: str):
-    """Get guild statistics from database"""
-    if not MONGODB_AVAILABLE or not db:
-        return {'member_count': 0, 'message_count': 0, 'active_users': 0}
-    
-    try:
-        stats = db.guild_stats.find_one({"_id": str(guild_id)})
-        if stats:
-            return {
-                'member_count': stats.get('member_count', 0),
-                'message_count': stats.get('message_count', 0),
-                'active_users': stats.get('active_users', 0)
-            }
-        return {'member_count': 0, 'message_count': 0, 'active_users': 0}
-    except Exception as e:
-        print(f"Error getting guild stats: {e}")
-        return {'member_count': 0, 'message_count': 0, 'active_users': 0}
-
 # Add thousands filter
 @app.template_filter('thousands')
 def thousands_filter(value):
@@ -373,7 +338,7 @@ def callback():
         resp = make_response(redirect('/'))
         resp.set_cookie('user_id', user['id'])
         resp.set_cookie('username', user['username'])
-        resp.set_cookie('access_token', access_token)
+        resp.set_cookie('access_token', access_token, httponly=True, secure=True, samesite='Lax')
         return resp
     return 'Authentication failed', 400
 
