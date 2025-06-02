@@ -1,4 +1,4 @@
-import discord
+import discord 
 from discord.ext import commands
 import aiohttp
 import os
@@ -38,9 +38,10 @@ def get_lastfm_api_secret() -> Optional[str]:
     return None
 with open("data/config.json", "r", encoding="utf-8") as f:
     config = json.load(f)
-    
+
 LASTFM_API_KEY = get_lastfm_api_key()
 LASTFM_API_SECRET = get_lastfm_api_secret()
+#TODO: Migrate this to mongo
 
 def load_links() -> dict:
     if not os.path.exists(DATA_PATH):
