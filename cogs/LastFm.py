@@ -1,6 +1,3 @@
-with open("data/config.json", "r", encoding="utf-8") as f:
-    config = json.load(f)
-
 import discord
 from discord.ext import commands
 import aiohttp
@@ -39,7 +36,9 @@ def get_lastfm_api_secret() -> Optional[str]:
         except Exception:
             continue
     return None
-
+with open("data/config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+    
 LASTFM_API_KEY = get_lastfm_api_key()
 LASTFM_API_SECRET = get_lastfm_api_secret()
 
