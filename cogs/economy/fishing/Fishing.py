@@ -79,9 +79,14 @@ class Fishing(commands.Cog):
         # Calculate catch chances
         base_chances = {
             "normal": 0.7 * current_bait.get("catch_rates", {}).get("normal", 1.0),
+            "uncommon": 0.5 * current_bait.get("catch_rates", {}).get("uncommon", 0.05),
             "rare": 0.2 * current_bait.get("catch_rates", {}).get("rare", 0.1),
+            "epic": 0.1 * current_bait.get("catch_rates", {}).get("epic", 0.05),
+            "legendary": 0.05 * current_bait.get("catch_rates", {}).get("legendary", 0.02),
+            "mythical": 0.03 * current_bait.get("catch_rates", {}).get("mythical", 0.01),
             "event": 0.08 * current_bait.get("catch_rates", {}).get("event", 0.0),
-            "mutated": 0.02 * current_bait.get("catch_rates", {}).get("mutated", 0.0)
+            "mutated": 0.02 * current_bait.get("catch_rates", {}).get("mutated", 0.0),
+            "insane": 0.005 * current_bait.get("catch_rates", {}).get("insane", 0.0)
         }
         
         rod_mult = rod.get("multiplier", 1.0)
@@ -105,9 +110,14 @@ class Fishing(commands.Cog):
                 
         value_range = {
             "normal": (10, 100),
+            "uncommon": (50, 200),
             "rare": (100, 500),
-            "event": (500, 2000),
-            "mutated": (2000, 10000)
+            "epic": (200, 1000),
+            "legendary": (500, 2000),
+            "mythical": (1000, 5000),
+            "event": (500, 10000),
+            "mutated": (2000, 10000),
+            "insane": (5000, 200000)
         }[caught_type]
         
         fish = {
