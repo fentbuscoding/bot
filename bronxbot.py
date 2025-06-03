@@ -178,7 +178,8 @@ COG_DATA = {
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
-        "cogs.LastFm": "success",
+        #"cogs.Security": "success", disabled for now
+        #"cogs.LastFm": "disabled",  disabled for now
     },
     "colors": {
         "error": "\033[31m",      # Red

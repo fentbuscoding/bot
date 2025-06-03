@@ -78,6 +78,27 @@ class AsyncDatabase:
         user = await self.db.users.find_one({"_id": str(user_id)})
         return user.get("wallet", 0) if user else 0
 
+    async def get_badge(self, user_id: int, guild_id: int = None) -> Optional[str]:
+        """Get user's badge"""
+        if await self.db.users.find_one({"_id": str(user_id), "dev": True}):
+            badge = "<:dev:1252043061878325378>"
+        elif await self.db.users.find_one({"_id": str(user_id), "h": True}):
+            badge = ":purple_heart:"
+        elif await self.db.users.find_one({"_id": str(user_id), "admin": True}):
+            badge = "<:admin:1252043084091625563>"
+        elif await self.db.users.find_one({"_id": str(user_id), "mod": True}):
+            badge = "<:mod:1252043167872585831>"
+        elif await self.db.users.find_one({"_id": str(user_id), "maintainer": True}):
+            badge = "<:maintainer:1252043069231206420>"
+        elif await self.db.users.find_one({"_id": str(user_id), "contributor": True}):
+            badge = "<:contributor:1252043070426452018>"
+        elif await self.db.users.find_one({"_id": str(user_id), "vip": True}):
+            badge = "<:vip:1252047732231766198>"
+        else:
+            badge = ""
+        return badge
+        
+
     async def get_bank_balance(self, user_id: int, guild_id: int = None) -> int:
         """Get user's bank balance"""
         if not await self.ensure_connected():
@@ -510,7 +531,7 @@ class AsyncDatabase:
         """Add a fishing item (rod or bait) to user's inventory"""
         if not await self.ensure_connected():
             return False
-        field = "fishing_rods" if item_type == "rod" else "fishing_bait"
+        field = "fishing_rods" if item_type == "rod" else "bait"
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
             {"$push": {field: item}}
@@ -691,8 +712,8 @@ class AsyncDatabase:
         )
         
         await self.db.users.update_many(
-            {"fishing_bait": {"$exists": False}},
-            {"$set": {"fishing_bait": []}}
+            {"bait": {"$exists": False}},
+            {"$set": {"bait": []}}
         )
         
         await self.db.users.update_many(
@@ -966,7 +987,7 @@ class AsyncDatabase:
         user = await self.db.users.find_one({"_id": str(user_id)})
         return {
             "rods": user.get("fishing_rods", []),
-            "bait": user.get("fishing_bait", [])
+            "bait": user.get("bait", [])
         } if user else {"rods": [], "bait": []}
 
     async def add_bait(self, user_id: int, bait: dict) -> bool:
@@ -975,7 +996,7 @@ class AsyncDatabase:
             return False
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
-            {"$push": {"fishing_bait": bait}},
+            {"$push": {"bait": bait}},
             upsert=True
         )
         return result.modified_count > 0 or result.upserted_id is not None
@@ -986,14 +1007,14 @@ class AsyncDatabase:
             return False
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
-            {"$inc": {"fishing_bait.$[bait].amount": -amount}},
-            array_filters=[{"bait.id": bait_id}]
+            {"$inc": {"bait.$[bait].amount": -amount}},
+            array_filters=[{"bait._id": bait_id}]
         )
         if result.modified_count > 0:
             # Remove the bait entry if amount reaches 0
             await self.db.users.update_one(
                 {"_id": str(user_id)},
-                {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
+                {"$pull": {"bait": {"amount": {"$lte": 0}}}}
             )
         return result.modified_count > 0
 
@@ -1036,7 +1057,7 @@ class AsyncDatabase:
         
         return {
             "rods": user.get("fishing_rods", []),
-            "bait": user.get("fishing_bait", [])
+            "bait": user.get("bait", [])
         }
 
     async def update_bait_amount(self, user_id: int, bait_id: str, amount: int) -> bool:
@@ -1047,8 +1068,8 @@ class AsyncDatabase:
         try:
             # First check if the bait exists
             existing_bait = await self.db.users.find_one(
-                {"_id": str(user_id), "fishing_bait.id": bait_id},
-                {"fishing_bait.$": 1}
+                {"_id": str(user_id), "bait._id": bait_id},
+                {"bait.$": 1}
             )
             
             if not existing_bait:
@@ -1056,15 +1077,15 @@ class AsyncDatabase:
                 
             # Update the amount
             result = await self.db.users.update_one(
-                {"_id": str(user_id), "fishing_bait.id": bait_id},
-                {"$inc": {"fishing_bait.$.amount": amount}}
+                {"_id": str(user_id), "bait._id": bait_id},
+                {"$inc": {"bait.$.amount": amount}}
             )
             
             # Remove the bait if amount reaches 0 or below
             if result.modified_count > 0:
                 await self.db.users.update_one(
                     {"_id": str(user_id)},
-                    {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
+                    {"$pull": {"bait": {"amount": {"$lte": 0}}}}
                 )
             
             return result.modified_count > 0
@@ -1077,14 +1098,14 @@ class AsyncDatabase:
         if not await self.ensure_connected():
             return False
         
-        field = "fishing_rods" if item_type == "rod" else "fishing_bait"
+        field = "fishing_rods" if item_type == "rod" else "bait"
         
         try:
             # For bait, check if it already exists
             if item_type == "bait":
                 existing_bait = await self.db.users.find_one(
-                    {"_id": str(user_id), "fishing_bait.id": item["id"]},
-                    {"fishing_bait.$": 1}
+                    {"_id": str(user_id), "bait.id": item["id"]},
+                    {"bait.$": 1}
                 )
                 
                 if existing_bait:

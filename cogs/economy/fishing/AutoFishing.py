@@ -20,7 +20,7 @@ class AutoFishing(commands.Cog):
         self.BASE_EFFICIENCY_UPGRADE_PRICE = 500
         self.EFFICIENCY_PRICE_MULTIPLIER = 1.8
         self.BASE_FISHING_INTERVAL = 300  # 5 minutes base
-        self.MAX_EFFICIENCY_LEVEL = 20
+        self.MAX_EFFICIENCY_LEVEL = 50
         self.MAX_AUTOFISHERS = 10
         
         # Start the autofishing loop
@@ -243,7 +243,6 @@ class AutoFishing(commands.Cog):
         next_autofisher_cost = int(self.BASE_AUTOFISHER_PRICE * (self.AUTOFISHER_PRICE_MULTIPLIER ** autofisher_data['count']))
         next_efficiency_cost = int(self.BASE_EFFICIENCY_UPGRADE_PRICE * (self.EFFICIENCY_PRICE_MULTIPLIER ** (efficiency_level - 1)))
         
-        # Create view with buttons
         view = discord.ui.View(timeout=120)
         self.deposit_amount = 100  # Default deposit amount
         
@@ -313,9 +312,15 @@ class AutoFishing(commands.Cog):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("❌ This is not your autofisher!", ephemeral=True)
             
+            # Access the view's deposit_amount
             self.deposit_amount = max(100, self.deposit_amount - 100)
-            await interaction.response.defer()
-            await self.show_auto_status(ctx, interaction.message)
+            
+            # Update the deposit button label
+            for item in view.children:
+                if isinstance(item, discord.ui.Button) and item.label and "Deposit" in item.label:
+                    item.label = f"Deposit {self.deposit_amount}"
+            
+            await interaction.response.edit_message(view=view)
         
         decrease_button.callback = decrease_callback
         view.add_item(decrease_button)
@@ -381,9 +386,15 @@ class AutoFishing(commands.Cog):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("❌ This is not your autofisher!", ephemeral=True)
             
+            # Access the view's deposit_amount
             self.deposit_amount += 100
-            await interaction.response.defer()
-            await self.show_auto_status(ctx, interaction.message)
+            
+            # Update the deposit button label
+            for item in view.children:
+                if isinstance(item, discord.ui.Button) and item.label and "Deposit" in item.label:
+                    item.label = f"Deposit {self.deposit_amount}"
+            
+            await interaction.response.edit_message(view=view)
         
         increase_button.callback = increase_callback
         view.add_item(increase_button)

@@ -12,38 +12,6 @@ class Fishing(commands.Cog):
         self.bot = bot
         self.logger = CogLogger(self.__class__.__name__)
         self.currency = "<:bronkbuk:1377389238290747582>"
-        self.DEFAULT_FISHING_ITEMS = {
-            "bait_shop": {
-                "beginner_bait": {
-                    "name": "Beginner Bait",
-                    "price": 0,
-                    "amount": 10,
-                    "description": "Basic bait for catching fish",
-                    "catch_rates": {"normal": 1.0, "rare": 0.1}
-                },
-                "pro_bait": {
-                    "name": "Pro Bait",
-                    "price": 50,
-                    "amount": 10,
-                    "description": "Better chances for rare fish",
-                    "catch_rates": {"normal": 1.2, "rare": 0.3, "event": 0.1}
-                },
-                "premium_bait": {
-                    "name": "Premium Bait",
-                    "price": 100,
-                    "amount": 10,
-                    "description": "High quality bait for the best catches",
-                    "catch_rates": {"normal": 1.5, "rare": 0.5, "event": 0.2, "mutated": 0.05}
-                },
-                "master_bait": {
-                    "name": "Master Bait",
-                    "price": 2000,
-                    "amount": 10,
-                    "description": "Top-tier bait for the ultimate fishing experience. For true master baiters",
-                    "catch_rates": {"normal": 2.0, "rare": 0.7, "event": 0.3, "mutated": 0.075}
-                }
-            }
-        }
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
     
     # piece de resistance: cog_check

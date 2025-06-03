@@ -225,13 +225,16 @@ class Utility(commands.Cog, ErrorHandler):
         await ctx.reply(f"```{' '.join(map(str, sorted(nums)))}```")
 
     @commands.command(aliases=['color'])
-    async def hexcolor(self, ctx, hex_code: str):
+    async def hexcolor(self, ctx, hex_code: str=None):
         """show a color preview"""
-        hex_code = hex_code.strip('#')
-        if len(hex_code) not in (3, 6):
-            self.logger.warning(f"Invalid hex code: {hex_code}")
-            return await ctx.reply("```invalid hex code```")
-        self.logger.debug(f"Color preview generated for: #{hex_code}")
+        if not hex_code:
+            hex_code = "%06x" % random.randint(0, 0xFFFFFF)
+        else:
+            hex_code = hex_code.strip('#')
+            if len(hex_code) not in (3, 6):
+                self.logger.warning(f"Invalid hex code: {hex_code}")
+                return await ctx.reply("```invalid hex code```")
+            self.logger.debug(f"Color preview generated for: #{hex_code}")
         url = f"https://singlecolorimage.com/get/{hex_code}/200x200"
         embed = discord.Embed(color=int(hex_code.ljust(6, '0'), 16))
         embed.set_image(url=url)

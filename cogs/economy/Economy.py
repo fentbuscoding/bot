@@ -61,8 +61,8 @@ class Economy(commands.Cog):
         bank = await db.get_bank_balance(member.id, ctx.guild.id)
         bank_limit = await db.get_bank_limit(member.id, ctx.guild.id)
         
+        badge = await db.get_badge(member.id, ctx.guild.id)
         embed = discord.Embed(
-            title=f"{member.display_name}'s Balance",
             description=(
                 f"💵 Wallet: **{wallet:,}** {self.currency}\n"
                 f"🏦 Bank: **{bank:,}**/**{bank_limit:,}** {self.currency}\n"
@@ -70,6 +70,12 @@ class Economy(commands.Cog):
             ),
             color=member.color
         )
+        if badge:
+            embed.title = f"{badge} | {member.display_name}'s Balance"
+        else:
+            embed.set_author(name=f"{member.display_name}'s Balance", icon_url=member.display_avatar.url)
+        if member != ctx.author:
+            embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
         await ctx.reply(embed=embed)
 
     @commands.command(name="deposit", aliases=["dep", 'd'])
