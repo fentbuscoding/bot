@@ -165,25 +165,27 @@ class Bazaar(commands.Cog):
         """Get all items from all shop categories"""
         shop_items = defaultdict(list)
         
-        # Get items from shop cog if available
-        shop_cog = self.bot.get_cog("Shop")
-        if shop_cog:
-            shop_items["items"].extend(shop_cog.SHOP_ITEMS.values())
-            shop_items["rods"].extend([item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "rod"])
-            shop_items["bait"].extend([item for item in shop_cog.FISHING_ITEMS.values() if item.get("type") == "bait"])
-            if hasattr(shop_cog, "UPGRADE_ITEMS"):
-                shop_items["upgrades"].extend(shop_cog.UPGRADE_ITEMS.values())
-        
-        # Get items from database collections
         try:
-            # Get shop items from database
-            shop_items["items"].extend(await db.get_shop_items("items"))
-            shop_items["upgrades"].extend(await db.get_shop_items("upgrades"))
-            
-            # Get fishing items
-            fishing_items = await db.get_shop_items("fishing")
-            shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
-            shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+            # Get shop cog if available
+            shop_cog = self.bot.get_cog("Shop")
+            if shop_cog:
+                # Get items from database collections using Shop cog's methods
+                shop_items["items"].extend(await shop_cog.get_shop_items("items"))
+                shop_items["upgrades"].extend(await shop_cog.get_shop_items("upgrades"))
+                
+                # Get fishing items
+                fishing_items = await shop_cog.get_shop_items("fishing")
+                shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
+                shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+            else:
+                # Fallback to direct database access if Shop cog isn't loaded
+                shop_items["items"].extend(await db.get_shop_items("items"))
+                shop_items["upgrades"].extend(await db.get_shop_items("upgrades"))
+                
+                fishing_items = await db.get_shop_items("fishing")
+                shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
+                shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+                
         except Exception as e:
             self.logger.error(f"Error loading shop items: {e}")
         
@@ -205,19 +207,22 @@ class Bazaar(commands.Cog):
         try:
             all_items = await self.get_all_shop_items()
             
+            # Filter out empty categories
+            valid_categories = {k: v for k, v in self.category_weights.items() if all_items.get(k)}
+            if not valid_categories:
+                self.logger.warning("No items found in any category!")
+                self.reset_bazaar_items()
+                return
+                
             # Select categories based on weights
             categories = []
-            for category, weight in self.category_weights.items():
+            for category, weight in valid_categories.items():
                 categories.extend([category] * int(weight * 10))
             
             selected_category = random.choice(categories)
+            category_items = all_items[selected_category]
             
             # Get 3-5 random items from selected category
-            category_items = all_items.get(selected_category, [])
-            if not category_items:
-                self.logger.warning(f"No items found for category: {selected_category}")
-                return
-                
             num_items = random.randint(3, 5)
             self.current_items = random.sample(category_items, min(num_items, len(category_items)))
             
@@ -235,6 +240,7 @@ class Bazaar(commands.Cog):
             
         except Exception as e:
             self.logger.error(f"Error resetting bazaar: {e}")
+            self.reset_bazaar_items()
     
     @tasks.loop(minutes=60)
     async def reset_secret_shop_task(self):

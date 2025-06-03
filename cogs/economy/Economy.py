@@ -76,7 +76,13 @@ class Economy(commands.Cog):
             embed.set_author(name=f"{member.display_name}'s Balance", icon_url=member.display_avatar.url)
         if member != ctx.author:
             embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
-        await ctx.reply(embed=embed)
+        try:
+            await ctx.reply(embed=embed)
+        except discord.HTTPException:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            self.logger.error(f"Failed to send balance embed in {ctx.channel.name}. User: {ctx.author.id}, Member: {member.id}")
+            await ctx.send("I can't send embeds in this channel. Please check my permissions.")
 
     @commands.command(name="deposit", aliases=["dep", 'd'])
     @commands.cooldown(1, 3, commands.BucketType.user)

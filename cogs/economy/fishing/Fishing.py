@@ -29,51 +29,70 @@ class Fishing(commands.Cog):
     @commands.command(name="fish", aliases=["fishing", 'fs'])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def fish(self, ctx):
-        """Go fishing! Requires a rod and bait."""
-        fishing_items = await db.get_fishing_items(ctx.author.id)
+        """Go fishing using your active rod and bait"""
+        # Get user data
+        user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
         
-        if not fishing_items["rods"]:
+        if not user_data:
+            return await ctx.reply("❌ User data not found!")
+        
+        # Get rods - check both possible fields
+        rods = user_data.get("rods", []) or user_data.get("fishing_rods", [])
+        if not rods:
             embed = discord.Embed(
-                title="🎣 First Time Fishing!",
-                description="You need a fishing rod and bait to start fishing!\nVisit the shop to get your free beginner gear:",
-                color=0x2b2d31
-            )
-            embed.add_field(
-                name="Free Starter Pack",
-                value="• Beginner Rod (0 coins)\n• 10x Beginner Bait (0 coins)",
-                inline=False
+                title="🎣 First Time Fishing",
+                description="You need a fishing rod to start! Buy one from `.shop rod`",
+                color=discord.Color.blue()
             )
             return await ctx.reply(embed=embed)
         
-        if not fishing_items["bait"]:
+        # Get bait - check both possible fields
+        bait = user_data.get("bait", []) or user_data.get("fishing_bait", [])
+        if not bait:
             return await ctx.reply("❌ You need bait to go fishing! Buy some from `.shop bait`")
         
-        rod = fishing_items["rods"][0]
-        bait = fishing_items["bait"][0]
+        # Get active rod or default to first rod
+        active_rod_id = user_data.get("active_rod")
+        if active_rod_id:
+            rod = next((r for r in rods if r.get("_id") == active_rod_id), None)
+        else:
+            rod = rods[0]
+            active_rod_id = rod.get("_id")
+            await db.db.users.update_one(
+                {"_id": str(ctx.author.id)},
+                {"$set": {"active_rod": active_rod_id}}
+            )
         
-        # Add debug logging
-        self.logger.info(f"Attempting to use bait: {bait}")
+        if not rod:
+            return await ctx.reply("❌ Your active rod is no longer available!")
         
-        try:
-            bait_removed = await db.remove_bait(ctx.author.id, bait["id"])
-            if not bait_removed:
-                self.logger.error(f"Failed to remove bait: {bait}")
-                return await ctx.reply("❌ Failed to use bait! Please try again or contact support.")
-        except Exception as e:
-            self.logger.error(f"Error removing bait: {e}")
-            return await ctx.reply("❌ An error occurred while using bait. Please try again.")
+        # Use first available bait
+        current_bait = bait[0]
+        bait_id = current_bait.get("_id", current_bait.get("id"))
+        if not bait_id:
+            return await ctx.reply("❌ Invalid bait configuration!")
         
-        # Rest of the fishing logic remains the same...
+        # Remove bait (implemented below)
+        if not await self.remove_bait(ctx.author.id, bait_id):
+            return await ctx.reply("❌ Failed to use bait!")
+        
+        # Calculate catch chances
         base_chances = {
-            "normal": 0.7 * bait.get("catch_rates", {}).get("normal", 1.0),
-            "rare": 0.2 * bait.get("catch_rates", {}).get("rare", 0.1),
-            "event": 0.08 * bait.get("catch_rates", {}).get("event", 0.0),
-            "mutated": 0.02 * bait.get("catch_rates", {}).get("mutated", 0.0)
+            "normal": 0.7 * current_bait.get("catch_rates", {}).get("normal", 1.0),
+            "rare": 0.2 * current_bait.get("catch_rates", {}).get("rare", 0.1),
+            "event": 0.08 * current_bait.get("catch_rates", {}).get("event", 0.0),
+            "mutated": 0.02 * current_bait.get("catch_rates", {}).get("mutated", 0.0)
         }
         
         rod_mult = rod.get("multiplier", 1.0)
         chances = {k: v * rod_mult for k, v in base_chances.items()}
         
+        # Normalize chances
+        total = sum(chances.values())
+        if total > 0:
+            chances = {k: v/total for k, v in chances.items()}
+        
+        # Determine catch
         roll = random.random()
         cumulative = 0
         caught_type = "normal"
@@ -96,9 +115,9 @@ class Fishing(commands.Cog):
             "type": caught_type,
             "name": f"{caught_type.title()} Fish",
             "value": random.randint(*value_range),
-            "caught_at": datetime.datetime.utcnow().isoformat(),
-            "bait_used": bait["id"],
-            "rod_used": rod["id"]
+            "caught_at": datetime.datetime.now().isoformat(),
+            "bait_used": bait_id,
+            "rod_used": active_rod_id
         }
         
         if await db.add_fish(ctx.author.id, fish):
@@ -110,10 +129,43 @@ class Fishing(commands.Cog):
             
             if caught_type in ["rare", "event", "mutated"]:
                 embed.set_footer(text="Wow! That's a special catch!")
+                embed.color = discord.Color.gold()
             
             await ctx.reply(embed=embed)
         else:
             await ctx.reply("❌ Failed to store your catch!")
+
+    async def remove_bait(self, user_id: int, bait_id: str) -> bool:
+        """Remove bait from user's inventory"""
+        try:
+            # First check the bait field (new structure)
+            result = await db.db.users.update_one(
+                {"_id": str(user_id), "bait._id": bait_id},
+                {"$inc": {"bait.$.amount": -1}}
+            )
+            
+            if result.modified_count == 0:
+                # If not found in bait, check fishing_bait (old structure)
+                result = await db.db.users.update_one(
+                    {"_id": str(user_id), "fishing_bait.id": bait_id},
+                    {"$inc": {"fishing_bait.$.amount": -1}}
+                )
+            
+            # Remove bait items with amount <= 0
+            await db.db.users.update_many(
+                {"_id": str(user_id)},
+                {
+                    "$pull": {
+                        "bait": {"amount": {"$lte": 0}},
+                        "fishing_bait": {"amount": {"$lte": 0}}
+                    }
+                }
+            )
+            
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error removing bait: {e}")
+            return False
 
     @commands.command(name="fishinv", aliases=["finv", 'fi'])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -383,6 +435,11 @@ class Fishing(commands.Cog):
             await ctx.reply("❌ Couldn't find that bait in your inventory!")
 
 
+    @commands.command(name="migrate", aliases=["migrate_fish"])
+    @commands.is_owner()
+    async def migrate_fish(self, ctx):
+        await db.migrate_to_standard_ids()
+        await ctx.reply("Migration complete!")
 
 async def setup(bot):
     await bot.add_cog(Fishing(bot))

@@ -269,7 +269,9 @@ class Shop(commands.Cog):
                 await interaction.send(f"No items found in the {shop_type} shop!")
             return
         
-        user_balance = await self.get_wallet(interaction.user.id)
+        # Get the user ID correctly for both Interaction and Context objects
+        user_id = interaction.user.id if isinstance(interaction, discord.Interaction) else interaction.author.id
+        user_balance = await self.get_wallet(user_id)
         
         embed = discord.Embed(
             title=f"{shop_type.capitalize()} Shop",
@@ -310,6 +312,8 @@ class Shop(commands.Cog):
         item_type = None
         for collection_type in self.supported_types:
             collection = await self.get_collection(collection_type)
+            if collection is None:  # Skip if collection doesn't exist
+                continue
             found_item = await collection.find_one({"id": item_id})
             if found_item:
                 item = found_item

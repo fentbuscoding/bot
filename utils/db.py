@@ -7,6 +7,8 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 import threading
+from bson import ObjectId
+import re
 
 def load_config() -> dict:
     """Load config from environment variables, then config.json as fallback."""
@@ -98,46 +100,114 @@ class AsyncDatabase:
             badge = ""
         return badge
 
-    async def migrate_fishing_items(self):
-        """Migrate fishing items to use _id instead of id"""
+
+    async def migrate_to_standard_ids(self):
+        """Migrate all fishing items to use standardized _id format"""
         if not await self.ensure_connected():
             return False
         
         try:
-            # Migrate rods
-            users_with_rods = await self.db.users.find({"fishing_rods": {"$exists": True}}).to_list(None)
-            for user in users_with_rods:
-                updated_rods = []
-                for rod in user.get("fishing_rods", []):
-                    if rod.get("id"):
-                        rod["_id"] = rod.pop("id")
-                    updated_rods.append(rod)
-                
-                if updated_rods != user.get("fishing_rods", []):
-                    await self.db.users.update_one(
-                        {"_id": user["_id"]},
-                        {"$set": {"fishing_rods": updated_rods}}
-                    )
-            
-            # Migrate bait
+            # 1. Migrate user bait (special handling needed)
             users_with_bait = await self.db.users.find({"bait": {"$exists": True}}).to_list(None)
             for user in users_with_bait:
                 updated_bait = []
+                needs_update = False
+                
                 for bait in user.get("bait", []):
-                    if bait.get("id"):
-                        bait["_id"] = bait.pop("id")
+                    if "id" in bait:
+                        # Only add _id if not present
+                        if "_id" not in bait:
+                            bait["_id"] = bait["id"]
+                        # Always remove the old id field
+                        del bait["id"]
+                        needs_update = True
                     updated_bait.append(bait)
                 
-                if updated_bait != user.get("bait", []):
+                if needs_update:
                     await self.db.users.update_one(
                         {"_id": user["_id"]},
                         {"$set": {"bait": updated_bait}}
                     )
-            
+
+            # 2. Migrate user rods (same approach as bait)
+            users_with_rods = await self.db.users.find({"fishing_rods": {"$exists": True}}).to_list(None)
+            for user in users_with_rods:
+                updated_rods = []
+                needs_update = False
+                
+                for rod in user.get("fishing_rods", []):
+                    if "id" in rod:
+                        if "_id" not in rod:
+                            rod["_id"] = rod["id"]
+                        del rod["id"]
+                        needs_update = True
+                    updated_rods.append(rod)
+                
+                if needs_update:
+                    await self.db.users.update_one(
+                        {"_id": user["_id"]},
+                        {"$set": {"fishing_rods": updated_rods}}
+                    )
+
+            # 3. For shop collections, we need to handle differently since we can't modify _id
+            # Create new collections and migrate data
+            if await self.db.shop_bait.count_documents({}) > 0:
+                all_bait = await self.db.shop_bait.find().to_list(None)
+                new_bait = []
+                
+                for bait in all_bait:
+                    new_doc = bait.copy()
+                    if "id" in new_doc:
+                        if "_id" not in new_doc:
+                            new_doc["_id"] = new_doc["id"]
+                        del new_doc["id"]
+                    new_bait.append(new_doc)
+                
+                if new_bait:
+                    await self.db.bait.insert_many(new_bait)
+                    await self.db.shop_bait.drop()
+
+            if await self.db.shop_rods.count_documents({}) > 0:
+                all_rods = await self.db.shop_rods.find().to_list(None)
+                new_rods = []
+                
+                for rod in all_rods:
+                    new_doc = rod.copy()
+                    if "id" in new_doc:
+                        if "_id" not in new_doc:
+                            new_doc["_id"] = new_doc["id"]
+                        del new_doc["id"]
+                    new_rods.append(new_doc)
+                
+                if new_rods:
+                    await self.db.rods.insert_many(new_rods)
+                    await self.db.shop_rods.drop()
+
             return True
         except Exception as e:
             self.logger.error(f"Migration failed: {e}")
             return False
+
+    def _generate_standard_id(self, item):
+        """Generate standardized ID from item name"""
+        if not item.get("name"):
+            return str(ObjectId())
+        
+        # Create standardized ID
+        standardized = item["name"].lower().strip()
+        standardized = re.sub(r'[^a-z0-9]+', '_', standardized)  # Replace special chars with _
+        standardized = re.sub(r'_+', '_', standardized)  # Collapse multiple _s
+        standardized = standardized.strip('_')  # Remove leading/trailing _
+        
+        # Ensure ID is valid and unique enough
+        if not standardized:
+            return str(ObjectId())
+        
+        # Append hash if needed to ensure uniqueness
+        if len(standardized) < 3:
+            standardized += f"_{str(ObjectId())[:4]}"
+        
+        return standardized
 
     async def get_active_fishing_gear(self, user_id: int) -> dict:
         """Get user's active fishing rod and bait"""
@@ -1050,6 +1120,15 @@ class AsyncDatabase:
         """Add bait to user's inventory"""
         if not await self.ensure_connected():
             return False
+        
+        # Ensure _id exists and is properly formatted
+        if "_id" not in bait:
+            bait["_id"] = bait.get("id", str(ObjectId()))
+        
+        # Remove old id field if it exists
+        if "id" in bait:
+            del bait["id"]
+        
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
             {"$push": {"bait": bait}},
@@ -1058,21 +1137,20 @@ class AsyncDatabase:
         return result.modified_count > 0 or result.upserted_id is not None
 
     async def remove_bait(self, user_id: int, bait_id: str, amount: int = 1) -> bool:
-        """Remove bait from user's inventory
-        Args:
-            user_id: The user's ID
-            bait_id: The _id of the bait to remove
-            amount: The quantity to remove (default: 1)
-        Returns:
-            bool: True if successful, False otherwise
-        """
+        """Remove bait from user's inventory with support for both id and _id fields"""
         if not await self.ensure_connected():
             return False
         
         try:
-            # First find the user and the specific bait
+            # First find the user and bait to verify existence and get current amount
             user = await self.db.users.find_one(
-                {"_id": str(user_id), "bait._id": bait_id},
+                {
+                    "_id": str(user_id),
+                    "$or": [
+                        {"bait._id": bait_id},
+                        {"bait.id": bait_id}
+                    ]
+                },
                 {"bait.$": 1}
             )
             
@@ -1083,22 +1161,25 @@ class AsyncDatabase:
             current_amount = current_bait.get("amount", 1)
             
             if current_amount < amount:
-                return False  # Not enough bait to remove
+                return False
                 
-            # Update the bait amount
+            # Determine which field is being used as the identifier
+            identifier_field = "_id" if "_id" in current_bait else "id"
+            
+            # Update using the correct identifier
             result = await self.db.users.update_one(
-                {"_id": str(user_id), "bait._id": bait_id},
+                {"_id": str(user_id), f"bait.{identifier_field}": bait_id},
                 {"$inc": {"bait.$.amount": -amount}}
             )
             
             if result.modified_count == 0:
                 return False
                 
-            # Check if we need to remove the bait entry completely
+            # Remove the bait entry if amount reaches 0 or below
             if current_amount - amount <= 0:
                 await self.db.users.update_one(
                     {"_id": str(user_id)},
-                    {"$pull": {"bait": {"_id": bait_id}}}
+                    {"$pull": {"bait": {identifier_field: bait_id}}}
                 )
                 
             return True
