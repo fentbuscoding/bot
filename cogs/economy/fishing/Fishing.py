@@ -46,14 +46,16 @@ class Fishing(commands.Cog):
         }
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
     
+    # piece de resistance: cog_check
     async def cog_check(self, ctx):
         """Global check for all commands in this cog"""
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
-            return await ctx.reply(
+            await ctx.reply(
                 random.choice([f"❌ Economy commands are disabled in this channel. "
                 f"Please use them in another channel.",
                 "<#1314685928614264852> is a good place for that."])
             )
+            return False
         return True
 
     @commands.command(name="fish", aliases=["fishing", 'fs'])

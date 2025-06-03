@@ -51,6 +51,21 @@ class Gambling(commands.Cog):
             (14, "red"), (31, "black"), (9, "red"), (22, "black"), (18, "red"), (29, "black"), 
             (7, "red"), (28, "black"), (12, "red"), (35, "black"), (3, "red"), (26, "black")
         ]
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
+    
+    # piece de resistance: cog_check
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            await ctx.reply(
+                random.choice([f"❌ Gambling commands are disabled in this channel. "
+                f"degens, please use them in another channel.",
+                "<#1314685928614264852> is a good place for that."])
+            )
+            return False
+        return True
+
+
 
     @commands.command(aliases=['bj', 'blowjob'])
     @commands.cooldown(1, 5, commands.BucketType.user)

@@ -39,7 +39,20 @@ class Economy(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
         self.stats_logger = StatsLogger()
-
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
+    
+    # piece de resistance: cog_check
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            await ctx.reply(
+                random.choice([f"❌ Economy commands are disabled in this channel. "
+                f"Please use them in another channel.",
+                "<#1314685928614264852> is a good place for that."])
+            )
+            return False
+        return True
+    
     @commands.command(aliases=['bal', 'cash', 'bb'])
     async def balance(self, ctx, member: discord.Member = None):
         """Check your balance"""

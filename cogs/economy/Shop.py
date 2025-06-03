@@ -29,6 +29,20 @@ class EconomyShopView(discord.ui.View):
             self.add_item(delete_btn)
         else:
             self.update_buttons()
+        
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
+    
+    # piece de resistance: cog_check
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            await ctx.reply(
+                random.choice([f"❌ Shop commands are disabled in this channel. "
+                f"Please use them in another channel.",
+                "<#1314685928614264852> is a good place for that."])
+            )
+            return False
+        return True
     
     def update_buttons(self):
         self.clear_items()
