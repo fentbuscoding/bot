@@ -51,9 +51,19 @@ class Fishing(commands.Cog):
         rod = fishing_items["rods"][0]
         bait = fishing_items["bait"][0]
         
-        if not await db.remove_bait(ctx.author.id, bait["id"]):
-            return await ctx.reply("❌ Failed to use bait!")
-            
+        # Add debug logging
+        self.logger.info(f"Attempting to use bait: {bait}")
+        
+        try:
+            bait_removed = await db.remove_bait(ctx.author.id, bait["id"])
+            if not bait_removed:
+                self.logger.error(f"Failed to remove bait: {bait}")
+                return await ctx.reply("❌ Failed to use bait! Please try again or contact support.")
+        except Exception as e:
+            self.logger.error(f"Error removing bait: {e}")
+            return await ctx.reply("❌ An error occurred while using bait. Please try again.")
+        
+        # Rest of the fishing logic remains the same...
         base_chances = {
             "normal": 0.7 * bait.get("catch_rates", {}).get("normal", 1.0),
             "rare": 0.2 * bait.get("catch_rates", {}).get("rare", 0.1),
@@ -111,27 +121,50 @@ class Fishing(commands.Cog):
         """View your fishing inventory"""
         fishing_items = await db.get_fishing_items(ctx.author.id)
         fish = await db.get_fish(ctx.author.id)
+        active_gear = await db.get_active_fishing_gear(ctx.author.id)
         
         pages = []
         
-        # Equipment page
+        # Equipment page with active gear
         equip_embed = discord.Embed(
             title="🎣 Fishing Equipment",
             color=discord.Color.blue()
         )
         
+        # Show active rod if available
+        active_rod = next((r for r in fishing_items["rods"] if r["_id"] == active_gear.get("rod")), None)
+        if active_rod:
+            equip_embed.add_field(
+                name="🎣 Active Rod",
+                value=f"**{active_rod['name']}**\n• Multiplier: {active_rod['multiplier']}x\n• {active_rod.get('description', '')}",
+                inline=False
+            )
+        
+        # Show active bait if available
+        active_bait = next((b for b in fishing_items["bait"] if b["_id"] == active_gear.get("bait")), None)
+        if active_bait:
+            equip_embed.add_field(
+                name="🪱 Active Bait",
+                value=f"**{active_bait['name']}** (x{active_bait.get('amount', 1)})\n• {active_bait.get('description', '')}",
+                inline=False
+            )
+        
+        # List all rods
         rods_text = ""
         for rod in fishing_items["rods"]:
-            rods_text += f"**{rod['name']}**\n• Multiplier: {rod['multiplier']}x\n• {rod['description']}\n\n"
+            active_status = " (Active)" if rod["_id"] == active_gear.get("rod") else ""
+            rods_text += f"**{rod['name']}{active_status}**\n• Multiplier: {rod['multiplier']}x\n• {rod.get('description', '')}\n\n"
         equip_embed.add_field(
             name="🎣 Fishing Rods",
             value=rods_text or "No rods",
             inline=False
         )
         
+        # List all bait
         bait_text = ""
         for bait in fishing_items["bait"]:
-            bait_text += f"**{bait['name']}** (x{bait.get('amount', 1)})\n• {bait['description']}\n\n"
+            active_status = " (Active)" if bait["_id"] == active_gear.get("bait") else ""
+            bait_text += f"**{bait['name']}{active_status}** (x{bait.get('amount', 1)})\n• {bait.get('description', '')}\n\n"
         equip_embed.add_field(
             name="🪱 Bait",
             value=bait_text or "No bait",
@@ -197,10 +230,32 @@ class Fishing(commands.Cog):
                     next_button.callback = self.next_page
                     self.add_item(next_button)
                 
-            @discord.ui.button(label="Close", style=discord.ButtonStyle.danger)
-            async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                await interaction.message.delete()
+                @discord.ui.button(label="Close", style=discord.ButtonStyle.danger)
+                async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await interaction.response.defer()
+                    await interaction.message.delete()
+                
+                # Add rod/bait selection buttons if on equipment page
+                if self.current_page == 0:
+                    select_rod = discord.ui.Button(label="Change Rod", style=discord.ButtonStyle.secondary, row=1)
+                    select_rod.callback = self.select_rod
+                    self.add_item(select_rod)
+                    
+                    select_bait = discord.ui.Button(label="Change Bait", style=discord.ButtonStyle.secondary, row=1)
+                    select_bait.callback = self.select_bait
+                    self.add_item(select_bait)
+                
+            async def select_rod(self, interaction: discord.Interaction):
+                await interaction.response.send_message(
+                    "Use `.rod` to view and select a different fishing rod!",
+                    ephemeral=True
+                )
+                
+            async def select_bait(self, interaction: discord.Interaction):
+                await interaction.response.send_message(
+                    "Use `.bait` to view and select different bait!",
+                    ephemeral=True
+                )
                 
             async def previous_page(self, interaction: discord.Interaction):
                 self.current_page -= 1
@@ -252,6 +307,82 @@ class Fishing(commands.Cog):
                 )
                 return await ctx.reply(embed=embed)
             await ctx.reply("❌ Failed to sell fish!")
+
+    # Add to Fishing cog
+
+    @commands.command(name="rod", aliases=["selectrod", "changerod"])
+    async def select_rod(self, ctx, rod_id: str = None):
+        """Select or view your active fishing rod"""
+        fishing_items = await db.get_fishing_items(ctx.author.id)
+        
+        if not fishing_items["rods"]:
+            return await ctx.reply("You don't have any fishing rods! Get one from the shop.")
+        
+        active_gear = await db.get_active_fishing_gear(ctx.author.id)
+        
+        if not rod_id:
+            # Show list of rods with active one marked
+            embed = discord.Embed(
+                title="🎣 Your Fishing Rods",
+                description="Select a rod using `.rod <id>`",
+                color=discord.Color.blue()
+            )
+            
+            for rod in fishing_items["rods"]:
+                status = "✅" if rod["_id"] == active_gear.get("rod") else ""
+                embed.add_field(
+                    name=f"{status} {rod['name']} (ID: {rod['_id']})",
+                    value=f"Multiplier: {rod['multiplier']}x\n{rod.get('description', '')}",
+                    inline=False
+                )
+            
+            return await ctx.reply(embed=embed)
+        
+        # Try to set active rod
+        if await db.set_active_rod(ctx.author.id, rod_id):
+            rod = next((r for r in fishing_items["rods"] if r["_id"] == rod_id), None)
+            if rod:
+                await ctx.reply(f"🎣 Successfully set **{rod['name']}** as your active fishing rod!")
+        else:
+            await ctx.reply("❌ Couldn't find that fishing rod in your inventory!")
+
+    @commands.command(name="bait", aliases=["selectbait", "changebait"])
+    async def select_bait(self, ctx, bait_id: str = None):
+        """Select or view your active bait"""
+        fishing_items = await db.get_fishing_items(ctx.author.id)
+        
+        if not fishing_items["bait"]:
+            return await ctx.reply("You don't have any bait! Get some from the shop.")
+        
+        active_gear = await db.get_active_fishing_gear(ctx.author.id)
+        
+        if not bait_id:
+            # Show list of bait with active one marked
+            embed = discord.Embed(
+                title="🪱 Your Bait",
+                description="Select bait using `.bait <id>`",
+                color=discord.Color.blue()
+            )
+            
+            for bait in fishing_items["bait"]:
+                status = "✅" if bait["_id"] == active_gear.get("bait") else ""
+                embed.add_field(
+                    name=f"{status} {bait['name']} (ID: {bait['_id']}) - x{bait.get('amount', 1)}",
+                    value=f"{bait.get('description', '')}",
+                    inline=False
+                )
+            
+            return await ctx.reply(embed=embed)
+        
+        # Try to set active bait
+        if await db.set_active_bait(ctx.author.id, bait_id):
+            bait = next((b for b in fishing_items["bait"] if b["_id"] == bait_id), None)
+            if bait:
+                await ctx.reply(f"🪱 Successfully set **{bait['name']}** as your active bait!")
+        else:
+            await ctx.reply("❌ Couldn't find that bait in your inventory!")
+
+
 
 async def setup(bot):
     await bot.add_cog(Fishing(bot))

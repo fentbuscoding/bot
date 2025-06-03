@@ -97,7 +97,116 @@ class AsyncDatabase:
         else:
             badge = ""
         return badge
+
+    async def migrate_fishing_items(self):
+        """Migrate fishing items to use _id instead of id"""
+        if not await self.ensure_connected():
+            return False
         
+        try:
+            # Migrate rods
+            users_with_rods = await self.db.users.find({"fishing_rods": {"$exists": True}}).to_list(None)
+            for user in users_with_rods:
+                updated_rods = []
+                for rod in user.get("fishing_rods", []):
+                    if rod.get("id"):
+                        rod["_id"] = rod.pop("id")
+                    updated_rods.append(rod)
+                
+                if updated_rods != user.get("fishing_rods", []):
+                    await self.db.users.update_one(
+                        {"_id": user["_id"]},
+                        {"$set": {"fishing_rods": updated_rods}}
+                    )
+            
+            # Migrate bait
+            users_with_bait = await self.db.users.find({"bait": {"$exists": True}}).to_list(None)
+            for user in users_with_bait:
+                updated_bait = []
+                for bait in user.get("bait", []):
+                    if bait.get("id"):
+                        bait["_id"] = bait.pop("id")
+                    updated_bait.append(bait)
+                
+                if updated_bait != user.get("bait", []):
+                    await self.db.users.update_one(
+                        {"_id": user["_id"]},
+                        {"$set": {"bait": updated_bait}}
+                    )
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"Migration failed: {e}")
+            return False
+
+    async def get_active_fishing_gear(self, user_id: int) -> dict:
+        """Get user's active fishing rod and bait"""
+        if not await self.ensure_connected():
+            return {"rod": None, "bait": None}
+        
+        user = await self.db.users.find_one({"_id": str(user_id)})
+        if not user:
+            return {"rod": None, "bait": None}
+        
+        # Get active gear or default to best available
+        active_gear = user.get("active_fishing", {})
+        rods = user.get("fishing_rods", [])
+        bait = user.get("bait", [])
+        
+        # If no active rod, select the one with highest multiplier
+        if not active_gear.get("rod") and rods:
+            best_rod = max(rods, key=lambda x: x.get("multiplier", 1.0))
+            active_gear["rod"] = best_rod["_id"]
+        
+        # If no active bait, select the first available
+        if not active_gear.get("bait") and bait:
+            active_gear["bait"] = bait[0]["_id"]
+        
+        return active_gear
+
+    async def set_active_rod(self, user_id: int, rod_id: str) -> bool:
+        """Set user's active fishing rod"""
+        if not await self.ensure_connected():
+            return False
+        
+        # Verify user has this rod
+        user = await self.db.users.find_one({
+            "_id": str(user_id),
+            "fishing_rods._id": rod_id
+        })
+        
+        if not user:
+            return False
+        
+        # Update active fishing gear
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"active_fishing.rod": rod_id}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def set_active_bait(self, user_id: int, bait_id: str) -> bool:
+        """Set user's active bait"""
+        if not await self.ensure_connected():
+            return False
+        
+        # Verify user has this bait
+        user = await self.db.users.find_one({
+            "_id": str(user_id),
+            "bait._id": bait_id
+        })
+        
+        if not user:
+            return False
+        
+        # Update active fishing gear
+        result = await self.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"active_fishing.bait": bait_id}},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
 
     async def get_bank_balance(self, user_id: int, guild_id: int = None) -> int:
         """Get user's bank balance"""
@@ -543,26 +652,6 @@ class AsyncDatabase:
         if not await self.ensure_connected():
             return False
             
-        if await self.db.shop_upgrades.count_documents({}) == 0:
-            await self.db.shop_upgrades.insert_many([
-                {
-                    "id": "bank_note_small",
-                    "name": "Small Bank Note",
-                    "price": 5000,
-                    "type": "bank",
-                    "amount": 10000,
-                    "description": "Expand your bank storage"
-                },
-                {
-                    "id": "bank_note_large",
-                    "name": "Large Bank Note",
-                    "price": 20000,
-                    "type": "bank",
-                    "amount": 50000,
-                    "description": "Significantly expand your bank storage"
-                }
-            ])
-
         # Create collections if they don't exist
         collections = [
             "users",
@@ -572,9 +661,8 @@ class AsyncDatabase:
             "shop_items",
             "shop_potions",
             "shop_upgrades",
-            "shop_fishing",
-            "shop_bait",
-            "shop_rod",
+            "rods",  # Unified rods collection
+            "bait",   # Unified bait collection
             "active_potions",
             "active_buffs"
         ]
@@ -588,102 +676,71 @@ class AsyncDatabase:
         await self.db.shops.create_index([("guild_id", 1), ("type", 1)])  # Shop lookups
         await self.db.active_potions.create_index("expires_at", expireAfterSeconds=0)  # TTL index
         await self.db.active_buffs.create_index("expires_at", expireAfterSeconds=0)  # TTL index
+        await self.db.rods.create_index("_id")  # Rod ID index
+        await self.db.bait.create_index("_id")  # Bait ID index
         
-        # Initialize default shops if empty
-        if await self.db.shop_items.count_documents({}) == 0:
-            await self.db.shop_items.insert_many([
-                {
-                    "id": "vip",
-                    "name": "VIP Role",
-                    "price": 10000,
-                    "description": "Grants VIP status and perks",
-                    "type": "role"
-                },
-                {
-                    "id": "color_role",
-                    "name": "Custom Color",
-                    "price": 5000,
-                    "description": "Create a custom colored role",
-                    "type": "role"
-                },
-                {
-                    "id": "interest_token",
-                    "name": "Interest Token",
-                    "price": 50000,
-                    "description": "Required to upgrade interest rate beyond level 20",
-                    "type": "special"
-                }
-            ])
+        # Migration: Merge shop_fishing, shop_bait, and shop_rod into unified collections
+        if await self.db.shop_fishing.count_documents({}) > 0:
+            # Migrate fishing rods
+            fishing_rods = await self.db.shop_fishing.find({"type": "rod"}).to_list(None)
+            if fishing_rods:
+                for rod in fishing_rods:
+                    # Ensure _id exists and is properly formatted
+                    if "_id" not in rod:
+                        rod["_id"] = rod.get("id", str(ObjectId()))
+                    # Remove old id field if it exists
+                    if "id" in rod:
+                        del rod["id"]
+                await self.db.rods.insert_many(fishing_rods)
+                await self.db.shop_fishing.delete_many({"type": "rod"})
             
-        if await self.db.shop_potions.count_documents({}) == 0:
-            await self.db.shop_potions.insert_many([
+            # Migrate fishing bait
+            fishing_bait = await self.db.shop_fishing.find({"type": "bait"}).to_list(None)
+            if fishing_bait:
+                for bait in fishing_bait:
+                    if "_id" not in bait:
+                        bait["_id"] = bait.get("id", str(ObjectId()))
+                    if "id" in bait:
+                        del bait["id"]
+                await self.db.bait.insert_many(fishing_bait)
+                await self.db.shop_fishing.delete_many({"type": "bait"})
+        
+        # Migrate shop_bait collection if it exists
+        if "shop_bait" in await self.db.list_collection_names():
+            shop_bait = await self.db.shop_bait.find().to_list(None)
+            if shop_bait:
+                for bait in shop_bait:
+                    if "_id" not in bait:
+                        bait["_id"] = bait.get("id", str(ObjectId()))
+                    if "id" in bait:
+                        del bait["id"]
+                await self.db.bait.insert_many(shop_bait)
+                await self.db.shop_bait.drop()
+        
+        # Migrate shop_rod collection if it exists
+        if "shop_rod" in await self.db.list_collection_names():
+            shop_rods = await self.db.shop_rod.find().to_list(None)
+            if shop_rods:
+                for rod in shop_rods:
+                    if "_id" not in rod:
+                        rod["_id"] = rod.get("id", str(ObjectId()))
+                    if "id" in rod:
+                        del rod["id"]
+                await self.db.rods.insert_many(shop_rods)
+                await self.db.shop_rod.drop()
+        
+        # Initialize default rods if empty
+        if await self.db.rods.count_documents({}) == 0:
+            await self.db.rods.insert_many([
                 {
-                    "id": "fishing_luck",
-                    "name": "Fishing Luck",
-                    "price": 1000,
-                    "type": "fishing",
-                    "multiplier": 1.5,
-                    "duration": 60,
-                    "description": "50% better fishing luck for 1 hour"
-                },
-                {
-                    "id": "money_boost",
-                    "name": "Money Boost",
-                    "price": 2000,
-                    "type": "money",
-                    "multiplier": 2.0,
-                    "duration": 30,
-                    "description": "Double money from all sources for 30 minutes"
-                }
-            ])
-            
-        if await self.db.shop_upgrades.count_documents({}) == 0:
-            await self.db.shop_upgrades.insert_many([
-                {
-                    "id": "rod_upgrade",
-                    "name": "Rod Enhancement",
-                    "price": 10000,
-                    "type": "fishing",
-                    "multiplier": 0.2,
-                    "description": "Upgrade your current rod's multiplier by 0.2x"
-                }
-            ])
-            
-        if await self.db.shop_fishing.count_documents({}) == 0:
-            await self.db.shop_fishing.insert_many([
-                {
-                    "id": "beginner_rod",
-                    "type": "rod",
+                    "_id": "beginner_rod",
                     "name": "Beginner Rod",
                     "price": 0,
                     "description": "Basic fishing rod",
                     "multiplier": 1.0
                 },
                 {
-                    "id": "beginner_bait",
-                    "type": "bait",
-                    "name": "Beginner Bait",
-                    "price": 0,
-                    "amount": 10,
-                    "description": "Basic bait for catching fish",
-                    "catch_rates": {"normal": 1.0, "rare": 0.1}
-                }
-            ])
-        if await self.db.shop_bait.count_documents({}) == 0:
-            await self.db.shop_bait.insert_many([
-                {
-                    "id": "basic_bait",
-                    "name": "Basic Bait",
-                    "price": 100,
-                    "amount": 5,
-                    "description": "Basic bait for catching fish",
-                    "catch_rates": {"normal": 1.0, "rare": 0.1}
-                }
-            ])
-        if await self.db.shop_rod.count_documents({}) == 0:
-            await self.db.shop_rod.insert_many([
-                {
-                    "id": "basic_rod",
+                    "_id": "basic_rod",
                     "name": "Basic Rod",
                     "price": 500,
                     "description": "Basic fishing rod",
@@ -691,6 +748,28 @@ class AsyncDatabase:
                 }
             ])
         
+        # Initialize default bait if empty
+        if await self.db.bait.count_documents({}) == 0:
+            await self.db.bait.insert_many([
+                {
+                    "_id": "beginner_bait",
+                    "name": "Beginner Bait",
+                    "price": 0,
+                    "amount": 10,
+                    "description": "Basic bait for catching fish",
+                    "catch_rates": {"normal": 1.0, "rare": 0.1}
+                },
+                {
+                    "_id": "basic_bait",
+                    "name": "Basic Bait",
+                    "price": 100,
+                    "amount": 5,
+                    "description": "Basic bait for catching fish",
+                    "catch_rates": {"normal": 1.0, "rare": 0.1}
+                }
+            ])
+        
+        # Initialize user defaults
         await self.db.users.update_many(
             {"wallet": {"$exists": False}},
             {"$set": {"wallet": 0}}
@@ -721,35 +800,12 @@ class AsyncDatabase:
             {"$set": {"fish": []}}
         )
         
+        await self.db.users.update_many(
+            {"active_fishing": {"$exists": False}},
+            {"$set": {"active_fishing": {"rod": None, "bait": None}}}
+        )
+        
         return True
-        
-    async def get_shop_items(self, shop_type: str, guild_id: int = None) -> list:
-        """Get items from a specific shop type"""
-        if not await self.ensure_connected():
-            return []
-        
-        collection = getattr(self.db, f"shop_{shop_type}", None)
-        if not collection:
-            return []
-        
-        if guild_id:
-            # Get both guild-specific and global items
-            pipeline = [
-                {
-                    "$match": {
-                        "$or": [
-                            {"guild_id": str(guild_id)},
-                            {"guild_id": None}
-                        ]
-                    }
-                }
-            ]
-            items = await collection.aggregate(pipeline).to_list(None)
-        else:
-            # Get only global items
-            items = await collection.find({"guild_id": None}).to_list(None)
-        
-        return items
         
     async def add_shop_item(self, item: dict, shop_type: str, guild_id: int = None) -> bool:
         """Add an item to a specific shop"""
