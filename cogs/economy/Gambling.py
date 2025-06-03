@@ -409,7 +409,7 @@ class Gambling(commands.Cog):
             
             # Create crash game
             view = self._crash_view(ctx.author.id, parsed_bet, wallet - parsed_bet)
-            embed = self._crash_embed(1.0, parsed_bet, wallet - parsed_bet, False)
+            embed = self._crash_embed(ctx.author.name, 1.0, parsed_bet, wallet - parsed_bet, False)
             
             message = await ctx.send(embed=embed, view=view)
             view.message = message
@@ -438,6 +438,7 @@ class Gambling(commands.Cog):
             if multiplier >= crash_point:
                 # Crashed exactly at crash_point
                 embed = self._crash_embed(
+                    ctx.author.name,
                     crash_point,
                     bet,
                     current_balance,
@@ -457,6 +458,7 @@ class Gambling(commands.Cog):
                 closeness = f"{percent_to_crash:.0f}% to crash point"
                 
                 embed = self._crash_embed(
+                    ctx.author.name,
                     view.cashout_multiplier,
                     bet,
                     current_balance + winnings,
@@ -473,7 +475,7 @@ class Gambling(commands.Cog):
             view.current_multiplier = multiplier
             
             # Update display
-            embed = self._crash_embed(multiplier, bet, current_balance, False)
+            embed = self._crash_embed(ctx.author.name, multiplier, bet, current_balance, False)
             try:
                 await view.message.edit(embed=embed)
             except discord.NotFound:
@@ -503,10 +505,10 @@ class Gambling(commands.Cog):
         
         return view
 
-    def _crash_embed(self, multiplier: float, bet: int, balance: int, game_over: bool, status: str = None):
+    def _crash_embed(self, author:str, multiplier: float, bet: int, balance: int, game_over: bool, status: str = None):
         """Create a crash game embed"""
         color = 0x2ecc71 if not game_over else 0xe74c3c
-        title = "🚀 Crash Game" if not game_over else "💥 Game Over"
+        title = f"{author.capitalize()}'s 🚀 Crash Game" if not game_over else "💥 Game Over"
         
         embed = discord.Embed(title=title, color=color)
         
