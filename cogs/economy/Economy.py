@@ -69,6 +69,8 @@ class Economy(commands.Cog):
                 bank = await db.get_bank_balance(ctx.author.id, ctx.guild.id)
                 limit = await db.get_bank_limit(ctx.author.id, ctx.guild.id)
                 space = limit - bank
+                if space <= 0:
+                    return await ctx.reply("Your bank is **full**! Upgrade your bank *(`.bu`)* to deposit more.")
                 
                 embed = discord.Embed(
                     description=(

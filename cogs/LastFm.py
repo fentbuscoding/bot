@@ -111,9 +111,14 @@ class LastFM(commands.Cog):
             "api_key": LASTFM_API_KEY,
             "cb": f"https://bronxbot.onrender.com/api/lastfm/callback?discord_id={discord_id}"
         }
+        print(f"Generated auth URL with params: {params}")  # Debug logging
         return f"https://www.last.fm/api/auth/?{urlencode(params)}"
 
+    #TODO: Migrate this to mongo asap
+
     def set_linked_user(self, discord_id: int, session_key: str, username: str):
+        if not session_key or not username:
+            raise ValueError("Invalid session key or username")
         self.links[str(discord_id)] = {"session": session_key, "username": username}
         save_links(self.links)
 
@@ -188,12 +193,17 @@ class LastFM(commands.Cog):
             avatar = ctx.author.display_avatar.url
         return username, session_key, display_name, avatar
 
-    @commands.command(aliases=["link"])
     async def fmlink(self, ctx):
-        """Link your Discord to Last.fm."""
-        if not LASTFM_API_KEY or not LASTFM_API_SECRET:
-            return await ctx.reply("❌ Last.fm API key/secret not set.")
+    """Link your Discord to Last.fm."""
+    if not LASTFM_API_KEY or not LASTFM_API_SECRET:
+        return await ctx.reply("❌ Last.fm API key/secret not set.")
+    
+    try:
         url = self.get_auth_url(ctx.author.id)
+        # Add verification that URL is properly formed
+        if not url.startswith("https://www.last.fm/api/auth/"):
+            raise ValueError("Invalid auth URL generated")
+            
         embed = create_embed(
             "Last.fm Authentication",
             f"**1.** [Click here to authorize with Last.fm]({url})\n"
@@ -204,7 +214,8 @@ class LastFM(commands.Cog):
             footer=("Your account will be linked automatically after you authorize.", ctx.author.display_avatar.url)
         )
         await ctx.reply(embed=embed)
-
+    except Exception as e:
+        await ctx.reply(f"❌ Error generating auth link: {e}")
     @commands.command(aliases=["unlink"])
     async def fmunlink(self, ctx):
         """Unlink your Last.fm account."""
@@ -277,8 +288,7 @@ class LastFM(commands.Cog):
             data = await self.get_lastfm_data("user.gettopartists", username, session_key, limit=limit)
             if "error" in data:
                 return await ctx.reply(f"❌ Last.fm error: {data['error']}")
-            artists = data.get("topartists", {}).get("artist", [])
-            if not artists:
+            artists = data.get("topartists", {}).get("artist", []) if not artists:
                 return await ctx.reply("No top artists found.")
             msg = "\n".join([f"**{i+1}.** [{a['name']}](https://last.fm/music/{a['name'].replace(' ', '+')}) (`{a['playcount']} plays`)" for i, a in enumerate(artists)])
             embed = create_embed(
@@ -410,7 +420,18 @@ class LastFM(commands.Cog):
                 return await ctx.reply("No users in this server have linked their Last.fm accounts.")
 
             async def fetch_artists(username):
-                await asyncio.sleep(0.1)  # small delay to avoid rate limits
+                await asyncio.sleep(0.1)  New chat
+Today
+Last.fm Authentication Error Fix Guide
+Code Analysis and Security Improvements Suggested
+Add Stock Selling Feature to Bazaar
+Yesterday
+Fixing Discord Modal Interaction Error
+Split Text Manipulation Commands into Cog
+Discord Economy Bot Features and Analysis
+Correcting Discord Bot Widget Markdown Syntax
+New Update Release with Discord Integration
+New chat# small delay to avoid rate limits
                 data = await self.get_lastfm_data("user.gettopartists", username, limit=limit)
                 if "error" in data:
                     return []

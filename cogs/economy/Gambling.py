@@ -8,6 +8,16 @@ import asyncio
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 
+class MultiplierConverter(commands.Converter):
+    async def convert(self, ctx, argument):
+        try:
+            # Remove 'x' suffix if present and convert to float
+            if argument.endswith('x'):
+                argument = argument[:-1]
+            return float(argument)
+        except ValueError:
+            raise commands.BadArgument("Multiplier must be a number (like 1.1 or 1.5x)")
+
 class Gambling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -380,11 +390,14 @@ class Gambling(commands.Cog):
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def crash(self, ctx, bet: str):
-        """Bet on a multiplier that can crash at any moment"""
+    async def crash(self, ctx, bet: str, auto_cashout: MultiplierConverter = None):
+        """Bet on a multiplier that can crash at any moment
+        `.crash all 1.2x` <- put it all on crash, and auto cashout when it hits 1.2x
+        `.crash 500 1.5` <- bet 500 with auto cashout at 1.5x
+        """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
-            
+        
         self.active_games.add(ctx.author.id)
         
         try:
@@ -415,7 +428,7 @@ class Gambling(commands.Cog):
             view.message = message
             
             # Start crash sequence
-            await self._run_crash_game(ctx, view, parsed_bet, wallet - parsed_bet)
+            await self._run_crash_game(ctx, view, parsed_bet, wallet - parsed_bet, auto_cashout)
             
         except Exception as e:
             self.logger.error(f"Crash error: {e}")
@@ -423,12 +436,12 @@ class Gambling(commands.Cog):
                 self.active_games.remove(ctx.author.id)
             await ctx.reply("❌ An error occurred while starting the game.")
 
-    async def _run_crash_game(self, ctx, view, bet: int, current_balance: int):
+    async def _run_crash_game(self, ctx, view, bet: int, current_balance: int, auto_cashout: float = None):
         """Run the crash game sequence with exact crash points"""
         multiplier = 1.0
         increment = 0.1
         crash_point = random.uniform(1.1, 2.0)  # Determine crash point first
-        
+
         # 1 in 1000 chance for a big multiplier
         if random.random() < 0.001:
             crash_point = random.uniform(10.0, 1000000.0)
@@ -449,21 +462,25 @@ class Gambling(commands.Cog):
                 return await view.message.edit(embed=embed, view=None)
                 
             # Then check for cashout (only possible if we haven't crashed yet)
-            if view.cashed_out:
-                winnings = int(bet * view.cashout_multiplier)
+            if view.cashed_out or (auto_cashout and multiplier >= auto_cashout):
+                cashout_value = view.current_multiplier if view.cashed_out else auto_cashout
+                winnings = int(bet * cashout_value)
                 await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
                 
                 # Calculate how close they were to crashing
-                percent_to_crash = (view.cashout_multiplier / crash_point) * 100
+                percent_to_crash = (cashout_value / crash_point) * 100
                 closeness = f"{percent_to_crash:.0f}% to crash point"
+                
+                status_msg = (f"💰 Cashed out at {cashout_value:.2f}x!" if view.cashed_out 
+                            else f"🔄 Auto-cashed out at {auto_cashout:.2f}x!")
                 
                 embed = self._crash_embed(
                     ctx.author.name,
-                    view.cashout_multiplier,
+                    cashout_value,
                     bet,
                     current_balance + winnings,
                     True,
-                    f"💰 Cashed out at {view.cashout_multiplier:.2f}x!\n\n"
+                    f"{status_msg}\n\n"
                     f"💡 Game would have crashed at {crash_point:.2f}x ({closeness})"
                 )
                 self.active_games.remove(ctx.author.id)
@@ -483,7 +500,6 @@ class Gambling(commands.Cog):
                 return
                 
             await asyncio.sleep(0.75)
-
     def _crash_view(self, user_id: int, bet: int, current_balance: int):
         """Create the crash game view with cashout button"""
         view = discord.ui.View(timeout=30.0)

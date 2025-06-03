@@ -27,6 +27,20 @@ class Fishing(commands.Cog):
                     "amount": 10,
                     "description": "Better chances for rare fish",
                     "catch_rates": {"normal": 1.2, "rare": 0.3, "event": 0.1}
+                },
+                "premium_bait": {
+                    "name": "Premium Bait",
+                    "price": 100,
+                    "amount": 10,
+                    "description": "High quality bait for the best catches",
+                    "catch_rates": {"normal": 1.5, "rare": 0.5, "event": 0.2, "mutated": 0.05}
+                },
+                "master_bait": {
+                    "name": "Master Bait",
+                    "price": 2000,
+                    "amount": 10,
+                    "description": "Top-tier bait for the ultimate fishing experience. For true master baiters",
+                    "catch_rates": {"normal": 2.0, "rare": 0.7, "event": 0.3, "mutated": 0.075}
                 }
             }
         }
@@ -36,9 +50,9 @@ class Fishing(commands.Cog):
         """Global check for all commands in this cog"""
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
             return await ctx.reply(
-                f"❌ Economy commands are disabled in this channel. "
+                random.choice([f"❌ Economy commands are disabled in this channel. "
                 f"Please use them in another channel.",
-                "<#1314685928614264852> is a good place for that."
+                "<#1314685928614264852> is a good place for that."])
             )
         return True
 
