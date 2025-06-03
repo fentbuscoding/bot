@@ -1058,21 +1058,54 @@ class AsyncDatabase:
         return result.modified_count > 0 or result.upserted_id is not None
 
     async def remove_bait(self, user_id: int, bait_id: str, amount: int = 1) -> bool:
-        """Remove bait from user's inventory"""
+        """Remove bait from user's inventory
+        Args:
+            user_id: The user's ID
+            bait_id: The _id of the bait to remove
+            amount: The quantity to remove (default: 1)
+        Returns:
+            bool: True if successful, False otherwise
+        """
         if not await self.ensure_connected():
             return False
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$inc": {"bait.$[bait].amount": -amount}},
-            array_filters=[{"bait._id": bait_id}]
-        )
-        if result.modified_count > 0:
-            # Remove the bait entry if amount reaches 0
-            await self.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$pull": {"bait": {"amount": {"$lte": 0}}}}
+        
+        try:
+            # First find the user and the specific bait
+            user = await self.db.users.find_one(
+                {"_id": str(user_id), "bait._id": bait_id},
+                {"bait.$": 1}
             )
-        return result.modified_count > 0
+            
+            if not user or not user.get("bait"):
+                return False
+                
+            current_bait = user["bait"][0]
+            current_amount = current_bait.get("amount", 1)
+            
+            if current_amount < amount:
+                return False  # Not enough bait to remove
+                
+            # Update the bait amount
+            result = await self.db.users.update_one(
+                {"_id": str(user_id), "bait._id": bait_id},
+                {"$inc": {"bait.$.amount": -amount}}
+            )
+            
+            if result.modified_count == 0:
+                return False
+                
+            # Check if we need to remove the bait entry completely
+            if current_amount - amount <= 0:
+                await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$pull": {"bait": {"_id": bait_id}}}
+                )
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error removing bait: {e}")
+            return False
 
     async def get_fish(self, user_id: int) -> list:
         """Get user's caught fish"""
