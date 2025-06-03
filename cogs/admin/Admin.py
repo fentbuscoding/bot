@@ -570,7 +570,7 @@ class Admin(commands.Cog):
 
     @commands.command()
     @commands.is_owner()
-    async def reset_economy(self, ctx, *, confirmation: str = None):
+    async def reset_economy(self, ctx, *, confirmation: Optional[str] = None):
         """Reset everyone's balance, inventory, and economic data (Bot Owner Only)
         Usage: .reset_economy YES I WANT TO RESET EVERYTHING"""
         

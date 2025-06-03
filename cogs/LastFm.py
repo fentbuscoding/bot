@@ -216,7 +216,7 @@ class LastFM(commands.Cog):
             await ctx.reply("You don't have a linked Last.fm account.")
 
     @commands.command(aliases=["who"])
-    async def fmwho(self, ctx, user: discord.Member = None):
+    async def fmwho(self, ctx, user: Optional[discord.Member] = None):
         """See the Last.fm username linked to a Discord user."""
         user = user or ctx.author
         username, _ = self.get_linked_user(user.id)
@@ -227,7 +227,7 @@ class LastFM(commands.Cog):
 
     @commands.command(aliases=["np"])
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def fm(self, ctx, user: discord.Member = None):
+    async def fm(self, ctx, user: Optional[discord.Member] = None):
         """Show now playing/last played track for a user."""
         try:
             username, session_key, display_name, avatar = await self.get_user_and_session(ctx, user)
@@ -237,7 +237,11 @@ class LastFM(commands.Cog):
             data = await self.get_lastfm_data("user.getrecenttracks", username, session_key, limit=1)
             if "error" in data:
                 return await ctx.reply(f"❌ Last.fm error: {data['error']}")
-            tracks = data.get("recenttracks", {}).get("track", [])
+            recenttracks = data.get("recenttracks", {})
+            if isinstance(recenttracks, dict):
+                tracks = recenttracks.get("track", [])
+            else:
+                tracks = []
             if not tracks:
                 return await ctx.reply("No recent tracks found.")
             track = tracks[0]
@@ -268,7 +272,7 @@ class LastFM(commands.Cog):
 
     @commands.command(aliases=["artists"])
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def fmtopartists(self, ctx, user: discord.Member = None, limit: int = 5):
+    async def fmtopartists(self, ctx, user: Optional[discord.Member] = None, limit: int = 5):
         """Show top artists."""
         try:
             username, session_key, display_name, _ = await self.get_user_and_session(ctx, user)
@@ -341,7 +345,7 @@ class LastFM(commands.Cog):
                 f"**Playcount:** `{albuminfo.get('playcount', 'N/A')}`",
                 color=discord.Color.gold(),
                 url=albuminfo.get("url", ""),
-                thumbnail=albuminfo["image"][-1]["#text"] if albuminfo.get("image") else None
+                thumbnail=albuminfo.get("image", [{}])[-1].get("#text") if albuminfo.get("image") else None
             )
             await ctx.reply(embed=embed)
         except Exception as e:
@@ -368,7 +372,7 @@ class LastFM(commands.Cog):
                 f"{bio[:500]}{'...' if len(bio) > 500 else ''}",
                 color=discord.Color.gold(),
                 url=artistinfo.get("url", ""),
-                thumbnail=artistinfo["image"][-1]["#text"] if artistinfo.get("image") else None
+                thumbnail=artistinfo.get("image", [{}])[-1].get("#text") if artistinfo.get("image") else None
             )
             await ctx.reply(embed=embed)
         except Exception as e:
@@ -376,7 +380,7 @@ class LastFM(commands.Cog):
 
     @commands.command(aliases=["recent"])
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def fmrecent(self, ctx, user: discord.Member = None, count: int = 5):
+    async def fmrecent(self, ctx, user: Optional[discord.Member] = None, count: int = 5):
         """Show recent tracks."""
         try:
             username, session_key, display_name, _ = await self.get_user_and_session(ctx, user)
