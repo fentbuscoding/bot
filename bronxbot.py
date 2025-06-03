@@ -78,7 +78,7 @@ class BronxBot(commands.AutoShardedBot):
         try:
             stats = {
                 'server_count': len(self.guilds),
-                'user_count': sum(g.member_count for g in self.guilds),
+                'user_count': sum((g.member_count or 0) for g in self.guilds),
                 'uptime': int(time.time() - self.start_time),
                 'latency': round(self.latency * 1000, 2),
                 'guilds': [str(g.id) for g in self.guilds],
