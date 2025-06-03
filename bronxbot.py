@@ -421,6 +421,13 @@ async def on_command_error(ctx: commands.Context, error: Exception):
             color=discord.Color.gold()
         )
         await ctx.send(embed=embed, delete_after=5)
+    elif isinstance(error, commands.CheckFailure):
+        embed = discord.Embed(
+            title="Error",
+            description="❌ You do not have permission to use this command in this channel.",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed, delete_after=10)
     else:
         print(f"Unhandled error in {ctx.command}: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
