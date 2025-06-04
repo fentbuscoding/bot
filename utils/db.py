@@ -84,6 +84,8 @@ class AsyncDatabase:
         """Get user's badge"""
         if await self.db.users.find_one({"_id": str(user_id), "dev": True}):
             badge = "<:dev:1252043061878325378>"
+        elif await self.db.users.find_one({"_id": str(user_id), "tester": True}):
+            badge = ":test_tube:"
         elif await self.db.users.find_one({"_id": str(user_id), "h": True}):
             badge = ":purple_heart:"
         elif await self.db.users.find_one({"_id": str(user_id), "admin": True}):
