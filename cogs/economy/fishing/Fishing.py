@@ -352,18 +352,13 @@ class Fishing(commands.Cog):
                 
                 # Navigation buttons
                 if len(self.pages) > 1:
-                    self.add_item(discord.ui.Button(
-                        emoji="⏮️",
-                        style=discord.ButtonStyle.secondary,
-                        disabled=self.current_page == 0,
-                        custom_id="first"
-                    ))
-                    self.add_item(discord.ui.Button(
-                        emoji="◀️",
-                        style=discord.ButtonStyle.primary,
-                        disabled=self.current_page == 0,
-                        custom_id="prev"
-                    ))
+                    first_button = discord.ui.Button(emoji="⏮️", style=discord.ButtonStyle.secondary, disabled=self.current_page == 0)
+                    first_button.callback = self.first_page
+                    self.add_item(first_button)
+                    
+                    prev_button = discord.ui.Button(emoji="◀️", style=discord.ButtonStyle.primary, disabled=self.current_page == 0)
+                    prev_button.callback = self.prev_page
+                    self.add_item(prev_button)
                     
                     self.add_item(discord.ui.Button(
                         label=f"Page {self.current_page + 1}/{len(self.pages)}",
@@ -371,48 +366,35 @@ class Fishing(commands.Cog):
                         disabled=True
                     ))
                     
-                    self.add_item(discord.ui.Button(
-                        emoji="▶️",
-                        style=discord.ButtonStyle.primary,
-                        disabled=self.current_page == len(self.pages) - 1,
-                        custom_id="next"
-                    ))
-                    self.add_item(discord.ui.Button(
-                        emoji="⏭️",
-                        style=discord.ButtonStyle.secondary,
-                        disabled=self.current_page == len(self.pages) - 1,
-                        custom_id="last"
-                    ))
+                    next_button = discord.ui.Button(emoji="▶️", style=discord.ButtonStyle.primary, disabled=self.current_page == len(self.pages) - 1)
+                    next_button.callback = self.next_page
+                    self.add_item(next_button)
+                    
+                    last_button = discord.ui.Button(emoji="⏭️", style=discord.ButtonStyle.secondary, disabled=self.current_page == len(self.pages) - 1)
+                    last_button.callback = self.last_page
+                    self.add_item(last_button)
                 
                 # Close button
-                self.add_item(discord.ui.Button(
-                    emoji="❌",
-                    style=discord.ButtonStyle.danger,
-                    custom_id="close",
-                    row=1
-                ))
+                close_button = discord.ui.Button(emoji="❌", style=discord.ButtonStyle.danger)
+                close_button.callback = self.close_inventory
+                self.add_item(close_button)
                 
                 # Gear management buttons (only on first page)
                 if self.current_page == 0:
-                    self.add_item(discord.ui.Button(
-                        label="Change Rod",
-                        style=discord.ButtonStyle.success,
-                        custom_id="change_rod",
-                        row=2
-                    ))
-                    self.add_item(discord.ui.Button(
-                        label="Change Bait",
-                        style=discord.ButtonStyle.success,
-                        custom_id="change_bait",
-                        row=2
-                    ))
+                    rod_button = discord.ui.Button(label="Change Rod", style=discord.ButtonStyle.success)
+                    rod_button.callback = self.change_rod
+                    self.add_item(rod_button)
+                    
+                    bait_button = discord.ui.Button(label="Change Bait", style=discord.ButtonStyle.success)
+                    bait_button.callback = self.change_bait
+                    self.add_item(bait_button)
             
             async def interaction_check(self, interaction: discord.Interaction) -> bool:
                 if interaction.user != self.author:
                     await interaction.response.send_message("This isn't your inventory!", ephemeral=True)
                     return False
                 return True
-                
+                    
             async def navigate(self, interaction: discord.Interaction, action: str):
                 if action == "first":
                     self.current_page = 0
@@ -426,32 +408,16 @@ class Fishing(commands.Cog):
                 self.update_buttons()
                 await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
             
-            @discord.ui.button(custom_id="close")
-            async def close_inventory(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.message.delete()
-            
-            @discord.ui.button(custom_id="change_rod")
-            async def change_rod(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.send_message("Use `.rods` to view and change your active fishing rod!", ephemeral=True)
-            
-            @discord.ui.button(custom_id="change_bait")
-            async def change_bait(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.send_message("Use `.baits` to view and change your active bait!", ephemeral=True)
-            
-            @discord.ui.button(custom_id="first")
-            async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def first_page(self, interaction: discord.Interaction):
                 await self.navigate(interaction, "first")
             
-            @discord.ui.button(custom_id="prev")
-            async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def prev_page(self, interaction: discord.Interaction):
                 await self.navigate(interaction, "prev")
             
-            @discord.ui.button(custom_id="next")
-            async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def next_page(self, interaction: discord.Interaction):
                 await self.navigate(interaction, "next")
             
-            @discord.ui.button(custom_id="last")
-            async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def last_page(self, interaction: discord.Interaction):
                 await self.navigate(interaction, "last")
         
         view = InventoryView(pages, ctx.author)
@@ -490,8 +456,6 @@ class Fishing(commands.Cog):
                 )
                 return await ctx.reply(embed=embed)
             await ctx.reply("❌ Failed to sell fish!")
-
-    # Add to Fishing cog
 
     @commands.command(name="rod", aliases=["selectrod", "changerod"])
     async def select_rod(self, ctx, rod_id: str = None):

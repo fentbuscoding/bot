@@ -199,11 +199,14 @@ class Shop(commands.Cog):
         return await collection.find_one({"id": item_id})
 
     async def get_shop_items(self, item_type: str) -> List[Dict]:
-        """Get all items of a specific type"""
+        """Get all items of a specific type, sorted by price (cheapest first)"""
         collection = await self.get_collection(item_type)
         if not collection:
             return []
-        return await collection.find().to_list(None)
+        
+        # Sort items by price in ascending order (cheapest first)
+        items = await collection.find().sort("price", 1).to_list(None)
+        return items
 
     # Database helper methods
     async def get_user_data(self, user_id: int) -> Dict:
