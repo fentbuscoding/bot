@@ -8,6 +8,16 @@ import asyncio
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 
+class MultiplierConverter(commands.Converter):
+    async def convert(self, ctx, argument):
+        try:
+            # Remove 'x' suffix if present and convert to float
+            if argument.endswith('x'):
+                argument = argument[:-1]
+            return float(argument)
+        except ValueError:
+            raise commands.BadArgument("Multiplier must be a number (like 1.1 or 1.5x)")
+
 class Gambling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -41,8 +51,21 @@ class Gambling(commands.Cog):
             (14, "red"), (31, "black"), (9, "red"), (22, "black"), (18, "red"), (29, "black"), 
             (7, "red"), (28, "black"), (12, "red"), (35, "black"), (3, "red"), (26, "black")
         ]
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
+    
+    # piece de resistance: cog_check
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            await ctx.reply(
+                random.choice([f"❌ Gambling commands are disabled in this channel. "
+                f"degens, please use them in another channel.",
+                "<#1314685928614264852> is a good place for that."])
+            )
+            return False
+        return True
 
-    @commands.command(aliases=['bj', 'blowjob'])
+    @commands.command(aliases=['bj'])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def blackjack(self, ctx, bet: str):
         """Play blackjack against the dealer"""
@@ -61,6 +84,7 @@ class Gambling(commands.Cog):
                 return await ctx.reply("❌ Invalid bet amount!")
 
             if parsed_bet <= 0:
+                self.active_games.remove(ctx.author.id)
                 return await ctx.reply("❌ Bet amount must be greater than 0!")
 
             if parsed_bet > wallet:
@@ -70,7 +94,9 @@ class Gambling(commands.Cog):
             # Initialize game
             dealer_hand = [self._draw_card(), self._draw_card()]
             player_hand = [self._draw_card(), self._draw_card()]
-            
+
+            print(f"Card 1: {player_hand[0]}, Card 2: {player_hand[1]}")  # Debug print
+            print(f"Can split: {self._can_split(player_hand)}")  # Debug print
             # Check for blackjack
             player_bj = self._check_blackjack(player_hand)
             dealer_bj = self._check_blackjack(dealer_hand)
@@ -137,7 +163,15 @@ class Gambling(commands.Cog):
                 self.active_games.remove(ctx.author.id)
             await ctx.reply("❌ An error occurred while starting the game.")
 
-    def _blackjack_view(self, user_id: int, bet: int, player_hand: list, dealer_hand: list, wallet: int):
+    def _can_split(self, hand: list) -> bool:
+        """Check if hand can be split (two cards of same value)"""
+        if len(hand) != 2:
+            return False
+        card1 = hand[0][:-1]  # Remove suit
+        card2 = hand[1][:-1]
+        return card1 == card2
+
+    def _blackjack_view(self, user_id: int, bet: int, player_hand: list, dealer_hand: list, wallet: int, split_count: int = 0):
         """Create the blackjack game view with buttons"""
         view = discord.ui.View(timeout=60.0)
         
@@ -151,14 +185,15 @@ class Gambling(commands.Cog):
             # Check for bust
             player_total = self._hand_value(player_hand)
             if player_total > 21:
-                await db.update_wallet(user_id, -bet, interaction.guild.id)
+                await db.update_wallet(user_id, -bet * (split_count + 1), interaction.guild.id)
                 embed = self._blackjack_embed(
-                    f"Bust! You lose {bet:,} {self.currency}",
+                    f"Bust! You lose {bet * (split_count + 1):,} {self.currency}",
                     player_hand,
                     dealer_hand,
                     bet,
-                    -bet,
-                    wallet - bet
+                    -bet * (split_count + 1),
+                    wallet - bet * (split_count + 1),
+                    split_count
                 )
                 self.active_games.remove(user_id)
                 return await interaction.response.edit_message(embed=embed, view=None)
@@ -170,7 +205,8 @@ class Gambling(commands.Cog):
                 [dealer_hand[0], "❓"],
                 bet,
                 0,
-                wallet
+                wallet,
+                split_count
             )
             await interaction.response.edit_message(embed=embed, view=view)
         
@@ -190,14 +226,14 @@ class Gambling(commands.Cog):
             winnings = 0
             
             if dealer_total > 21:
-                outcome = f"Dealer busts! You win {bet:,} {self.currency}"
-                winnings = bet
+                outcome = f"Dealer busts! You win {bet * (split_count + 1):,} {self.currency}"
+                winnings = bet * (split_count + 1)
             elif player_total > dealer_total:
-                outcome = f"You win {bet:,} {self.currency}!"
-                winnings = bet
+                outcome = f"You win {bet * (split_count + 1):,} {self.currency}!"
+                winnings = bet * (split_count + 1)
             elif player_total < dealer_total:
-                outcome = f"You lose {bet:,} {self.currency}!"
-                winnings = -bet
+                outcome = f"You lose {bet * (split_count + 1):,} {self.currency}!"
+                winnings = -bet * (split_count + 1)
             else:
                 outcome = "Push! Bet returned"
                 winnings = 0
@@ -212,7 +248,8 @@ class Gambling(commands.Cog):
                 dealer_hand,
                 bet,
                 winnings,
-                wallet + winnings
+                wallet + winnings,
+                split_count
             )
             self.active_games.remove(user_id)
             await interaction.response.edit_message(embed=embed, view=None)
@@ -222,7 +259,7 @@ class Gambling(commands.Cog):
                 return await interaction.response.send_message("❌ This isn't your game!", ephemeral=True)
                 
             # Check if player can afford to double
-            if wallet < bet * 2:
+            if wallet < bet * (split_count + 2):  # Original bet + new bet for each split
                 return await interaction.response.send_message(
                     "❌ You don't have enough to double!", ephemeral=True)
                     
@@ -233,14 +270,15 @@ class Gambling(commands.Cog):
             # Check for bust
             player_total = self._hand_value(player_hand)
             if player_total > 21:
-                await db.update_wallet(user_id, -new_bet, interaction.guild.id)
+                await db.update_wallet(user_id, -new_bet * (split_count + 1), interaction.guild.id)
                 embed = self._blackjack_embed(
-                    f"Bust! You lose {new_bet:,} {self.currency}",
+                    f"Bust! You lose {new_bet * (split_count + 1):,} {self.currency}",
                     player_hand,
                     dealer_hand,
                     new_bet,
-                    -new_bet,
-                    wallet - new_bet
+                    -new_bet * (split_count + 1),
+                    wallet - new_bet * (split_count + 1),
+                    split_count
                 )
                 self.active_games.remove(user_id)
                 return await interaction.response.edit_message(embed=embed, view=None)
@@ -256,14 +294,14 @@ class Gambling(commands.Cog):
             winnings = 0
             
             if dealer_total > 21:
-                outcome = f"Dealer busts! You win {new_bet:,} {self.currency}"
-                winnings = new_bet
+                outcome = f"Dealer busts! You win {new_bet * (split_count + 1):,} {self.currency}"
+                winnings = new_bet * (split_count + 1)
             elif player_total > dealer_total:
-                outcome = f"You win {new_bet:,} {self.currency}!"
-                winnings = new_bet
+                outcome = f"You win {new_bet * (split_count + 1):,} {self.currency}!"
+                winnings = new_bet * (split_count + 1)
             elif player_total < dealer_total:
-                outcome = f"You lose {new_bet:,} {self.currency}!"
-                winnings = -new_bet
+                outcome = f"You lose {new_bet * (split_count + 1):,} {self.currency}!"
+                winnings = -new_bet * (split_count + 1)
             else:
                 outcome = "Push! Bet returned"
                 winnings = 0
@@ -278,10 +316,58 @@ class Gambling(commands.Cog):
                 dealer_hand,
                 new_bet,
                 winnings,
-                wallet + winnings
+                wallet + winnings,
+                split_count
             )
             self.active_games.remove(user_id)
             await interaction.response.edit_message(embed=embed, view=None)
+        
+        async def split_callback(interaction):
+            if interaction.user.id != user_id:
+                return await interaction.response.send_message("❌ This isn't your game!", ephemeral=True)
+                
+            # Check if player can afford another split (max 4 hands)
+            if split_count >= 3:  # Already split 3 times (total 4 hands)
+                return await interaction.response.send_message(
+                    "❌ You can't split more than 4 hands!", ephemeral=True)
+                    
+            if wallet < bet * (split_count + 2):  # Original bet + new bet for each split
+                return await interaction.response.send_message(
+                    "❌ You don't have enough to split again!", ephemeral=True)
+                    
+            # Split the hand into two hands
+            hand1 = [player_hand[0], self._draw_card()]
+            hand2 = [player_hand[1], self._draw_card()]
+            
+            # Create split queue
+            split_queue = []
+            if split_count > 0:
+                # If we're already in a split, add to existing queue
+                split_queue.extend(view.split_queue)
+            split_queue.extend([hand1, hand2])
+            
+            # Create split game view
+            view = self._blackjack_split_view(
+                user_id,
+                bet,
+                split_queue,
+                dealer_hand,
+                wallet - bet,  # Original bet already deducted
+                split_count + 1
+            )
+            
+            embed = self._blackjack_split_embed(
+                f"Split {1}/{len(split_queue)} - Hit or Stand?",
+                split_queue[0],
+                split_queue[1:] if len(split_queue) > 1 else None,
+                [dealer_hand[0], "❓"],
+                bet,
+                0,
+                wallet - bet,
+                split_count + 1
+            )
+            
+            await interaction.response.edit_message(embed=embed, view=view)
         
         hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.green)
         hit_button.callback = hit_callback
@@ -297,11 +383,237 @@ class Gambling(commands.Cog):
             double_button.callback = double_callback
             view.add_item(double_button)
             
+            # Only allow split if cards have same value and we have < 4 hands
+            if True: #self._can_split(player_hand) and split_count < 3
+                split_button = discord.ui.Button(label="Split", style=discord.ButtonStyle.grey)
+                split_button.callback = split_callback
+                view.add_item(split_button)
+                
         return view
 
-    def _blackjack_embed(self, title: str, player_hand: list, dealer_hand: list, bet: int, winnings: int, new_balance: int):
+    def _blackjack_split_view(self, user_id: int, bet: int, split_queue: list, dealer_hand: list, wallet: int, split_count: int):
+        """Create a view for split hands with queue"""
+        view = discord.ui.View(timeout=60.0)
+        view.current_hand_index = 0
+        view.split_queue = split_queue
+        view.hands_completed = 0
+        view.split_count = split_count
+        
+        async def hit_callback(interaction):
+            if interaction.user.id != user_id:
+                return await interaction.response.send_message("❌ This isn't your game!", ephemeral=True)
+                
+            # Add card to current hand
+            view.split_queue[view.current_hand_index].append(self._draw_card())
+            current_hand = view.split_queue[view.current_hand_index]
+            
+            # Check for bust
+            hand_value = self._hand_value(current_hand)
+            if hand_value > 21:
+                # Mark hand as done
+                view.hands_completed += 1
+                
+                # Check if all hands are done
+                if view.hands_completed == len(view.split_queue):
+                    total_loss = bet * len(view.split_queue)
+                    await db.update_wallet(user_id, -total_loss, interaction.guild.id)
+                    embed = self._blackjack_split_embed(
+                        f"All hands bust! You lose {total_loss:,} {self.currency}",
+                        view.split_queue[0],
+                        view.split_queue[1:],
+                        dealer_hand,
+                        bet,
+                        -total_loss,
+                        wallet - total_loss + bet,  # Original bet was already deducted
+                        view.split_count
+                    )
+                    self.active_games.remove(user_id)
+                    return await interaction.response.edit_message(embed=embed, view=None)
+                else:
+                    # Move to next hand
+                    view.current_hand_index += 1
+                    embed = self._blackjack_split_embed(
+                        f"Split {view.current_hand_index + 1}/{len(view.split_queue)} - Hit or Stand?",
+                        view.split_queue[view.current_hand_index],
+                        [h for i, h in enumerate(view.split_queue) if i != view.current_hand_index],
+                        [dealer_hand[0], "❓"],
+                        bet,
+                        0,
+                        wallet,
+                        view.split_count
+                    )
+                    return await interaction.response.edit_message(embed=embed, view=view)
+                    
+            # Update message
+            embed = self._blackjack_split_embed(
+                f"Split {view.current_hand_index + 1}/{len(view.split_queue)} - Hit or Stand?",
+                view.split_queue[view.current_hand_index],
+                [h for i, h in enumerate(view.split_queue) if i != view.current_hand_index],
+                [dealer_hand[0], "❓"],
+                bet,
+                0,
+                wallet,
+                view.split_count
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
+        
+        async def stand_callback(interaction):
+            if interaction.user.id != user_id:
+                return await interaction.response.send_message("❌ This isn't your game!", ephemeral=True)
+                
+            # Mark current hand as done
+            view.hands_completed += 1
+            
+            # Check if all hands are done
+            if view.hands_completed == len(view.split_queue):
+                # Dealer draws until 17 or higher
+                dealer_total = self._hand_value(dealer_hand)
+                while dealer_total < 17:
+                    dealer_hand.append(self._draw_card())
+                    dealer_total = self._hand_value(dealer_hand)
+                    
+                # Evaluate all hands
+                results = []
+                total_winnings = 0
+                
+                for hand in view.split_queue:
+                    hand_value = self._hand_value(hand)
+                    
+                    if hand_value > 21:
+                        results.append("Bust")
+                        total_winnings -= bet
+                    elif dealer_total > 21:
+                        results.append("Win (Dealer bust)")
+                        total_winnings += bet
+                    elif hand_value > dealer_total:
+                        results.append("Win")
+                        total_winnings += bet
+                    elif hand_value < dealer_total:
+                        results.append("Lose")
+                        total_winnings -= bet
+                    else:
+                        results.append("Push")
+                        
+                # Update balance
+                await db.update_wallet(user_id, total_winnings, interaction.guild.id)
+                
+                # Create result message
+                outcome = "\n".join(
+                    f"Hand {i+1}: {result}" 
+                    for i, result in enumerate(results)
+                )
+                outcome += f"\n\n**Net {'win' if total_winnings > 0 else 'loss'}: {abs(total_winnings):,} {self.currency}**"
+                    
+                embed = self._blackjack_split_embed(
+                    outcome,
+                    view.split_queue[0],
+                    view.split_queue[1:],
+                    dealer_hand,
+                    bet,
+                    total_winnings,
+                    wallet + total_winnings + bet,  # Original bet was already deducted
+                    view.split_count
+                )
+                self.active_games.remove(user_id)
+                return await interaction.response.edit_message(embed=embed, view=None)
+            else:
+                # Move to next hand
+                view.current_hand_index += 1
+                embed = self._blackjack_split_embed(
+                    f"Split {view.current_hand_index + 1}/{len(view.split_queue)} - Hit or Stand?",
+                    view.split_queue[view.current_hand_index],
+                    [h for i, h in enumerate(view.split_queue) if i != view.current_hand_index],
+                    [dealer_hand[0], "❓"],
+                    bet,
+                    0,
+                    wallet,
+                    view.split_count
+                )
+                return await interaction.response.edit_message(embed=embed, view=view)
+        
+        hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.green)
+        hit_button.callback = hit_callback
+        view.add_item(hit_button)
+        
+        stand_button = discord.ui.Button(label="Stand", style=discord.ButtonStyle.red)
+        stand_button.callback = stand_callback
+        view.add_item(stand_button)
+        
+        return view
+
+    def _blackjack_split_embed(self, title: str, current_hand: list, other_hands: list, dealer_hand: list, bet: int, winnings: int, new_balance: int, split_count: int):
+        """Create a blackjack split game embed"""
+        embed = discord.Embed(
+            title=f"♠️♥️ Blackjack Game (Split {split_count}/{len(other_hands) + 1}) ♦️♣️ - {title}", 
+            color=0x2b2d31
+        )
+        
+        # Format hands
+        current_hand_cards = " ".join([f"`{card}`" for card in current_hand])
+        dealer_cards = " ".join([f"`{card}`" for card in dealer_hand])
+        
+        # Calculate totals
+        current_hand_total = self._hand_value(current_hand)
+        dealer_total = self._hand_value(dealer_hand) if "❓" not in dealer_hand else "?"
+        
+        embed.add_field(
+            name=f"Current Hand ({current_hand_total})",
+            value=current_hand_cards,
+            inline=False
+        )
+        
+        # Show other hands if they exist
+        if other_hands and len(other_hands) > 0:
+            other_hands_text = []
+            for i, hand in enumerate(other_hands, 1):
+                hand_cards = " ".join([f"`{card}`" for card in hand])
+                hand_total = self._hand_value(hand)
+                other_hands_text.append(f"**Hand {i} ({hand_total})**: {hand_cards}")
+            
+            embed.add_field(
+                name="Other Hands",
+                value="\n".join(other_hands_text),
+                inline=False
+            )
+        
+        embed.add_field(
+            name=f"Dealer's Hand ({dealer_total})",
+            value=dealer_cards,
+            inline=False
+        )
+        
+        # Add bet info
+        embed.add_field(
+            name="Bet per Hand",
+            value=f"**{bet:,}** {self.currency}",
+            inline=True
+        )
+        
+        # Add winnings if game is over
+        if winnings != 0:
+            embed.add_field(
+                name="Net Result",
+                value=f"**{winnings:,}** {self.currency}",
+                inline=True
+            )
+        
+        embed.add_field(
+            name="New Balance",
+            value=f"**{new_balance:,}** {self.currency}",
+            inline=True
+        )
+        
+        return embed
+
+    # Update the regular blackjack embed to include split count
+    def _blackjack_embed(self, title: str, player_hand: list, dealer_hand: list, bet: int, winnings: int, new_balance: int, split_count: int = 0):
         """Create a blackjack game embed"""
-        embed = discord.Embed(title=f"♠️♥️ Blackjack ♦️♣️ - {title}", color=0x2b2d31)
+        embed_title = f"♠️♥️ Blackjack Game"
+        if split_count > 0:
+            embed_title += f" (Split {split_count}/4)"
+        embed_title += f" ♦️♣️ - {title}"
+        
+        embed = discord.Embed(title=embed_title, color=0x2b2d31)
         
         # Format hands
         player_cards = " ".join([f"`{card}`" for card in player_hand])
@@ -323,9 +635,10 @@ class Gambling(commands.Cog):
         )
         
         # Add bet info
+        bet_amount = bet * (split_count + 1) if split_count > 0 else bet
         embed.add_field(
             name="Bet",
-            value=f"**{bet:,}** {self.currency}",
+            value=f"**{bet_amount:,}** {self.currency}",
             inline=True
         )
         
@@ -380,11 +693,14 @@ class Gambling(commands.Cog):
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def crash(self, ctx, bet: str):
-        """Bet on a multiplier that can crash at any moment"""
+    async def crash(self, ctx, bet: str, auto_cashout: MultiplierConverter = None):
+        """Bet on a multiplier that can crash at any moment
+        `.crash all 1.2x` <- put it all on crash, and auto cashout when it hits 1.2x
+        `.crash 500 1.5` <- bet 500 with auto cashout at 1.5x
+        """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
-            
+        
         self.active_games.add(ctx.author.id)
         
         try:
@@ -409,13 +725,13 @@ class Gambling(commands.Cog):
             
             # Create crash game
             view = self._crash_view(ctx.author.id, parsed_bet, wallet - parsed_bet)
-            embed = self._crash_embed(1.0, parsed_bet, wallet - parsed_bet, False)
+            embed = self._crash_embed(ctx.author.name, 1.0, parsed_bet, wallet - parsed_bet, False)
             
             message = await ctx.send(embed=embed, view=view)
             view.message = message
             
             # Start crash sequence
-            await self._run_crash_game(ctx, view, parsed_bet, wallet - parsed_bet)
+            await self._run_crash_game(ctx, view, parsed_bet, wallet - parsed_bet, auto_cashout)
             
         except Exception as e:
             self.logger.error(f"Crash error: {e}")
@@ -423,12 +739,12 @@ class Gambling(commands.Cog):
                 self.active_games.remove(ctx.author.id)
             await ctx.reply("❌ An error occurred while starting the game.")
 
-    async def _run_crash_game(self, ctx, view, bet: int, current_balance: int):
+    async def _run_crash_game(self, ctx, view, bet: int, current_balance: int, auto_cashout: float = None):
         """Run the crash game sequence with exact crash points"""
         multiplier = 1.0
         increment = 0.1
         crash_point = random.uniform(1.1, 2.0)  # Determine crash point first
-        
+
         # 1 in 1000 chance for a big multiplier
         if random.random() < 0.001:
             crash_point = random.uniform(10.0, 1000000.0)
@@ -438,6 +754,7 @@ class Gambling(commands.Cog):
             if multiplier >= crash_point:
                 # Crashed exactly at crash_point
                 embed = self._crash_embed(
+                    ctx.author.name,
                     crash_point,
                     bet,
                     current_balance,
@@ -448,20 +765,25 @@ class Gambling(commands.Cog):
                 return await view.message.edit(embed=embed, view=None)
                 
             # Then check for cashout (only possible if we haven't crashed yet)
-            if view.cashed_out:
-                winnings = int(bet * view.cashout_multiplier)
+            if view.cashed_out or (auto_cashout and multiplier >= auto_cashout):
+                cashout_value = view.current_multiplier if view.cashed_out else auto_cashout
+                winnings = int(bet * cashout_value)
                 await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
                 
                 # Calculate how close they were to crashing
-                percent_to_crash = (view.cashout_multiplier / crash_point) * 100
+                percent_to_crash = (cashout_value / crash_point) * 100
                 closeness = f"{percent_to_crash:.0f}% to crash point"
                 
+                status_msg = (f"💰 Cashed out at {cashout_value:.2f}x!" if view.cashed_out 
+                            else f"🔄 Auto-cashed out at {auto_cashout:.2f}x!")
+                
                 embed = self._crash_embed(
-                    view.cashout_multiplier,
+                    ctx.author.name,
+                    cashout_value,
                     bet,
                     current_balance + winnings,
                     True,
-                    f"💰 Cashed out at {view.cashout_multiplier:.2f}x!\n\n"
+                    f"{status_msg}\n\n"
                     f"💡 Game would have crashed at {crash_point:.2f}x ({closeness})"
                 )
                 self.active_games.remove(ctx.author.id)
@@ -473,7 +795,7 @@ class Gambling(commands.Cog):
             view.current_multiplier = multiplier
             
             # Update display
-            embed = self._crash_embed(multiplier, bet, current_balance, False)
+            embed = self._crash_embed(ctx.author.name, multiplier, bet, current_balance, False)
             try:
                 await view.message.edit(embed=embed)
             except discord.NotFound:
@@ -481,7 +803,6 @@ class Gambling(commands.Cog):
                 return
                 
             await asyncio.sleep(0.75)
-
     def _crash_view(self, user_id: int, bet: int, current_balance: int):
         """Create the crash game view with cashout button"""
         view = discord.ui.View(timeout=30.0)
@@ -503,10 +824,10 @@ class Gambling(commands.Cog):
         
         return view
 
-    def _crash_embed(self, multiplier: float, bet: int, balance: int, game_over: bool, status: str = None):
+    def _crash_embed(self, author:str, multiplier: float, bet: int, balance: int, game_over: bool, status: str = None):
         """Create a crash game embed"""
         color = 0x2ecc71 if not game_over else 0xe74c3c
-        title = "🚀 Crash Game" if not game_over else "💥 Game Over"
+        title = f"{author.capitalize()}'s 🚀 Crash Game" if not game_over else "💥 Game Over"
         
         embed = discord.Embed(title=title, color=color)
         

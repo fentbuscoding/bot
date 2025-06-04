@@ -7,6 +7,7 @@ import uuid
 import datetime
 import asyncio
 import math
+from bson import ObjectId
 
 class AutoFishing(commands.Cog):
     def __init__(self, bot):
@@ -16,12 +17,13 @@ class AutoFishing(commands.Cog):
         
         # Autofisher configurations
         self.BASE_AUTOFISHER_PRICE = 1000
-        self.AUTOFISHER_PRICE_MULTIPLIER = 2.5  # Gets expensive FAST
+        self.AUTOFISHER_PRICE_MULTIPLIER = 2.5
         self.BASE_EFFICIENCY_UPGRADE_PRICE = 500
         self.EFFICIENCY_PRICE_MULTIPLIER = 1.8
         self.BASE_FISHING_INTERVAL = 300  # 5 minutes base
-        self.MAX_EFFICIENCY_LEVEL = 20
+        self.MAX_EFFICIENCY_LEVEL = 50
         self.MAX_AUTOFISHERS = 10
+        self.BAIT_COST = 50  # Cost for autofisher to buy bait
         
         # Start the autofishing loop
         self.autofishing_task = self.bot.loop.create_task(self.autofishing_loop())
@@ -44,121 +46,138 @@ class AutoFishing(commands.Cog):
                     try:
                         await self.process_user_autofishing(user_id)
                     except Exception as e:
-                        self.logger.error(f"Error processing autofishing for user {user_id}: {e}")
+                        self.logger.error(f"Error processing autofishing for user {user_id}: {str(e)}")
                 
                 # Wait 30 seconds before next cycle
                 await asyncio.sleep(30)
                 
             except Exception as e:
-                self.logger.error(f"Error in autofishing loop: {e}")
+                self.logger.error(f"Error in autofishing loop: {str(e)}")
                 await asyncio.sleep(60)  # Wait longer on error
 
     async def process_user_autofishing(self, user_id):
         """Process autofishing for a single user"""
-        autofisher_data = await db.get_autofisher_data(user_id)
-        if not autofisher_data or autofisher_data["count"] == 0:
-            return
+        try:
+            autofisher_data = await db.get_autofisher_data(user_id)
+            if not autofisher_data or autofisher_data["count"] == 0:
+                return
+                
+            fishing_items = await db.get_fishing_items(user_id)
+            if not fishing_items["rods"]:
+                return  # No rods, can't autofish
+                
+            current_time = datetime.datetime.now()
+            last_fish_time = datetime.datetime.fromisoformat(autofisher_data.get("last_fish_time", "2000-01-01T00:00:00"))
             
-        fishing_items = await db.get_fishing_items(user_id)
-        if not fishing_items["rods"]:
-            return  # No rods, can't autofish
+            # Calculate fishing interval
+            efficiency_level = autofisher_data.get("efficiency_level", 1)
+            fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))
             
-        current_time = datetime.datetime.utcnow()
-        last_fish_time = datetime.datetime.fromisoformat(autofisher_data.get("last_fish_time", "2000-01-01T00:00:00"))
+            if (current_time - last_fish_time).total_seconds() < fishing_interval:
+                return
+                
+            autofisher_count = autofisher_data["count"]
+            autofisher_balance = autofisher_data.get("balance", 0)
+            
+            for _ in range(autofisher_count):
+                # Handle bait management
+                if not fishing_items["bait"]:
+                    if autofisher_balance >= self.BAIT_COST:
+                        bait = {
+                            "_id": "pro_bait",  # Standardized ID
+                            "name": "Pro Bait",
+                            "amount": 10,
+                            "description": "Better chances for rare fish",
+                            "catch_rates": {"normal": 1.2, "rare": 0.3, "event": 0.1}
+                        }
+                        if await db.add_bait(user_id, bait):
+                            autofisher_balance -= self.BAIT_COST
+                            fishing_items["bait"] = [bait]
+                        else:
+                            break
+                    else:
+                        break
+                
+                bait = fishing_items["bait"][0]
+                rod = fishing_items["rods"][0]
+                
+                # Get the correct bait identifier
+                bait_id = bait.get("_id", bait.get("id"))
+                if not bait_id:
+                    self.logger.error(f"No valid bait ID found for user {user_id}")
+                    break
+                    
+                # Remove bait
+                if not await db.remove_bait(user_id, bait_id):
+                    self.logger.error(f"Failed to remove bait for user {user_id}")
+                    break
+                    
+                # Update local bait count
+                bait["amount"] -= 1
+                if bait["amount"] <= 0:
+                    fishing_items["bait"] = []
+                
+                # Process fishing
+                caught_type = self.calculate_catch_type(bait, rod)
+                fish_value = self.calculate_fish_value(caught_type)
+                
+                fish = {
+                    "_id": str(ObjectId()),
+                    "type": caught_type,
+                    "name": f"{caught_type.title()} Fish",
+                    "value": fish_value,
+                    "caught_at": current_time.isoformat(),
+                    "bait_used": bait_id,
+                    "rod_used": rod.get("_id", rod.get("id")),
+                    "auto_caught": True
+                }
+                
+                if not await db.add_fish(user_id, fish):
+                    self.logger.error(f"Failed to add fish for user {user_id}")
+            
+            # Update autofisher data
+            await db.update_autofisher_data(user_id, {
+                "last_fish_time": current_time.isoformat(),
+                "balance": autofisher_balance
+            })
+            
+        except Exception as e:
+            self.logger.error(f"Error processing autofishing for user {user_id}: {str(e)}")
+
+    def calculate_catch_type(self, bait, rod):
+        """Calculate the type of fish caught"""
+        base_chances = {
+            "normal": 0.7 * bait.get("catch_rates", {}).get("normal", 1.0),
+            "rare": 0.2 * bait.get("catch_rates", {}).get("rare", 0.1),
+            "event": 0.08 * bait.get("catch_rates", {}).get("event", 0.0),
+            "mutated": 0.02 * bait.get("catch_rates", {}).get("mutated", 0.0)
+        }
         
-        # Calculate fishing interval based on efficiency level
-        efficiency_level = autofisher_data.get("efficiency_level", 1)
-        fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))  # 15% faster per level
+        rod_mult = rod.get("multiplier", 1.0)
+        chances = {k: v * rod_mult for k, v in base_chances.items()}
         
-        # Check if enough time has passed to fish
-        if (current_time - last_fish_time).total_seconds() < fishing_interval:
-            return
-            
-        # Process fishing for each autofisher
-        autofisher_count = autofisher_data["count"]
-        autofisher_balance = autofisher_data.get("balance", 0)
+        roll = random.random()
+        cumulative = 0
+        caught_type = "normal"
         
-        for _ in range(autofisher_count):
-            # Check for bait
-            if not fishing_items["bait"]:
-                # Try to buy bait if autofisher has balance
-                bait_cost = 50  # Pro bait cost
-                if autofisher_balance >= bait_cost:
-                    # Buy pro bait
-                    bait = {
-                        "id": str(uuid.uuid4()),
-                        "name": "Pro Bait",
-                        "amount": 10,
-                        "description": "Better chances for rare fish",
-                        "catch_rates": {"normal": 1.2, "rare": 0.3, "event": 0.1}
-                    }
-                    await db.add_bait(user_id, bait)
-                    autofisher_balance -= bait_cost
-                    fishing_items["bait"] = [bait]  # Update local copy
-                else:
-                    break  # No money for bait, stop autofishing
-            
-            # Use bait and fish
-            bait = fishing_items["bait"][0]
-            rod = fishing_items["rods"][0]  # Use first rod
-            
-            # Remove bait
-            if not await db.remove_bait(user_id, bait["id"]):
+        for fish_type, chance in chances.items():
+            cumulative += chance
+            if roll <= cumulative:
+                caught_type = fish_type
                 break
                 
-            # Update local bait count
-            bait["amount"] -= 1
-            if bait["amount"] <= 0:
-                fishing_items["bait"] = []
-            
-            # Calculate catch chances (same as manual fishing)
-            base_chances = {
-                "normal": 0.7 * bait.get("catch_rates", {}).get("normal", 1.0),
-                "rare": 0.2 * bait.get("catch_rates", {}).get("rare", 0.1),
-                "event": 0.08 * bait.get("catch_rates", {}).get("event", 0.0),
-                "mutated": 0.02 * bait.get("catch_rates", {}).get("mutated", 0.0)
-            }
-            
-            rod_mult = rod.get("multiplier", 1.0)
-            chances = {k: v * rod_mult for k, v in base_chances.items()}
-            
-            roll = random.random()
-            cumulative = 0
-            caught_type = "normal"
-            
-            for fish_type, chance in chances.items():
-                cumulative += chance
-                if roll <= cumulative:
-                    caught_type = fish_type
-                    break
-            
-            # Generate fish value
-            value_range = {
-                "normal": (10, 100),
-                "rare": (100, 500),
-                "event": (500, 2000),
-                "mutated": (2000, 10000)
-            }[caught_type]
-            
-            fish = {
-                "id": str(uuid.uuid4()),
-                "type": caught_type,
-                "name": f"{caught_type.title()} Fish",
-                "value": random.randint(*value_range),
-                "caught_at": current_time.isoformat(),
-                "bait_used": bait["id"],
-                "rod_used": rod["id"],
-                "auto_caught": True
-            }
-            
-            # Add fish to collection
-            await db.add_fish(user_id, fish)
-        
-        # Update last fish time and autofisher balance
-        await db.update_autofisher_data(user_id, {
-            "last_fish_time": current_time.isoformat(),
-            "balance": autofisher_balance
-        })
+        return caught_type
+
+    def calculate_fish_value(self, fish_type):
+        """Calculate the value of the caught fish"""
+        value_ranges = {
+            "normal": (10, 100),
+            "rare": (100, 500),
+            "event": (500, 2000),
+            "mutated": (2000, 10000)
+        }
+        min_val, max_val = value_ranges.get(fish_type, (10, 100))
+        return random.randint(min_val, max_val)
 
     @commands.group(name="auto", aliases=["af", "autofisher"], invoke_without_command=True)
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -243,7 +262,6 @@ class AutoFishing(commands.Cog):
         next_autofisher_cost = int(self.BASE_AUTOFISHER_PRICE * (self.AUTOFISHER_PRICE_MULTIPLIER ** autofisher_data['count']))
         next_efficiency_cost = int(self.BASE_EFFICIENCY_UPGRADE_PRICE * (self.EFFICIENCY_PRICE_MULTIPLIER ** (efficiency_level - 1)))
         
-        # Create view with buttons
         view = discord.ui.View(timeout=120)
         self.deposit_amount = 100  # Default deposit amount
         
@@ -313,9 +331,15 @@ class AutoFishing(commands.Cog):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("❌ This is not your autofisher!", ephemeral=True)
             
+            # Access the view's deposit_amount
             self.deposit_amount = max(100, self.deposit_amount - 100)
-            await interaction.response.defer()
-            await self.show_auto_status(ctx, interaction.message)
+            
+            # Update the deposit button label
+            for item in view.children:
+                if isinstance(item, discord.ui.Button) and item.label and "Deposit" in item.label:
+                    item.label = f"Deposit {self.deposit_amount}"
+            
+            await interaction.response.edit_message(view=view)
         
         decrease_button.callback = decrease_callback
         view.add_item(decrease_button)
@@ -381,9 +405,15 @@ class AutoFishing(commands.Cog):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("❌ This is not your autofisher!", ephemeral=True)
             
+            # Access the view's deposit_amount
             self.deposit_amount += 100
-            await interaction.response.defer()
-            await self.show_auto_status(ctx, interaction.message)
+            
+            # Update the deposit button label
+            for item in view.children:
+                if isinstance(item, discord.ui.Button) and item.label and "Deposit" in item.label:
+                    item.label = f"Deposit {self.deposit_amount}"
+            
+            await interaction.response.edit_message(view=view)
         
         increase_button.callback = increase_callback
         view.add_item(increase_button)

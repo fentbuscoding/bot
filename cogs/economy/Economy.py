@@ -39,7 +39,20 @@ class Economy(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
         self.stats_logger = StatsLogger()
-
+        self.blocked_channels = [1378156495144751147, 1260347806699491418]
+    
+    # piece de resistance: cog_check
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
+            await ctx.reply(
+                random.choice([f"❌ Economy commands are disabled in this channel. "
+                f"Please use them in another channel.",
+                "<#1314685928614264852> is a good place for that."])
+            )
+            return False
+        return True
+    
     @commands.command(aliases=['bal', 'cash', 'bb'])
     async def balance(self, ctx, member: discord.Member = None):
         """Check your balance"""
@@ -48,8 +61,8 @@ class Economy(commands.Cog):
         bank = await db.get_bank_balance(member.id, ctx.guild.id)
         bank_limit = await db.get_bank_limit(member.id, ctx.guild.id)
         
+        badge = await db.get_badge(member.id, ctx.guild.id)
         embed = discord.Embed(
-            title=f"{member.display_name}'s Balance",
             description=(
                 f"💵 Wallet: **{wallet:,}** {self.currency}\n"
                 f"🏦 Bank: **{bank:,}**/**{bank_limit:,}** {self.currency}\n"
@@ -57,7 +70,19 @@ class Economy(commands.Cog):
             ),
             color=member.color
         )
-        await ctx.reply(embed=embed)
+        if badge:
+            embed.title = f"{badge} | {member.display_name}'s Balance"
+        else:
+            embed.set_author(name=f"{member.display_name}'s Balance", icon_url=member.display_avatar.url)
+        if member != ctx.author:
+            embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+        try:
+            await ctx.reply(embed=embed)
+        except discord.HTTPException:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            self.logger.error(f"Failed to send balance embed in {ctx.channel.name}. User: {ctx.author.id}, Member: {member.id}")
+            await ctx.send("I can't send embeds in this channel. Please check my permissions.")
 
     @commands.command(name="deposit", aliases=["dep", 'd'])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -69,6 +94,8 @@ class Economy(commands.Cog):
                 bank = await db.get_bank_balance(ctx.author.id, ctx.guild.id)
                 limit = await db.get_bank_limit(ctx.author.id, ctx.guild.id)
                 space = limit - bank
+                if space <= 0:
+                    return await ctx.reply("Your bank is **full**! Upgrade your bank *(`.bu`)* to deposit more.")
                 
                 embed = discord.Embed(
                     description=(
