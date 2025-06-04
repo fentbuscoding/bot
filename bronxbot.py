@@ -101,7 +101,7 @@ class BronxBot(commands.AutoShardedBot):
             async with aiohttp.ClientSession() as session:
                 endpoints = {
                     'prod': 'https://bronxbot.onrender.com/api/stats',
-                    'dev': 'http://localhost:5000/api/stats'
+                    #'dev': 'http://localhost:5000/api/stats'
                 }
                 
                 for env, url in endpoints.items():
