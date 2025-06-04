@@ -466,6 +466,10 @@ async def on_message(message):
     """Handle messages"""
     if message.author.bot:
         return
+        
+    if message.content == bot.user.mention:
+        return await message.reply("Hi! Im BronxBot, use `.help` to get started!")
+
     if message.content.startswith(bot.command_prefix):
         if message.guild in bot.MAIN_GUILD_IDS:
             if message.channel.id in [1378156495144751147, 1260347806699491418]:
