@@ -8,7 +8,7 @@ It's mainly written by one dude, but with all the [contributors on github](https
 
 # BronxBots Features
 
-# Accepted Variables
+## Accepted Variables
 ***Most*** commands that use economic values also accept these:
 `1k = 1000`
 `2.5% = 2.5 percentage of balance or wallet where applicable`
