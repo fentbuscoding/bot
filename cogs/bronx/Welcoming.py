@@ -3,7 +3,7 @@ import random
 import json
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
-from utils.db import db
+from utils.db import async_db
 
 logger = CogLogger('Welcoming')
 
@@ -58,7 +58,7 @@ class Welcoming(commands.Cog):
             except discord.Forbidden:
                 logger.warning(f"Could not DM {member} (forbidden).")
             try:
-                await db.store_stats(member.guild.id, "gained")
+                await async_db.store_stats(member.guild.id, "gained")
             except Exception as e:
                 logger.error(f"Failed to store join stats: {e}")
 
@@ -101,7 +101,7 @@ class Welcoming(commands.Cog):
         logger.info(f"[-] Member left: {member} in guild {member.guild.id}")
         if member.guild.id == 1259717095382319215:
             try:
-                await db.store_stats(member.guild.id, "lost")
+                await async_db.store_stats(member.guild.id, "lost")
             except Exception as e:
                 logger.error(f"Failed to store leave stats: {e}")
 
