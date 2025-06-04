@@ -84,17 +84,68 @@ class AutoFishing(commands.Cog):
             autofisher_count = autofisher_data["count"]
             autofisher_balance = autofisher_data.get("balance", 0)
             
-            for _ in range(autofisher_count):
-                # Bait handling and fishing logic...
-                # (Keep your existing bait and fishing logic here)
+            # Get the best rod for autofishing
+            best_rod = max(fishing_items["rods"], key=lambda r: r.get("multiplier", 1.0))
+            
+            # Track if any fishing was successful
+            fishing_occurred = False
+            
+            for i in range(autofisher_count):
+                # Check if we have enough balance for bait
+                if autofisher_balance < self.BAIT_COST:
+                    # Not enough money for bait, skip this autofisher
+                    continue
                 
-                # After successful fishing:
+                # Deduct bait cost
+                autofisher_balance -= self.BAIT_COST
+                
+                # Get available baits (you might need to adjust this based on your bait system)
+                baits = fishing_items.get("baits", [])
+                if not baits:
+                    # Use default/basic bait stats if no baits available
+                    bait = {
+                        "name": "basic_bait",
+                        "catch_rates": {
+                            "normal": 1.0,
+                            "rare": 0.1,
+                            "event": 0.0,
+                            "mutated": 0.0
+                        }
+                    }
+                else:
+                    # Use the best available bait
+                    bait = max(baits, key=lambda b: sum(b.get("catch_rates", {}).values()))
+                
+                # Determine what type of fish was caught
+                caught_type = self.calculate_catch_type(bait, best_rod)
+                
+                # Calculate fish value
+                fish_value = self.calculate_fish_value(caught_type)
+                
+                # Create fish object
+                fish_data = {
+                    "id": str(ObjectId()),
+                    "type": caught_type,
+                    "value": fish_value,
+                    "caught_at": current_time.isoformat(),
+                    "auto_caught": True,
+                    "rod_used": best_rod.get("name", "unknown"),
+                    "bait_used": bait.get("name", "basic_bait")
+                }
+                
+                # Add fish to user's inventory
+                await db.add_fish(user_id, fish_data)
+                
+                fishing_occurred = True
+            
+            # Update autofisher data only if fishing occurred
+            if fishing_occurred:
+                autofisher_data["balance"] = autofisher_balance
                 autofisher_data["last_fish_time"] = current_time.isoformat()
                 await db.set_autofisher_data(user_id, autofisher_data)
                 
         except Exception as e:
             self.logger.error(f"Error processing autofishing for user {user_id}: {str(e)}")
-
     def calculate_catch_type(self, bait, rod):
         """Calculate the type of fish caught"""
         base_chances = {

@@ -73,6 +73,50 @@ class AsyncDatabase:
                 return False
         return True
 
+    async def get_bait(self, bait_id):
+        return await db.bait.find_one({"_id": bait_id})
+
+    async def get_rod(self, rod_id):
+        return await db.rods.find_one({"_id": rod_id})
+    
+    async def get_user_data(self, user_id):
+        return await db.users.find_one({"_id": str(user_id)})
+
+    async def set_active_rod(self, user_id, rod_id):
+        return await db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"active_rod": rod_id}}
+        )
+
+    async def add_fish(self, user_id, fish_data):
+        return await db.users.update_one(
+            {"_id": str(user_id)},
+            {"$push": {"fish": fish_data}}
+        )
+
+
+
+    async def decrement_bait(user_id, bait_id, amount=1):
+        path = f"inventory.bait.{bait_id}"
+        user = await db.users.find_one({"_id": str(user_id)})
+        current = user.get("inventory", {}).get("bait", {}).get(bait_id, 0)
+
+        if isinstance(current, dict) and "$numberInt" in current:
+            current = int(current["$numberInt"])
+
+        if current > amount:
+            return await db.users.update_one(
+                {"_id": str(user_id)},
+                {"$inc": {path: -amount}}
+            )
+        else:
+            return await db.users.update_one(
+                {"_id": str(user_id)},
+                {"$unset": {path: ""}}
+            )
+
+
+
     async def get_wallet_balance(self, user_id: int, guild_id: int = None) -> int:
         """Get user's wallet balance"""
         if not await self.ensure_connected():
@@ -211,30 +255,13 @@ class AsyncDatabase:
         
         return standardized
 
-    async def get_active_fishing_gear(self, user_id: int) -> dict:
-        """Get user's active fishing rod and bait"""
-        if not await self.ensure_connected():
-            return {"rod": None, "bait": None}
-        
-        user = await self.db.users.find_one({"_id": str(user_id)})
-        if not user:
-            return {"rod": None, "bait": None}
-        
-        # Get active gear or default to best available
-        active_gear = user.get("active_fishing", {})
-        rods = user.get("fishing_rods", [])
-        bait = user.get("bait", [])
-        
-        # If no active rod, select the one with highest multiplier
-        if not active_gear.get("rod") and rods:
-            best_rod = max(rods, key=lambda x: x.get("multiplier", 1.0))
-            active_gear["rod"] = best_rod["_id"]
-        
-        # If no active bait, select the first available
-        if not active_gear.get("bait") and bait:
-            active_gear["bait"] = bait[0]["_id"]
-        
-        return active_gear
+    async def get_active_fishing_gear(self, user_id):
+        user = await self.get_user_data(user_id)
+        return {
+            "rod": user.get("active_rod"),
+            "bait": user.get("active_bait")
+        }
+
 
     async def set_active_rod(self, user_id: int, rod_id: str) -> bool:
         """Set user's active fishing rod"""
@@ -406,6 +433,7 @@ class AsyncDatabase:
             return False
         result = await self.db.global_buffs.insert_one(buff_data)
         return result.inserted_id is not None
+
 
     async def get_user_balance(self, user_id: int, guild_id: int = None) -> int:
         """Get user's total balance"""
@@ -1108,15 +1136,26 @@ class AsyncDatabase:
         users = await self.db.users.aggregate(pipeline).to_list(None)
         return [int(user["_id"]) for user in users]
 
-    async def get_fishing_items(self, user_id: int) -> dict:
-        """Get user's fishing items (rods and bait)"""
-        if not await self.ensure_connected():
-            return {"rods": [], "bait": []}
-        user = await self.db.users.find_one({"_id": str(user_id)})
-        return {
-            "rods": user.get("fishing_rods", []),
-            "bait": user.get("bait", [])
-        } if user else {"rods": [], "bait": []}
+    async def get_fishing_items(self, user_id):
+        user = await self.get_user_data(user_id)
+        inv = user.get("inventory", {})
+        rods = []
+        bait = []
+
+        for rod_id, count in inv.get("rod", {}).items():
+            rod_data = await self.get_rod(rod_id)
+            if rod_data:
+                rods.append(rod_data)
+
+        for bait_id, amt in inv.get("bait", {}).items():
+            bait_data = await self.get_bait(bait_id)
+            if bait_data:
+                bait_data["amount"] = amt
+                bait_data["id"] = bait_id
+                bait.append(bait_data)
+
+        return {"rods": rods, "bait": bait}
+
 
     async def add_bait(self, user_id: int, bait: dict) -> bool:
         """Add bait to user's inventory"""
@@ -1196,17 +1235,6 @@ class AsyncDatabase:
             return []
         user = await self.db.users.find_one({"_id": str(user_id)})
         return user.get("fish", []) if user else []
-
-    async def add_fish(self, user_id: int, fish: dict) -> bool:
-        """Add a fish to user's collection"""
-        if not await self.ensure_connected():
-            return False
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$push": {"fish": fish}},
-            upsert=True
-        )
-        return result.modified_count > 0
 
     async def remove_fish(self, user_id: int, fish_id: str) -> bool:
         """Remove a specific fish from user's collection"""
