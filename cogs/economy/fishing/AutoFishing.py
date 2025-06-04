@@ -22,7 +22,7 @@ class AutoFishing(commands.Cog):
         self.EFFICIENCY_PRICE_MULTIPLIER = 1.8
         self.BASE_FISHING_INTERVAL = 300  # 5 minutes base
         self.MAX_EFFICIENCY_LEVEL = 50
-        self.MAX_AUTOFISHERS = 10
+        self.MAX_AUTOFISHERS = 30
         self.BAIT_COST = 50  # Cost for autofisher to buy bait
         
         # Start the autofishing loop
@@ -102,7 +102,7 @@ class AutoFishing(commands.Cog):
                 rod = fishing_items["rods"][0]
                 
                 # Get the correct bait identifier
-                bait_id = bait.get("_id", bait.get("id"))
+                bait_id = bait.get("_id")
                 if not bait_id:
                     self.logger.error(f"No valid bait ID found for user {user_id}")
                     break
@@ -128,7 +128,7 @@ class AutoFishing(commands.Cog):
                     "value": fish_value,
                     "caught_at": current_time.isoformat(),
                     "bait_used": bait_id,
-                    "rod_used": rod.get("_id", rod.get("id")),
+                    "rod_used": rod.get("_id"),
                     "auto_caught": True
                 }
                 
@@ -186,8 +186,20 @@ class AutoFishing(commands.Cog):
         await self.show_auto_status(ctx)
 
     async def show_auto_status(self, ctx, message_to_edit=None):
-        """Helper function to show/refresh the autofisher status embed"""
         autofisher_data = await db.get_autofisher_data(ctx.author.id)
+        last_fish_time = datetime.datetime.fromisoformat(autofisher_data.get("last_fish_time", "2000-01-01T00:00:00"))
+        
+        # If last_fish_time is too old, reset it to now
+        if (datetime.datetime.now() - last_fish_time).total_seconds() > (24 * 3600):  # If older than 24h
+            last_fish_time = datetime.datetime.now()
+            autofisher_data["last_fish_time"] = last_fish_time.isoformat()
+            await db.set_autofisher_data(ctx.author.id, autofisher_data)
+        
+        # Calculate next fish time normally
+        efficiency_level = autofisher_data.get("efficiency_level", 1)
+        fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))
+        next_fish_time = last_fish_time + datetime.timedelta(seconds=fishing_interval)
+        time_until_next = max(0, (next_fish_time - datetime.datetime.now()).total_seconds())
         
         if not autofisher_data:
             embed = discord.Embed(
@@ -236,7 +248,7 @@ class AutoFishing(commands.Cog):
         efficiency_level = autofisher_data.get("efficiency_level", 1)
         fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))
         next_fish_time = last_fish_time + datetime.timedelta(seconds=fishing_interval)
-        time_until_next = (next_fish_time - datetime.datetime.utcnow()).total_seconds()
+        time_until_next = (next_fish_time - datetime.datetime.now()).total_seconds()
         
         embed = discord.Embed(
             title="🤖 Your Autofisher Status",
@@ -429,9 +441,15 @@ class AutoFishing(commands.Cog):
         """Buy an additional autofisher"""
         await self.handle_autofisher_purchase(ctx, is_initial=True)
 
-    async def handle_autofisher_purchase(self, ctx, is_initial=False):
-        balance = await db.get_balance(ctx.author.id)
-        autofisher_data = await db.get_autofisher_data(ctx.author.id) or {"count": 0, "efficiency_level": 1, "balance": 0}
+    async def handle_autofisher_purchase(self, ctx):
+        autofisher_data = await db.get_autofisher_data(ctx.author.id)
+        if not autofisher_data or autofisher_data["count"] == 0:
+            autofisher_data = {
+                "count": 0,
+                "efficiency_level": 1,
+                "balance": 0,
+                "last_fish_time": datetime.datetime.utcnow().isoformat()  # Reset time
+            }
         
         if autofisher_data["count"] >= self.MAX_AUTOFISHERS:
             return await ctx.reply(f"❌ You've reached the maximum number of autofishers ({self.MAX_AUTOFISHERS})!")
@@ -441,99 +459,26 @@ class AutoFishing(commands.Cog):
         if balance < cost:
             return await ctx.reply(f"❌ You need {cost} {self.currency} to buy an autofisher! (You have {balance})")
         
-        # Create embed
-        embed = discord.Embed(
-            title="🤖 Autofisher Purchase",
-            description=f"Current autofishers: **{autofisher_data['count']}**\n"
-                    f"Purchase cost: **{cost} {self.currency}**\n"
-                    f"Your balance: **{balance} {self.currency}**\n\n"
-                    f"New total will be: **{autofisher_data['count'] + 1}**",
-            color=discord.Color.blue()
-        )
-        
-        # Add next purchase info if not max
-        if autofisher_data["count"] + 1 < self.MAX_AUTOFISHERS:
-            next_cost = int(self.BASE_AUTOFISHER_PRICE * (self.AUTOFISHER_PRICE_MULTIPLIER ** (autofisher_data["count"] + 1)))
-            embed.add_field(
-                name="Next Purchase",
-                value=f"Autofisher #{autofisher_data['count'] + 2} will cost {next_cost} {self.currency}",
-                inline=False
-            )
-        
-        # Create view with buttons
-        view = discord.ui.View()
-        
-        # Purchase button
-        purchase_button = discord.ui.Button(
-            label=f"Buy Autofisher #{autofisher_data['count'] + 1}",
-            style=discord.ButtonStyle.green,
-            emoji="🤖"
-        )
-        
-        async def purchase_callback(interaction):
-            if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("❌ This is not your purchase!", ephemeral=True)
+        # Process purchase
+        if await db.update_balance(ctx.author.id, -cost):
+            autofisher_data["count"] += 1
+            autofisher_data["last_fish_time"] = datetime.datetime.utcnow().isoformat()
             
-            # Verify balance again in case it changed
-            current_balance = await db.get_balance(ctx.author.id)
-            if current_balance < cost:
-                return await interaction.response.send_message(
-                    f"❌ You no longer have enough money! (Need {cost} {self.currency})",
-                    ephemeral=True
-                )
-            
-            # Process purchase
-            if await db.update_balance(ctx.author.id, -cost):
-                autofisher_data["count"] += 1
-                autofisher_data["last_fish_time"] = datetime.datetime.utcnow().isoformat()
-                await db.set_autofisher_data(ctx.author.id, autofisher_data)
-                
-                success_embed = discord.Embed(
-                    title="🤖 Autofisher Purchased!",
-                    description=f"You now have **{autofisher_data['count']}** autofisher{'s' if autofisher_data['count'] > 1 else ''}!",
-                    color=discord.Color.green()
-                )
-                
-                # Disable the purchase button after successful purchase
-                purchase_button.disabled = True
-                view.stop()
-                
-                await interaction.response.edit_message(embed=success_embed, view=view)
-                
-                # If not at max, offer another purchase
-                if autofisher_data["count"] < self.MAX_AUTOFISHERS:
-                    await self.handle_autofisher_purchase(ctx)
-            else:
-                await interaction.response.send_message("❌ Failed to purchase autofisher!", ephemeral=True)
-        
-        purchase_button.callback = purchase_callback
-        view.add_item(purchase_button)
-        
-        # Cancel button
-        cancel_button = discord.ui.Button(
-            label="Cancel",
-            style=discord.ButtonStyle.red,
-            emoji="❌"
-        )
-        
-        async def cancel_callback(interaction):
-            if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("❌ This is not your purchase!", ephemeral=True)
+            # Make sure to update the database with the new autofisher data
+            await db.set_autofisher_data(ctx.author.id, autofisher_data)
             
             embed = discord.Embed(
-                description="❌ Autofisher purchase cancelled.",
-                color=discord.Color.red()
+                title="🤖 Autofisher Purchased!",
+                description=f"You now have **{autofisher_data['count']}** autofisher{'s' if autofisher_data['count'] > 1 else ''}!",
+                color=discord.Color.green()
             )
-            view.stop()
-            await interaction.response.edit_message(embed=embed, view=view)
-        
-        cancel_button.callback = cancel_callback
-        view.add_item(cancel_button)
-        
-        if is_initial:
-            await ctx.reply(embed=embed, view=view)
+            
+            if is_initial:
+                await ctx.reply(embed=embed, delete_after=10)
+            else:
+                await ctx.send(embed=embed, delete_after=10)
         else:
-            await ctx.send(embed=embed, view=view)
+            await ctx.reply("❌ Failed to purchase autofisher!")
 
     @auto.command(name="upgrade", aliases=["eff", "efficiency"])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -557,101 +502,27 @@ class AutoFishing(commands.Cog):
         if balance < cost:
             return await ctx.reply(f"❌ You need {cost} {self.currency} to upgrade efficiency! (You have {balance})")
         
-        # Create embed
-        embed = discord.Embed(
-            title="⚡ Efficiency Upgrade",
-            description=f"Current level: **{efficiency_level}**\n"
-                    f"Upgrade cost: **{cost} {self.currency}**\n"
-                    f"Your balance: **{balance} {self.currency}**\n\n"
-                    f"New level will be: **{efficiency_level + 1}**",
-            color=discord.Color.blue()
-        )
-        
-        # Add next level info if not max
-        if efficiency_level + 1 < self.MAX_EFFICIENCY_LEVEL:
-            next_cost = int(self.BASE_EFFICIENCY_UPGRADE_PRICE * (self.EFFICIENCY_PRICE_MULTIPLIER ** efficiency_level))
-            embed.add_field(
-                name="Next Upgrade",
-                value=f"Level {efficiency_level + 2} will cost {next_cost} {self.currency}",
-                inline=False
-            )
-        
-        # Create view with buttons
-        view = discord.ui.View()
-        
-        # Upgrade button
-        upgrade_button = discord.ui.Button(
-            label=f"Upgrade to Level {efficiency_level + 1}",
-            style=discord.ButtonStyle.green,
-            emoji="⚡"
-        )
-        
-        async def upgrade_callback(interaction):
-            if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("❌ This is not your upgrade!", ephemeral=True)
+        # Process upgrade
+        if await db.update_balance(ctx.author.id, -cost):
+            autofisher_data["efficiency_level"] = efficiency_level + 1
+            new_interval = self.BASE_FISHING_INTERVAL * (0.85 ** efficiency_level)
             
-            # Verify balance again in case it changed
-            current_balance = await db.get_balance(ctx.author.id)
-            if current_balance < cost:
-                return await interaction.response.send_message(
-                    f"❌ You no longer have enough money! (Need {cost} {self.currency})",
-                    ephemeral=True
-                )
-            
-            # Process upgrade
-            if await db.update_balance(ctx.author.id, -cost):
-                autofisher_data["efficiency_level"] = efficiency_level + 1
-                await db.set_autofisher_data(ctx.author.id, autofisher_data)
-                
-                new_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level))
-                
-                success_embed = discord.Embed(
-                    title="⚡ Efficiency Upgraded!",
-                    description=f"New efficiency level: **{efficiency_level + 1}**\n"
-                            f"New fishing interval: **{new_interval/60:.1f} minutes**",
-                    color=discord.Color.green()
-                )
-                
-                # Disable the upgrade button after successful upgrade
-                upgrade_button.disabled = True
-                view.stop()
-                
-                await interaction.response.edit_message(embed=success_embed, view=view)
-                
-                # If not at max level, offer another upgrade
-                if efficiency_level + 1 < self.MAX_EFFICIENCY_LEVEL:
-                    await self.handle_efficiency_upgrade(ctx)
-            else:
-                await interaction.response.send_message("❌ Failed to upgrade efficiency!", ephemeral=True)
-        
-        upgrade_button.callback = upgrade_callback
-        view.add_item(upgrade_button)
-        
-        # Cancel button
-        cancel_button = discord.ui.Button(
-            label="Cancel",
-            style=discord.ButtonStyle.red,
-            emoji="❌"
-        )
-        
-        async def cancel_callback(interaction):
-            if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("❌ This is not your upgrade!", ephemeral=True)
+            # Make sure to update the database with the new efficiency level
+            await db.set_autofisher_data(ctx.author.id, autofisher_data)
             
             embed = discord.Embed(
-                description="❌ Efficiency upgrade cancelled.",
-                color=discord.Color.red()
+                title="⚡ Efficiency Upgraded!",
+                description=f"New efficiency level: **{efficiency_level + 1}**\n"
+                        f"New fishing interval: **{new_interval/60:.1f} minutes**",
+                color=discord.Color.green()
             )
-            view.stop()
-            await interaction.response.edit_message(embed=embed, view=view)
-        
-        cancel_button.callback = cancel_callback
-        view.add_item(cancel_button)
-        
-        if is_initial:
-            await ctx.reply(embed=embed, view=view)
+            
+            if is_initial:
+                await ctx.reply(embed=embed)
+            else:
+                await ctx.send(embed=embed)
         else:
-            await ctx.send(embed=embed, view=view)
+            await ctx.reply("❌ Failed to upgrade efficiency!")
 
     @auto.command(name="deposit", aliases=["add", "fund"])
     @commands.cooldown(1, 3, commands.BucketType.user)
