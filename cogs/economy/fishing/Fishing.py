@@ -1,3 +1,27 @@
+# hey! if you see this, it means the code is being loaded correctly!
+# This file is part of the Bronk Discord Bot project.
+
+# template for adding bait that uses every possible value
+{
+  "_id": "insane_bait",
+  "name": "INSANE BAIT",
+  "type": "bait",
+  "price": { "$numberInt": "50000" },
+  "description": "For the worthy.",
+  "catch_rates": {
+    "normal":0.0,
+    "uncommon":0.0,
+    "rare": 0.0,
+    "epic": 0.0,
+    "legendary": 0.0,
+    "mythical": 0.0,
+    "event": 0.0,
+    "mutated": 0.1,
+    "insane": 100000.0,
+    "master": 0.0
+  }
+}
+
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
@@ -78,7 +102,7 @@ class Fishing(commands.Cog):
         
         # Calculate catch chances
         base_chances = {
-            "normal": 0.7 * current_bait.get("catch_rates", {}).get("normal", 1.0),
+            "normal": 0.7 * current_bait.get("catch_rates", {}).get("normal", 0.0),
             "uncommon": 0.5 * current_bait.get("catch_rates", {}).get("uncommon", 0.05),
             "rare": 0.2 * current_bait.get("catch_rates", {}).get("rare", 0.1),
             "epic": 0.1 * current_bait.get("catch_rates", {}).get("epic", 0.05),
@@ -86,7 +110,8 @@ class Fishing(commands.Cog):
             "mythical": 0.03 * current_bait.get("catch_rates", {}).get("mythical", 0.01),
             "event": 0.08 * current_bait.get("catch_rates", {}).get("event", 0.0),
             "mutated": 0.02 * current_bait.get("catch_rates", {}).get("mutated", 0.0),
-            "insane": 0.005 * current_bait.get("catch_rates", {}).get("insane", 0.0)
+            "insane": 0.005 * current_bait.get("catch_rates", {}).get("insane", 0.0),
+            "master": 0.0001 * current_bait.get("catch_rates", {}).get("master", 0.0)
         }
         
         rod_mult = rod.get("multiplier", 1.0)
@@ -117,7 +142,8 @@ class Fishing(commands.Cog):
             "mythical": (1000, 5000),
             "event": (500, 10000),
             "mutated": (2000, 10000),
-            "insane": (5000, 200000)
+            "insane": (5000, 200000),
+            "master": (100000, 10000000)
         }[caught_type]
         
         fish = {
