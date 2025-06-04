@@ -1,6 +1,3 @@
-# Fixed Fishing.py - Focus on bait handling fixes
-# This file is part of the Bronk Discord Bot project.
-
 # template for adding bait that uses every possible value
 {
   "_id": "insane_bait",
@@ -24,7 +21,7 @@
 
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
 import discord
 import random
 import uuid
@@ -37,6 +34,7 @@ class Fishing(commands.Cog):
         self.logger = CogLogger(self.__class__.__name__)
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
+        self.db = AsyncDatabase.get_instance()
     
     # piece de resistance: cog_check
     async def cog_check(self, ctx):
@@ -151,7 +149,7 @@ class Fishing(commands.Cog):
     async def fish(self, ctx):
         """Go fishing using your active rod and bait"""
         # Get user data
-        user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
+        user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
         
         if not user_data:
             return await ctx.reply("❌ User data not found!")
@@ -178,7 +176,7 @@ class Fishing(commands.Cog):
         else:
             rod = rods[0]
             active_rod_id = rod.get("_id")
-            await db.db.users.update_one(
+            await self.db.db.users.update_one(
                 {"_id": str(ctx.author.id)},
                 {"$set": {"active_rod": active_rod_id}}
             )
@@ -278,7 +276,7 @@ class Fishing(commands.Cog):
             "rod_used": active_rod_id
         }
         
-        if await db.add_fish(ctx.author.id, fish):
+        if await self.db.add_fish(ctx.author.id, fish):
             embed = discord.Embed(
                 title="🎣 Caught a Fish!",
                 description=f"You caught a **{fish['name']}**!\nValue: **{fish['value']}** {self.currency}",
@@ -308,7 +306,7 @@ class Fishing(commands.Cog):
     async def remove_bait_improved(self, user_id: int, bait_id: str) -> bool:
         """Improved bait removal that handles all data structures"""
         try:
-            user_data = await db.db.users.find_one({"_id": str(user_id)})
+            user_data = await self.db.db.users.find_one({"_id": str(user_id)})
             if not user_data:
                 return False
             
@@ -320,41 +318,41 @@ class Fishing(commands.Cog):
                     amount = int(current_amount["$numberInt"])
                     if amount > 1:
                         # Decrease amount
-                        result = await db.db.users.update_one(
+                        result = await self.db.db.users.update_one(
                             {"_id": str(user_id)},
                             {"$set": {inventory_path: {"$numberInt": str(amount - 1)}}}
                         )
                     else:
                         # Remove completely
-                        result = await db.db.users.update_one(
+                        result = await self.db.db.users.update_one(
                             {"_id": str(user_id)},
                             {"$unset": {inventory_path: ""}}
                         )
                     return result.modified_count > 0
             
             # Try to remove from fishing_bait array
-            result = await db.db.users.update_one(
+            result = await self.db.db.users.update_one(
                 {"_id": str(user_id), "fishing_bait.id": bait_id},
                 {"$inc": {"fishing_bait.$.amount": -1}}
             )
             
             if result.modified_count > 0:
                 # Remove bait items with amount <= 0
-                await db.db.users.update_one(
+                await self.db.db.users.update_one(
                     {"_id": str(user_id)},
                     {"$pull": {"fishing_bait": {"amount": {"$lte": 0}}}}
                 )
                 return True
             
             # Try to remove from bait array (if it exists)
-            result = await db.db.users.update_one(
+            result = await self.db.db.users.update_one(
                 {"_id": str(user_id), "bait._id": bait_id},
                 {"$inc": {"bait.$.amount": -1}}
             )
             
             if result.modified_count > 0:
                 # Remove bait items with amount <= 0
-                await db.db.users.update_one(
+                await self.db.db.users.update_one(
                     {"_id": str(user_id)},
                     {"$pull": {"bait": {"amount": {"$lte": 0}}}}
                 )
@@ -370,13 +368,13 @@ class Fishing(commands.Cog):
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def fish_inventory(self, ctx):
         """View your fishing inventory"""
-        user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
+        user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
         if not user_data:
             return await ctx.reply("❌ User data not found!")
         
-        fishing_items = await db.get_fishing_items(ctx.author.id)
-        fish = await db.get_fish(ctx.author.id)
-        active_gear = await db.get_active_fishing_gear(ctx.author.id)
+        fishing_items = await self.db.get_fishing_items(ctx.author.id)
+        fish = await self.db.get_fish(ctx.author.id)
+        active_gear = await self.db.get_active_fishing_gear(ctx.author.id)
         
         # Get all bait using improved method
         all_bait = self.get_all_bait(user_data)
@@ -448,8 +446,69 @@ class Fishing(commands.Cog):
         equip_embed.set_footer(text="Page 1 - Use the buttons below to navigate")
         pages.append(equip_embed)
         
-        # Rest of the inventory pages (fish, detailed views, etc.)
-        # ... (keeping the rest of the original fishinv code)
+        # Detailed rods page (if more than 3 rods)
+        if len(fishing_items["rods"]) > 3:
+            rods_embed = discord.Embed(
+                title="🎣 All Fishing Rods",
+                color=discord.Color.blue()
+            )
+            
+            for rod in fishing_items["rods"]:
+                active_status = " (Active)" if rod["_id"] == active_gear.get("rod") else ""
+                rods_embed.add_field(
+                    name=f"{rod['name']}{active_status}",
+                    value=f"Multiplier: {rod['multiplier']}x\n{rod.get('description', '')}",
+                    inline=False
+                )
+            
+            pages.append(rods_embed)
+        
+        # Detailed bait page (if more than 3 bait)
+        if len(all_bait) > 3:
+            bait_embed = discord.Embed(
+                title="🪱 All Bait",
+                color=discord.Color.blue()
+            )
+            
+            for bait in all_bait:
+                active_status = " (Active)" if bait["_id"] == active_bait_id else ""
+                bait_embed.add_field(
+                    name=f"{bait['name']}{active_status} (x{bait['amount']})",
+                    value=bait.get('description', 'No description available'),
+                    inline=False
+                )
+            
+            pages.append(bait_embed)
+        
+        # Fish collection pages
+        if fish:
+            fish_by_type = {}
+            for f in fish:
+                fish_by_type.setdefault(f["type"], []).append(f)
+                
+            for fish_type, fish_list in fish_by_type.items():
+                embed = discord.Embed(
+                    title=f"🐟 {fish_type.title()} Collection",
+                    color=discord.Color.blue()
+                )
+                
+                total_value = sum(f["value"] for f in fish_list)
+                embed.description = f"Total Value: **{total_value}** {self.currency}\nAmount: {len(fish_list)}"
+                
+                for fish_item in sorted(fish_list, key=lambda x: x["value"], reverse=True)[:10]:
+                    embed.add_field(
+                        name=f"{fish_item['name']} ({fish_item['value']} {self.currency})",
+                        value=f"Caught: {fish_item['caught_at'].split('T')[0]}",
+                        inline=True
+                    )
+                    
+                pages.append(embed)
+        else:
+            pages.append(discord.Embed(
+                title="🐟 Fish Collection",
+                description="You haven't caught any fish yet!\nUse `.fish` to start fishing.",
+                color=discord.Color.blue()
+            ))
         
         class InventoryView(discord.ui.View):
             def __init__(self, pages, author, timeout=60):
@@ -457,6 +516,65 @@ class Fishing(commands.Cog):
                 self.pages = pages
                 self.author = author
                 self.current_page = 0
+                self.update_buttons()
+                
+            def update_buttons(self):
+                self.clear_items()
+                
+                # Navigation buttons
+                if len(self.pages) > 1:
+                    first_button = discord.ui.Button(emoji="⏮️", style=discord.ButtonStyle.secondary, disabled=self.current_page == 0)
+                    first_button.callback = self.first_page
+                    self.add_item(first_button)
+                    
+                    prev_button = discord.ui.Button(emoji="◀️", style=discord.ButtonStyle.primary, disabled=self.current_page == 0)
+                    prev_button.callback = self.prev_page
+                    self.add_item(prev_button)
+                    
+                    self.add_item(discord.ui.Button(
+                        label=f"Page {self.current_page + 1}/{len(self.pages)}",
+                        style=discord.ButtonStyle.gray,
+                        disabled=True
+                    ))
+                    
+                    next_button = discord.ui.Button(emoji="▶️", style=discord.ButtonStyle.primary, disabled=self.current_page == len(self.pages) - 1)
+                    next_button.callback = self.next_page
+                    self.add_item(next_button)
+                    
+                    last_button = discord.ui.Button(emoji="⏭️", style=discord.ButtonStyle.secondary, disabled=self.current_page == len(self.pages) - 1)
+                    last_button.callback = self.last_page
+                    self.add_item(last_button)
+            
+            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                if interaction.user != self.author:
+                    await interaction.response.send_message("This isn't your inventory!", ephemeral=True)
+                    return False
+                return True
+                    
+            async def navigate(self, interaction: discord.Interaction, action: str):
+                if action == "first":
+                    self.current_page = 0
+                elif action == "prev":
+                    self.current_page -= 1
+                elif action == "next":
+                    self.current_page += 1
+                elif action == "last":
+                    self.current_page = len(self.pages) - 1
+                
+                self.update_buttons()
+                await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+            
+            async def first_page(self, interaction: discord.Interaction):
+                await self.navigate(interaction, "first")
+            
+            async def prev_page(self, interaction: discord.Interaction):
+                await self.navigate(interaction, "prev")
+            
+            async def next_page(self, interaction: discord.Interaction):
+                await self.navigate(interaction, "next")
+            
+            async def last_page(self, interaction: discord.Interaction):
+                await self.navigate(interaction, "last")
         
         view = InventoryView(pages, ctx.author)
         await ctx.reply(embed=pages[0], view=view)
@@ -465,14 +583,14 @@ class Fishing(commands.Cog):
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def sellfish(self, ctx, fish_id: str = "all"):
         """Sell fish from your inventory"""
-        fish = await db.get_fish(ctx.author.id)
+        fish = await self.db.get_fish(ctx.author.id)
         if not fish:
             return await ctx.reply("You don't have any fish to sell!")
             
         if fish_id.lower() == "all":
             total_value = sum(f["value"] for f in fish)
-            if await db.update_balance(ctx.author.id, total_value):
-                await db.clear_fish(ctx.author.id)
+            if await self.db.update_balance(ctx.author.id, total_value):
+                await self.db.clear_fish(ctx.author.id)
                 embed = discord.Embed(
                     title="🐟 Fish Sold!",
                     description=f"Sold {len(fish)} fish for **{total_value}** {self.currency}",
@@ -485,8 +603,8 @@ class Fishing(commands.Cog):
             if not fish_to_sell:
                 return await ctx.reply("❌ Fish not found in your inventory!")
                 
-            if await db.update_balance(ctx.author.id, fish_to_sell["value"]):
-                await db.remove_fish(ctx.author.id, fish_id)
+            if await self.db.update_balance(ctx.author.id, fish_to_sell["value"]):
+                await self.db.remove_fish(ctx.author.id, fish_id)
                 embed = discord.Embed(
                     title="🐟 Fish Sold!",
                     description=f"Sold {fish_to_sell['name']} for **{fish_to_sell['value']}** {self.currency}",
@@ -498,12 +616,12 @@ class Fishing(commands.Cog):
     @commands.command(name="rod", aliases=["selectrod", "changerod"])
     async def select_rod(self, ctx, rod_id: str = None):
         """Select or view your active fishing rod"""
-        fishing_items = await db.get_fishing_items(ctx.author.id)
+        fishing_items = await self.db.get_fishing_items(ctx.author.id)
         
         if not fishing_items["rods"]:
             return await ctx.reply("You don't have any fishing rods! Get one from the shop.")
         
-        active_gear = await db.get_active_fishing_gear(ctx.author.id)
+        active_gear = await self.db.get_active_fishing_gear(ctx.author.id)
         
         if not rod_id:
             # Show list of rods with active one marked
@@ -524,7 +642,7 @@ class Fishing(commands.Cog):
             return await ctx.reply(embed=embed)
         
         # Try to set active rod
-        if await db.set_active_rod(ctx.author.id, rod_id):
+        if await self.db.set_active_rod(ctx.author.id, rod_id):
             rod = next((r for r in fishing_items["rods"] if r["_id"] == rod_id), None)
             if rod:
                 await ctx.reply(f"🎣 Successfully set **{rod['name']}** as your active fishing rod!")
@@ -534,7 +652,7 @@ class Fishing(commands.Cog):
     @commands.command(name="bait", aliases=["selectbait", "changebait"])
     async def select_bait(self, ctx, bait_id: str = None):
         """Select or view your active bait"""
-        user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
+        user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
         if not user_data:
             return await ctx.reply("❌ User data not found!")
         
@@ -566,7 +684,7 @@ class Fishing(commands.Cog):
         # Try to set active bait
         bait_to_set = next((b for b in all_bait if b["_id"] == bait_id), None)
         if bait_to_set:
-            await db.db.users.update_one(
+            await self.db.db.users.update_one(
                 {"_id": str(ctx.author.id)},
                 {"$set": {"active_bait": bait_id}}
             )
@@ -577,7 +695,7 @@ class Fishing(commands.Cog):
     @commands.command(name="migrate", aliases=["migrate_fish"])
     @commands.is_owner()
     async def migrate_fish(self, ctx):
-        await db.migrate_to_standard_ids()
+        await self.db.migrate_to_standard_ids()
         await ctx.reply("Migration complete!")
 
 async def setup(bot):

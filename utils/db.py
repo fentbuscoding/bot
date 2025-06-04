@@ -74,22 +74,22 @@ class AsyncDatabase:
         return True
 
     async def get_bait(self, bait_id):
-        return await db.bait.find_one({"_id": bait_id})
+        return await async_db.db.bait.find_one({"_id": bait_id})
 
     async def get_rod(self, rod_id):
-        return await db.rods.find_one({"_id": rod_id})
+        return await async_db.db.rods.find_one({"_id": rod_id})
     
     async def get_user_data(self, user_id):
-        return await db.users.find_one({"_id": str(user_id)})
+        return await async_db.db.users.find_one({"_id": str(user_id)})
 
     async def set_active_rod(self, user_id, rod_id):
-        return await db.users.update_one(
+        return await async_db.db.users.update_one(
             {"_id": str(user_id)},
             {"$set": {"active_rod": rod_id}}
         )
 
     async def add_fish(self, user_id, fish_data):
-        return await db.users.update_one(
+        return await async_db.db.users.update_one(
             {"_id": str(user_id)},
             {"$push": {"fish": fish_data}}
         )
@@ -98,19 +98,19 @@ class AsyncDatabase:
 
     async def decrement_bait(user_id, bait_id, amount=1):
         path = f"inventory.bait.{bait_id}"
-        user = await db.users.find_one({"_id": str(user_id)})
+        user = await async_db.db.users.find_one({"_id": str(user_id)})
         current = user.get("inventory", {}).get("bait", {}).get(bait_id, 0)
 
         if isinstance(current, dict) and "$numberInt" in current:
             current = int(current["$numberInt"])
 
         if current > amount:
-            return await db.users.update_one(
+            return await async_db.db.users.update_one(
                 {"_id": str(user_id)},
                 {"$inc": {path: -amount}}
             )
         else:
-            return await db.users.update_one(
+            return await async_db.db.users.update_one(
                 {"_id": str(user_id)},
                 {"$unset": {path: ""}}
             )
@@ -1452,11 +1452,6 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting balance: {e}")
             return {"wallet": 0, "bank": 0}
-
-    # Change store_stats to be async-compatible
-    async def store_stats(self, guild_id: int, stat_type: str):
-        """Store guild statistics asynchronously"""
-        return self.store_stats_sync(guild_id, stat_type)
     
     def store_stats_sync(self, guild_id: int, stat_type: str):
         """Store guild statistics synchronously"""
@@ -1489,8 +1484,6 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
             return {}
-
-
 
 # Create global database instances
 async_db = AsyncDatabase.get_instance()  # For Discord bot

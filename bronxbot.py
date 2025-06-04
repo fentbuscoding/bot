@@ -109,7 +109,7 @@ class BronxBot(commands.AutoShardedBot):
                         async with session.post(url, json=stats) as resp:
                             result = await resp.text()
                             if resp.status == 200:
-                                logging.info(f"[{env.upper()}] Stats updated successfully: {result}")
+                                pass
                             else:
                                 logging.error(f"[{env.upper()}] Failed to update stats: {resp.status} - {result}")
                                 
