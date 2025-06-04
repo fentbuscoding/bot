@@ -76,7 +76,7 @@ class ShopItemButton(Button):
         if modal.amount.value:
             try:
                 amount = int(modal.amount.value)
-                await self.view.cog.process_purchase(interaction.user.id, self.item['id'], amount, self.item['type'])
+                await self.view.cog.process_purchase(interaction.user.id, self.item['_id'], amount, self.item['type'])
             except Exception as e:
                 print(f"Error processing purchase: {e}")
 
@@ -196,7 +196,7 @@ class Shop(commands.Cog):
         collection = await self.get_collection(item_type)
         if not collection:
             return None
-        return await collection.find_one({"id": item_id})
+        return await collection.find_one({"_id": item_id})
 
     async def get_shop_items(self, item_type: str) -> List[Dict]:
         """Get all items of a specific type, sorted by price (cheapest first)"""
@@ -227,36 +227,164 @@ class Shop(commands.Cog):
         )
         return result.modified_count > 0 or result.upserted_id is not None
 
+    async def migrate_bait_storage(self):
+        """Migrate bait storage from array to object structure"""
+        async for user in self.db.users.find({
+            "$or": [
+                {"bait": {"$exists": True}},
+                {"inventory.bait": {"$type": "array"}}
+            ]
+        }):
+            # Initialize inventory if it doesn't exist
+            if 'inventory' not in user:
+                user['inventory'] = {
+                    'rod': {},
+                    'bait': {},
+                    'upgrade': {},
+                    'potion': {},
+                    'pickaxe': {}
+                }
+            
+            # Convert array bait to object structure
+            if isinstance(user.get('inventory', {}).get('bait'), list):
+                for item in user['inventory']['bait']:
+                    if '_id' in item:
+                        user['inventory']['bait'][item['_id']] = item.get('amount', 1)
+                user['inventory']['bait'] = {k: v for k, v in user['inventory']['bait'].items() if not isinstance(v, list)}
+            
+            # Move root-level bait array to inventory.bait object
+            if 'bait' in user and isinstance(user['bait'], list):
+                for item in user['bait']:
+                    if '_id' in item:
+                        user['inventory']['bait'][item['_id']] = item.get('amount', 1)
+            
+            # Update the user document
+            update_data = {
+                "$set": {
+                    "inventory": user['inventory']
+                },
+                "$unset": {
+                    "bait": ""
+                }
+            }
+            
+            await self.db.users.update_one(
+                {"_id": user['_id']},
+                update_data
+            )
+            
+
     async def add_item_to_inventory(self, user_id: int, item_id: str, item_type: str, amount: int = 1) -> bool:
-        """Add an item to user's inventory"""
-        inventory_field = f"inventory.{item_type}.{item_id}"
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$inc": {inventory_field: amount}},
-            upsert=True
-        )
-        return result.modified_count > 0 or result.upserted_id is not None
+        """Add an item to user's inventory with special handling for baits"""
+        try:
+            # Special case for bait items
+            if item_type == "bait":
+                # Check if we should use the object structure (preferred) or array structure
+                user = await self.get_user_data(user_id)
+                
+                if user and 'inventory' in user and 'bait' in user['inventory'] and isinstance(user['inventory']['bait'], dict):
+                    # Use the object structure in inventory.bait
+                    inventory_field = f"inventory.bait.{item_id}"
+                else:
+                    # Fallback to array structure (should be migrated eventually)
+                    inventory_field = "bait"
+                    
+                    # Ensure we're pushing to an array
+                    await self.db.users.update_one(
+                        {"_id": str(user_id)},
+                        {"$setOnInsert": {"bait": []}},
+                        upsert=True
+                    )
+            else:
+                # Standard handling for other item types
+                inventory_field = f"inventory.{item_type}.{item_id}"
+            
+            # Perform the update
+            if item_type == "bait" and inventory_field == "bait":
+                # For array structure, we need to find and update or push new item
+                user = await self.get_user_data(user_id)
+                existing_item = next((item for item in user.get('bait', []) if item.get('_id') == item_id), None)
+                
+                if existing_item:
+                    # Update existing item's amount
+                    result = await self.db.users.update_one(
+                        {"_id": str(user_id), "bait._id": item_id},
+                        {"$inc": {"bait.$.amount": amount}}
+                    )
+                else:
+                    # Push new item to array
+                    item_data = await self.get_item(item_id, item_type)
+                    if not item_data:
+                        return False
+                        
+                    new_item = {
+                        "_id": item_id,
+                        "name": item_data.get('name', 'Unknown Bait'),
+                        "amount": amount,
+                        "description": item_data.get('description', ''),
+                        "catch_rates": item_data.get('catch_rates', {})
+                    }
+                    
+                    result = await self.db.users.update_one(
+                        {"_id": str(user_id)},
+                        {"$push": {"bait": new_item}}
+                    )
+            else:
+                # Standard update for object structure
+                result = await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$inc": {inventory_field: amount}},
+                    upsert=True
+                )
+            
+            return result.modified_count > 0 or result.upserted_id is not None
+            
+        except Exception as e:
+            print(f"Error adding item to inventory: {e}")
+            return False
 
     async def process_purchase(self, user_id: int, item_id: str, amount: int, item_type: str) -> bool:
-        """Process a purchase transaction"""
+        """Process a purchase transaction with debug prints"""
+        print(f"\n=== Starting purchase process ===")
+        print(f"User: {user_id}, Item: {item_id}, Amount: {amount}, Type: {item_type}")
+        
         item = await self.get_item(item_id, item_type)
         if not item:
+            print("Purchase failed: Item not found")
             return False
+        print(f"Item found: {item['name']} (Price: {item['price']})")
         
         total_price = item['price'] * amount
+        print(f"Total price: {total_price}")
+        
         user_balance = await self.get_wallet(user_id)
+        print(f"User balance: {user_balance}")
         
         if user_balance < total_price:
+            print("Purchase failed: Insufficient funds")
             return False
         
         # Deduct money
+        print("Attempting to deduct money...")
         wallet_updated = await self.update_wallet(user_id, -total_price)
+        print(f"Wallet updated: {wallet_updated}")
+        
         if not wallet_updated:
+            print("Purchase failed: Wallet update failed")
             return False
         
         # Add item to inventory
+        print("Attempting to add item to inventory...")
         inventory_updated = await self.add_item_to_inventory(user_id, item_id, item_type, amount)
-        return wallet_updated and inventory_updated
+        print(f"Inventory updated: {inventory_updated}")
+        
+        if not inventory_updated:
+            print("Warning: Inventory update failed, refunding money...")
+            await self.update_wallet(user_id, total_price)  # Refund if inventory update failed
+            return False
+        
+        print("=== Purchase successful! ===")
+        return True
 
     @commands.command()
     async def shop(self, ctx, shop_type: str = None):
@@ -336,7 +464,7 @@ class Shop(commands.Cog):
             collection = await self.get_collection(collection_type)
             if collection is None:  # Skip if collection doesn't exist
                 continue
-            found_item = await collection.find_one({"id": item_id})
+            found_item = await collection.find_one({"_id": item_id})
             if found_item:
                 item = found_item
                 item_type = collection_type
@@ -365,4 +493,6 @@ class Shop(commands.Cog):
             await ctx.send("There was an error processing your purchase. Please try again.")
 
 async def setup(bot):
+    cog = Shop(bot)
     await bot.add_cog(Shop(bot))
+    await cog.migrate_bait_storage() 
