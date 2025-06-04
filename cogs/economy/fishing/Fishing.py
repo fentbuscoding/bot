@@ -373,21 +373,6 @@ class Fishing(commands.Cog):
                     last_button = discord.ui.Button(emoji="⏭️", style=discord.ButtonStyle.secondary, disabled=self.current_page == len(self.pages) - 1)
                     last_button.callback = self.last_page
                     self.add_item(last_button)
-                
-                # Close button
-                close_button = discord.ui.Button(emoji="❌", style=discord.ButtonStyle.danger)
-                close_button.callback = self.close_inventory
-                self.add_item(close_button)
-                
-                # Gear management buttons (only on first page)
-                if self.current_page == 0:
-                    rod_button = discord.ui.Button(label="Change Rod", style=discord.ButtonStyle.success)
-                    rod_button.callback = self.change_rod
-                    self.add_item(rod_button)
-                    
-                    bait_button = discord.ui.Button(label="Change Bait", style=discord.ButtonStyle.success)
-                    bait_button.callback = self.change_bait
-                    self.add_item(bait_button)
             
             async def interaction_check(self, interaction: discord.Interaction) -> bool:
                 if interaction.user != self.author:
