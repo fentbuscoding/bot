@@ -156,7 +156,12 @@ class Gambling(commands.Cog):
             
             message = await ctx.send(embed=embed, view=view)
             view.message = message
-            
+        except asyncio.TimeoutError:
+            self.logger.error("Blackjack game timed out")
+            if ctx.author.id in self.active_games:
+                self.active_games.remove(ctx.author.id)
+            await ctx.reply("❌ Your blackjack game has timed out due to inactivity.")
+
         except Exception as e:
             self.logger.error(f"Blackjack error: {e}")
             if ctx.author.id in self.active_games:
@@ -173,7 +178,11 @@ class Gambling(commands.Cog):
 
     def _blackjack_view(self, user_id: int, bet: int, player_hand: list, dealer_hand: list, wallet: int, split_count: int = 0):
         """Create the blackjack game view with buttons"""
-        view = discord.ui.View(timeout=60.0)
+        try:
+            view = discord.ui.View(timeout=60.0)
+        except asyncio.TimeoutError:
+            self.logger.error("Blackjack view creation timed out")
+            return None
         
         async def hit_callback(interaction):
             if interaction.user.id != user_id:
@@ -1063,7 +1072,12 @@ class Gambling(commands.Cog):
                     return await ctx.reply(f"❌ You don't have '{item_name}' in your inventory!")
                     
             # Create confirmation view
-            view = discord.ui.View(timeout=30.0)
+            try:
+                view = discord.ui.View(timeout=30.0)
+            except asyncio.TimeoutError:
+                if ctx.author.id in self.active_games:
+                    self.active_games.remove(ctx.author.id)
+                return await ctx.reply("❌ Confirmation timed out. Please try again.")
             
             async def confirm_callback(interaction):
                 if interaction.user.id != ctx.author.id:
