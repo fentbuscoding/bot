@@ -45,7 +45,21 @@ class Error(commands.Cog):
             await ctx.reply(f"❌ Invalid argument provided: {str(error)}")
             
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.reply(f"⏳ This command is on cooldown for {error.retry_after:.1f}s")
+            def format_time(seconds):
+                days, seconds = divmod(seconds, 86400)
+                hours, seconds = divmod(seconds, 3600)
+                minutes, seconds = divmod(seconds, 60)
+                time_parts = []
+                if days > 0:
+                    time_parts.append(f"{int(days)}d")
+                if hours > 0:
+                    time_parts.append(f"{int(hours)}h")
+                if minutes > 0:
+                    time_parts.append(f"{int(minutes)}m")
+                if seconds > 0:
+                    time_parts.append(f"{int(seconds)}s")
+                return " ".join(time_parts)
+            await ctx.reply(f"⏳ This command is on cooldown for `{format_time(error.retry_after)}`")
             
         elif isinstance(error, commands.DisabledCommand):
             await ctx.reply("❌ This command is currently disabled")
