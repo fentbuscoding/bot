@@ -112,9 +112,29 @@ class ShopView(View):
         self.add_item(Button(style=discord.ButtonStyle.blurple, emoji="➡️", custom_id="next_page"))
         
         # Add item buttons for current page
-        self.update_item_buttons()
-    
-    def update_item_buttons(self):
+        self.update_view()
+
+    def get_page_embed(self) -> discord.Embed:
+        """Create an embed for the current page"""
+        embed = discord.Embed(
+            title=f"{self.shop_type.capitalize()} Shop",
+            description=f"Your balance: {self.user_balance}{self.cog.currency}\n\nPage {self.current_page + 1}/{(len(self.items) + self.items_per_page - 1) // self.items_per_page}",
+            color=discord.Color.blue()
+        )
+        
+        start_idx = self.current_page * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        for item in self.items[start_idx:end_idx]:
+            embed.add_field(
+                name=f"{item['name']} - {item['price']}{self.cog.currency}",
+                value=item.get('description', 'No description available'),
+                inline=False
+            )
+        
+        return embed
+
+    def update_view(self):
+        """Update both buttons and embed for current page"""
         # Clear existing item buttons (keep first 3 buttons which are nav/select)
         for child in self.children[3:]:
             self.remove_item(child)
@@ -129,19 +149,18 @@ class ShopView(View):
                 user_balance=self.user_balance,
                 style=discord.ButtonStyle.green
             ))
-    
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.data.get("custom_id") in ["prev_page", "next_page"]:
             if interaction.data["custom_id"] == "prev_page":
                 if self.current_page > 0:
                     self.current_page -= 1
-                    self.update_item_buttons()
             else:
                 if (self.current_page + 1) * self.items_per_page < len(self.items):
                     self.current_page += 1
-                    self.update_item_buttons()
             
-            await interaction.response.edit_message(view=self)
+            self.update_view()
+            await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
             return False
         return True
 

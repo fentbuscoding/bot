@@ -215,51 +215,99 @@ class Fishing(commands.Cog):
         
         # Equipment page with active gear
         equip_embed = discord.Embed(
-            title="🎣 Fishing Equipment",
+            title=f"{ctx.author.display_name}'s Fishing Inventory",
             color=discord.Color.blue()
         )
+        
+        # Active gear section
+        active_section = ""
         
         # Show active rod if available
         active_rod = next((r for r in fishing_items["rods"] if r["_id"] == active_gear.get("rod")), None)
         if active_rod:
-            equip_embed.add_field(
-                name="🎣 Active Rod",
-                value=f"**{active_rod['name']}**\n• Multiplier: {active_rod['multiplier']}x\n• {active_rod.get('description', '')}",
-                inline=False
-            )
+            active_section += f"**🎣 Active Rod:** {active_rod['name']} ({active_rod['multiplier']}x)\n"
+        else:
+            active_section += "**🎣 Active Rod:** None\n"
         
         # Show active bait if available
         active_bait = next((b for b in fishing_items["bait"] if b["_id"] == active_gear.get("bait")), None)
         if active_bait:
-            equip_embed.add_field(
-                name="🪱 Active Bait",
-                value=f"**{active_bait['name']}** (x{active_bait.get('amount', 1)})\n• {active_bait.get('description', '')}",
-                inline=False
-            )
+            active_section += f"**🪱 Active Bait:** {active_bait['name']} (x{active_bait.get('amount', 1)})\n"
+        else:
+            active_section += "**🪱 Active Bait:** None\n"
         
-        # List all rods
+        equip_embed.add_field(
+            name="⚡ Active Gear",
+            value=active_section,
+            inline=False
+        )
+        
+        # List all rods (limited to 3 on first page)
         rods_text = ""
-        for rod in fishing_items["rods"]:
+        for rod in fishing_items["rods"][:3]:
             active_status = " (Active)" if rod["_id"] == active_gear.get("rod") else ""
-            rods_text += f"**{rod['name']}{active_status}**\n• Multiplier: {rod['multiplier']}x\n• {rod.get('description', '')}\n\n"
+            rods_text += f"• {rod['name']}{active_status} ({rod['multiplier']}x)\n"
+        
+        if len(fishing_items["rods"]) > 3:
+            rods_text += f"\n*+{len(fishing_items['rods']) - 3} more rods...*"
+        
         equip_embed.add_field(
             name="🎣 Fishing Rods",
             value=rods_text or "No rods",
-            inline=False
+            inline=True
         )
         
-        # List all bait
+        # List all bait (limited to 3 on first page)
         bait_text = ""
-        for bait in fishing_items["bait"]:
+        for bait in fishing_items["bait"][:3]:
             active_status = " (Active)" if bait["_id"] == active_gear.get("bait") else ""
-            bait_text += f"**{bait['name']}{active_status}** (x{bait.get('amount', 1)})\n• {bait.get('description', '')}\n\n"
+            bait_text += f"• {bait['name']}{active_status} (x{bait.get('amount', 1)})\n"
+        
+        if len(fishing_items["bait"]) > 3:
+            bait_text += f"\n*+{len(fishing_items['bait']) - 3} more bait...*"
+        
         equip_embed.add_field(
             name="🪱 Bait",
             value=bait_text or "No bait",
-            inline=False
+            inline=True
         )
         
+        equip_embed.set_footer(text="Page 1 - Use the buttons below to navigate")
         pages.append(equip_embed)
+        
+        # Detailed rods page (if more than 3 rods)
+        if len(fishing_items["rods"]) > 3:
+            rods_embed = discord.Embed(
+                title="🎣 All Fishing Rods",
+                color=discord.Color.blue()
+            )
+            
+            for rod in fishing_items["rods"]:
+                active_status = " (Active)" if rod["_id"] == active_gear.get("rod") else ""
+                rods_embed.add_field(
+                    name=f"{rod['name']}{active_status}",
+                    value=f"Multiplier: {rod['multiplier']}x\n{rod.get('description', '')}",
+                    inline=False
+                )
+            
+            pages.append(rods_embed)
+        
+        # Detailed bait page (if more than 3 bait)
+        if len(fishing_items["bait"]) > 3:
+            bait_embed = discord.Embed(
+                title="🪱 All Bait",
+                color=discord.Color.blue()
+            )
+            
+            for bait in fishing_items["bait"]:
+                active_status = " (Active)" if bait["_id"] == active_gear.get("bait") else ""
+                bait_embed.add_field(
+                    name=f"{bait['name']}{active_status} (x{bait.get('amount', 1)})",
+                    value=bait.get('description', ''),
+                    inline=False
+                )
+            
+            pages.append(bait_embed)
         
         # Fish collection pages
         if fish:
@@ -269,18 +317,18 @@ class Fishing(commands.Cog):
                 
             for fish_type, fish_list in fish_by_type.items():
                 embed = discord.Embed(
-                    title=f"🐟 {fish_type.title()} Fish Collection",
+                    title=f"🐟 {fish_type.title()} Collection",
                     color=discord.Color.blue()
                 )
                 
                 total_value = sum(f["value"] for f in fish_list)
                 embed.description = f"Total Value: **{total_value}** {self.currency}\nAmount: {len(fish_list)}"
                 
-                for fish in sorted(fish_list, key=lambda x: x["value"], reverse=True)[:5]:
+                for fish in sorted(fish_list, key=lambda x: x["value"], reverse=True)[:10]:
                     embed.add_field(
                         name=f"{fish['name']} ({fish['value']} {self.currency})",
                         value=f"Caught: {fish['caught_at'].split('T')[0]}",
-                        inline=False
+                        inline=True
                     )
                     
                 pages.append(embed)
@@ -291,75 +339,122 @@ class Fishing(commands.Cog):
                 color=discord.Color.blue()
             ))
         
-        class PaginationView(discord.ui.View):
+        class InventoryView(discord.ui.View):
             def __init__(self, pages, author, timeout=60):
                 super().__init__(timeout=timeout)
                 self.pages = pages
                 self.author = author
                 self.current_page = 0
-                
-            async def update_message(self, interaction):
-                self.current_page %= len(self.pages)  # Wrap around
-                page = self.pages[self.current_page]
                 self.update_buttons()
-                await interaction.response.edit_message(embed=page, view=self)
                 
             def update_buttons(self):
                 self.clear_items()
+                
+                # Navigation buttons
                 if len(self.pages) > 1:
-                    prev_button = discord.ui.Button(label="◀ Previous", style=discord.ButtonStyle.primary)
-                    prev_button.callback = self.previous_page
-                    self.add_item(prev_button)
+                    self.add_item(discord.ui.Button(
+                        emoji="⏮️",
+                        style=discord.ButtonStyle.secondary,
+                        disabled=self.current_page == 0,
+                        custom_id="first"
+                    ))
+                    self.add_item(discord.ui.Button(
+                        emoji="◀️",
+                        style=discord.ButtonStyle.primary,
+                        disabled=self.current_page == 0,
+                        custom_id="prev"
+                    ))
                     
-                    page_button = discord.ui.Button(label=f"Page {self.current_page + 1}/{len(self.pages)}", disabled=True)
-                    self.add_item(page_button)
+                    self.add_item(discord.ui.Button(
+                        label=f"Page {self.current_page + 1}/{len(self.pages)}",
+                        style=discord.ButtonStyle.gray,
+                        disabled=True
+                    ))
                     
-                    next_button = discord.ui.Button(label="Next ▶", style=discord.ButtonStyle.primary)
-                    next_button.callback = self.next_page
-                    self.add_item(next_button)
+                    self.add_item(discord.ui.Button(
+                        emoji="▶️",
+                        style=discord.ButtonStyle.primary,
+                        disabled=self.current_page == len(self.pages) - 1,
+                        custom_id="next"
+                    ))
+                    self.add_item(discord.ui.Button(
+                        emoji="⏭️",
+                        style=discord.ButtonStyle.secondary,
+                        disabled=self.current_page == len(self.pages) - 1,
+                        custom_id="last"
+                    ))
                 
-                @discord.ui.button(label="Close", style=discord.ButtonStyle.danger)
-                async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-                    await interaction.response.defer()
-                    await interaction.message.delete()
+                # Close button
+                self.add_item(discord.ui.Button(
+                    emoji="❌",
+                    style=discord.ButtonStyle.danger,
+                    custom_id="close",
+                    row=1
+                ))
                 
-                # Add rod/bait selection buttons if on equipment page
+                # Gear management buttons (only on first page)
                 if self.current_page == 0:
-                    select_rod = discord.ui.Button(label="Change Rod", style=discord.ButtonStyle.secondary, row=1)
-                    select_rod.callback = self.select_rod
-                    self.add_item(select_rod)
-                    
-                    select_bait = discord.ui.Button(label="Change Bait", style=discord.ButtonStyle.secondary, row=1)
-                    select_bait.callback = self.select_bait
-                    self.add_item(select_bait)
-                
-            async def select_rod(self, interaction: discord.Interaction):
-                await interaction.response.send_message(
-                    "Use `.rod` to view and select a different fishing rod!",
-                    ephemeral=True
-                )
-                
-            async def select_bait(self, interaction: discord.Interaction):
-                await interaction.response.send_message(
-                    "Use `.bait` to view and select different bait!",
-                    ephemeral=True
-                )
-                
-            async def previous_page(self, interaction: discord.Interaction):
-                self.current_page -= 1
-                await self.update_message(interaction)
-                
-            async def next_page(self, interaction: discord.Interaction):
-                self.current_page += 1
-                await self.update_message(interaction)
-                
+                    self.add_item(discord.ui.Button(
+                        label="Change Rod",
+                        style=discord.ButtonStyle.success,
+                        custom_id="change_rod",
+                        row=2
+                    ))
+                    self.add_item(discord.ui.Button(
+                        label="Change Bait",
+                        style=discord.ButtonStyle.success,
+                        custom_id="change_bait",
+                        row=2
+                    ))
+            
             async def interaction_check(self, interaction: discord.Interaction) -> bool:
                 if interaction.user != self.author:
                     await interaction.response.send_message("This isn't your inventory!", ephemeral=True)
                     return False
                 return True
+                
+            async def navigate(self, interaction: discord.Interaction, action: str):
+                if action == "first":
+                    self.current_page = 0
+                elif action == "prev":
+                    self.current_page -= 1
+                elif action == "next":
+                    self.current_page += 1
+                elif action == "last":
+                    self.current_page = len(self.pages) - 1
+                
+                self.update_buttons()
+                await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+            
+            @discord.ui.button(custom_id="close")
+            async def close_inventory(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.message.delete()
+            
+            @discord.ui.button(custom_id="change_rod")
+            async def change_rod(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Use `.rods` to view and change your active fishing rod!", ephemeral=True)
+            
+            @discord.ui.button(custom_id="change_bait")
+            async def change_bait(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Use `.baits` to view and change your active bait!", ephemeral=True)
+            
+            @discord.ui.button(custom_id="first")
+            async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await self.navigate(interaction, "first")
+            
+            @discord.ui.button(custom_id="prev")
+            async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await self.navigate(interaction, "prev")
+            
+            @discord.ui.button(custom_id="next")
+            async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await self.navigate(interaction, "next")
+            
+            @discord.ui.button(custom_id="last")
+            async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await self.navigate(interaction, "last")
         
-        view = PaginationView(pages, ctx.author)
+        view = InventoryView(pages, ctx.author)
         await ctx.reply(embed=pages[0], view=view)
 
     @commands.command(name="sellfish", aliases=["sellf", 'sell_fish', 'sf'])
