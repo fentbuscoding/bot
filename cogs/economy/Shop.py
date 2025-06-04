@@ -226,52 +226,6 @@ class Shop(commands.Cog):
             upsert=True
         )
         return result.modified_count > 0 or result.upserted_id is not None
-
-    async def migrate_bait_storage(self):
-        """Migrate bait storage from array to object structure"""
-        async for user in self.db.users.find({
-            "$or": [
-                {"bait": {"$exists": True}},
-                {"inventory.bait": {"$type": "array"}}
-            ]
-        }):
-            # Initialize inventory if it doesn't exist
-            if 'inventory' not in user:
-                user['inventory'] = {
-                    'rod': {},
-                    'bait': {},
-                    'upgrade': {},
-                    'potion': {},
-                    'pickaxe': {}
-                }
-            
-            # Convert array bait to object structure
-            if isinstance(user.get('inventory', {}).get('bait'), list):
-                for item in user['inventory']['bait']:
-                    if '_id' in item:
-                        user['inventory']['bait'][item['_id']] = item.get('amount', 1)
-                user['inventory']['bait'] = {k: v for k, v in user['inventory']['bait'].items() if not isinstance(v, list)}
-            
-            # Move root-level bait array to inventory.bait object
-            if 'bait' in user and isinstance(user['bait'], list):
-                for item in user['bait']:
-                    if '_id' in item:
-                        user['inventory']['bait'][item['_id']] = item.get('amount', 1)
-            
-            # Update the user document
-            update_data = {
-                "$set": {
-                    "inventory": user['inventory']
-                },
-                "$unset": {
-                    "bait": ""
-                }
-            }
-            
-            await self.db.users.update_one(
-                {"_id": user['_id']},
-                update_data
-            )
             
 
     async def add_item_to_inventory(self, user_id: int, item_id: str, item_type: str, amount: int = 1) -> bool:
@@ -495,4 +449,3 @@ class Shop(commands.Cog):
 async def setup(bot):
     cog = Shop(bot)
     await bot.add_cog(Shop(bot))
-    await cog.migrate_bait_storage() 
