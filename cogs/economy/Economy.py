@@ -272,7 +272,8 @@ class Economy(commands.Cog):
         
         chance = random.random()
         if chance < 0.6:  # 60% chance to fail
-            fine = int((random.random() * 0.3 + 0.1) * victim_bal)
+            fine_percentage = max(0.1, min(0.3, victim_bal / (ctx.author.id if await db.get_wallet_balance(ctx.author.id, ctx.guild.id) else 1)))
+            fine = int(victim_bal * fine_percentage)
 
             await db.update_wallet(ctx.author.id, -fine, ctx.guild.id)
             await db.update_wallet(victim.id, fine, ctx.guild.id)
