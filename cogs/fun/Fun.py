@@ -523,12 +523,6 @@ class Fun(commands.Cog, ErrorHandler):
         ]
         await ctx.reply(f"😊 ```{user.display_name}, {random.choice(compliments)}```")
 
-    @commands.command()
-    async def reverse(self, ctx, *, text: str):
-        """reverse your text"""
-        reversed_text = text[::-1]
-        await ctx.reply(f"🔄 ```{reversed_text}```")
-
 async def setup(bot):
     logger = CogLogger("Fun")
     try:

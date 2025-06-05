@@ -169,6 +169,7 @@ COG_DATA = {
         "cogs.unique.Multiplayer": "fun", 
         "cogs.fun.Fun": "fun",
         "cogs.fun.Text": "fun",
+        "cogs.fun.Other": "fun",
         "cogs.unique.SyncRoles": "success", 
         "cogs.Help": "success", 
         "cogs.ModMail": "success", 
@@ -183,7 +184,6 @@ COG_DATA = {
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
-        "cogs.fun.other": "success",
         #"cogs.Security": "success", disabled for now
         #"cogs.LastFm": "disabled",  disabled for now
     },
