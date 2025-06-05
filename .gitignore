@@ -17,3 +17,4 @@ dashboard/bronxbot-web.service
 **/__pycache__/
 test.py
 logs
+user_timezone.json
