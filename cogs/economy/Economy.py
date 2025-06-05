@@ -262,27 +262,47 @@ class Economy(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 300, commands.BucketType.user)
     async def rob(self, ctx, victim: discord.Member):
-        """Attempt to rob someone"""
+        """Attempt to rob someone - risk fines or even losing everything!"""
         if victim == ctx.author:
             return await ctx.reply("You can't rob yourself!")
         
         victim_bal = await db.get_wallet_balance(victim.id, ctx.guild.id)
+        author_bal = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        
         if victim_bal < 100:
             return await ctx.reply("They're too poor to rob!")
         
+        # 1% chance for catastrophic failure (lose all money)
+        if random.random() < 0.01:
+            await db.update_wallet(ctx.author.id, -author_bal, ctx.guild.id)
+            return await ctx.reply("🚨 **DISASTER!** You got caught by the police and lost ALL your money! 🚨")
+        
         chance = random.random()
         if chance < 0.6:  # 60% chance to fail
-            fine_percentage = max(0.1, min(0.3, victim_bal / (ctx.author.id if await db.get_wallet_balance(ctx.author.id, ctx.guild.id) else 1)))
-            fine = int(victim_bal * fine_percentage)
-
+            # Calculate fine as 10-20% of victim's balance or 5-10% of robber's balance, whichever is smaller
+            victim_percentage = random.uniform(0.1, 0.2)
+            author_percentage = random.uniform(0.05, 0.1)
+            
+            fine_from_victim = int(victim_bal * victim_percentage)
+            fine_from_author = int(author_bal * author_percentage)
+            fine = min(fine_from_victim, fine_from_author)
+            
+            # Ensure the fine is at least 10% of victim's balance but not more than author can pay
+            fine = min(fine, author_bal)
+            fine = max(fine, int(victim_bal * 0.1))
+            
+            if fine <= 0:
+                return await ctx.reply("You tried to rob them but had no money to pay the fine when caught!")
+            
             await db.update_wallet(ctx.author.id, -fine, ctx.guild.id)
-            await db.update_wallet(victim.id, fine, ctx.guild.id)
-            return await ctx.reply(f"You got caught and paid **{fine}** {self.currency} in fines!")
-        
-        stolen = int(victim_bal * random.uniform(0.1, 0.5))
-        await db.update_wallet(victim.id, -stolen, ctx.guild.id)
-        await db.update_wallet(ctx.author.id, stolen, ctx.guild.id)
-        await ctx.reply(f"You stole **{stolen}** {self.currency} from {victim.mention}!")
+            # The fine doesn't go to the victim to prevent money duping
+            await ctx.reply(f"💢 You got caught and were fined **{fine}** {self.currency}! (The money was confiscated by authorities)")
+        else:  # 40% chance to succeed
+            stolen = int(victim_bal * random.uniform(0.1, 0.3))  # Reduced from 0.1-0.5 to 0.1-0.3
+            stolen = min(stolen, victim_bal)  # Ensure we don't steal more than they have
+            await db.update_wallet(victim.id, -stolen, ctx.guild.id)
+            await db.update_wallet(ctx.author.id, stolen, ctx.guild.id)
+            await ctx.reply(f"💰 You successfully stole **{stolen}** {self.currency} from {victim.mention}!")
 
     
     @commands.command(hidden=True)
