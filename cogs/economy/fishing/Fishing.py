@@ -1,3 +1,5 @@
+
+
 # template for adding bait that uses every possible value
 {
   "_id": "insane_bait",
@@ -48,260 +50,293 @@ class Fishing(commands.Cog):
             return False
         return True
 
-    def get_all_bait(self, user_data):
-        """Get all bait from both inventory and fishing_bait arrays"""
-        all_bait = []
-        
-        # Get bait from inventory.bait (newer structure)
-        inventory_bait = user_data.get("inventory", {}).get("bait", {})
-        for bait_key, bait_data in inventory_bait.items():
-            if isinstance(bait_data, dict) and bait_data.get("$numberInt"):
-                # Handle MongoDB number format
-                amount = int(bait_data["$numberInt"])
-                if amount > 0:
-                    all_bait.append({
-                        "_id": bait_key,
-                        "name": bait_key.replace("_", " ").title(),
-                        "amount": amount,
-                        "source": "inventory"
-                    })
-        
-        # Get bait from fishing_bait array (older structure)
-        fishing_bait = user_data.get("fishing_bait", [])
-        for bait in fishing_bait:
-            amount = bait.get("amount", 0)
-            if isinstance(amount, dict) and amount.get("$numberInt"):
-                amount = int(amount["$numberInt"])
-            if amount > 0:
-                all_bait.append({
-                    "_id": bait.get("id", bait.get("_id")),
-                    "name": bait.get("name", "Unknown Bait"),
-                    "amount": amount,
-                    "catch_rates": bait.get("catch_rates", {}),
+    async def migrate_rods_and_bait(self):
+        """Migration method to clean up rod and bait IDs"""
+        try:
+            print("[MIGRATION] Starting rod and bait ID migration...")
+            
+            # Process rods collection
+            rods_collection = self.db.db.rods
+            rods_cursor = rods_collection.find({})
+            rods_updated = 0
+            
+            async for rod in rods_cursor:
+                if 'id' not in rod:
+                    continue
+                    
+                new_id = rod['id']
+                if not new_id:
+                    continue
+                    
+                # Check if document with new _id already exists
+                existing = await rods_collection.find_one({"_id": new_id})
+                if existing:
+                    print(f"[MIGRATION] Skipping rod {new_id} - already exists with new ID")
+                    continue
+                    
+                # Create new document with correct _id
+                new_rod = {
+                    "_id": new_id,
+                    "name": rod.get("name", ""),
+                    "price": rod.get("price", 0),
+                    "description": rod.get("description", ""),
+                    "multiplier": rod.get("multiplier", 1),
+                    "type": rod.get("type", "rod")
+                }
+                
+                # Insert new document
+                await rods_collection.insert_one(new_rod)
+                
+                # Remove old document
+                await rods_collection.delete_one({"_id": rod["_id"]})
+                rods_updated += 1
+                print(f"[MIGRATION] Updated rod: {rod['_id']} -> {new_id}")
+            
+            # Process bait collection
+            bait_collection = self.db.db.bait
+            bait_cursor = bait_collection.find({})
+            bait_updated = 0
+            
+            async for bait in bait_cursor:
+                if 'id' not in bait:
+                    continue
+                    
+                new_id = bait['id']
+                if not new_id:
+                    continue
+                    
+                # Check if document with new _id already exists
+                existing = await bait_collection.find_one({"_id": new_id})
+                if existing:
+                    print(f"[MIGRATION] Skipping bait {new_id} - already exists with new ID")
+                    continue
+                    
+                # Create new document with correct _id
+                new_bait = {
+                    "_id": new_id,
+                    "name": bait.get("name", ""),
+                    "price": bait.get("price", 0),
                     "description": bait.get("description", ""),
-                    "source": "fishing_bait"
-                })
-        
-        # Also get from user_data.bait (another possible structure)
-        direct_bait = user_data.get("bait", [])
-        for bait in direct_bait:
-            amount = bait.get("amount", 0)
-            if isinstance(amount, dict) and amount.get("$numberInt"):
-                amount = int(amount["$numberInt"])
-            if amount > 0:
-                all_bait.append({
-                    "_id": bait.get("_id", bait.get("id")),
-                    "name": bait.get("name", "Unknown Bait"),
-                    "amount": amount,
                     "catch_rates": bait.get("catch_rates", {}),
-                    "description": bait.get("description", ""),
-                    "source": "bait"
-                })
-        
-        return all_bait
-
-    def get_bait_catch_rates(self, bait_id):
-        """Get catch rates for specific bait types"""
-        bait_rates = {
-            "insane_bait": {
-                "normal": 0.0,
-                "uncommon": 0.0,
-                "rare": 0.0,
-                "epic": 0.0,
-                "legendary": 0.0,
-                "mythical": 0.0,
-                "event": 0.0,
-                "mutated": 0.1,
-                "insane": 100000.0,
-                "master": 0.0
-            },
-            "pro_bait": {
-                "normal": 1.2,
-                "uncommon": 0.1,
-                "rare": 0.3,
-                "epic": 0.05,
-                "legendary": 0.02,
-                "mythical": 0.01,
-                "event": 0.1,
-                "mutated": 0.0,
-                "insane": 0.0,
-                "master": 0.0
-            },
-            # Default rates for unknown bait
-            "default": {
-                "normal": 1.0,
-                "uncommon": 0.05,
-                "rare": 0.1,
-                "epic": 0.05,
-                "legendary": 0.02,
-                "mythical": 0.01,
-                "event": 0.0,
-                "mutated": 0.0,
-                "insane": 0.0,
-                "master": 0.0
+                    "type": bait.get("type", "bait")
+                }
+                
+                # Insert new document
+                await bait_collection.insert_one(new_bait)
+                
+                # Remove old document
+                await bait_collection.delete_one({"_id": bait["_id"]})
+                bait_updated += 1
+                print(f"[MIGRATION] Updated bait: {bait['_id']} -> {new_id}")
+            
+            print(f"[MIGRATION] Completed! Updated {rods_updated} rods and {bait_updated} bait items.")
+            return {
+                "rods_updated": rods_updated,
+                "bait_updated": bait_updated
             }
+            
+        except Exception as e:
+            print(f"[MIGRATION ERROR] {str(e)}")
+            raise
+
+    def get_default_catch_rates(self, bait_name):
+        """Return default catch rates for different bait types"""
+        rates = {
+            "beginner_bait": {"normal": 1.5},
+            "pro_bait": {"normal": 1.2, "rare": 1.1},
+            "advanced_bait": {"normal": 1.1, "rare": 1.3, "epic": 1.1},
+            "insane_bait": {"normal": 0.8, "rare": 1.5, "epic": 1.3, "legendary": 1.2}
         }
-        
-        return bait_rates.get(bait_id, bait_rates["default"])
+        return rates.get(bait_name, {"normal": 1.0})
 
     @commands.command(name="fish", aliases=["fishing", 'fs'])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def fish(self, ctx):
         """Go fishing using your active rod and bait"""
-        # Get user data
-        user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
-        
-        if not user_data:
-            return await ctx.reply("❌ User data not found!")
-        
-        # Get rods - check both possible fields
-        rods = user_data.get("rods", []) or user_data.get("fishing_rods", [])
-        if not rods:
-            embed = discord.Embed(
-                title="🎣 First Time Fishing",
-                description="You need a fishing rod to start! Buy one from `.shop rod`",
-                color=discord.Color.blue()
-            )
-            return await ctx.reply(embed=embed)
-        
-        # Get all available bait
-        all_bait = self.get_all_bait(user_data)
-        if not all_bait:
-            return await ctx.reply("❌ You need bait to go fishing! Buy some from `.shop bait`")
-        
-        # Get active rod or default to first rod
-        active_rod_id = user_data.get("active_rod")
-        if active_rod_id:
-            rod = next((r for r in rods if r.get("_id") == active_rod_id), None)
-        else:
-            rod = rods[0]
-            active_rod_id = rod.get("_id")
+        try:
+            user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
+            if not user_data:
+                return await ctx.reply("❌ User data not found!")
+
+            # Check rods in inventory.rod
+            rods = user_data.get("inventory", {}).get("rod", {})
+            if not rods:
+                return await ctx.reply("❌ You need a fishing rod! Buy one from `.shop rod`")
+
+            # Get active rod
+            active_rod = user_data.get("active_rod")
+            if not active_rod or active_rod not in rods:
+                active_rod = next(iter(rods.keys()), None)
+                if active_rod:
+                    await self.db.db.users.update_one(
+                        {"_id": str(ctx.author.id)},
+                        {"$set": {"active_rod": active_rod}}
+                    )
+                else:
+                    return await ctx.reply("❌ No valid rods available!")
+
+            # Get bait inventory
+            bait_inventory = user_data.get("inventory", {}).get("bait", {})
+            if not bait_inventory:
+                return await ctx.reply("❌ You need bait! Buy some from `.shop bait`")
+
+            # Get active bait
+            active_bait = user_data.get("active_bait")
+            if not active_bait or active_bait not in bait_inventory:
+                active_bait = next(iter(bait_inventory.keys()), None)
+                if active_bait:
+                    await self.db.db.users.update_one(
+                        {"_id": str(ctx.author.id)},
+                        {"$set": {"active_bait": active_bait}}
+                    )
+                else:
+                    return await ctx.reply("❌ No valid bait available!")
+
+            # Verify bait amount
+            if bait_inventory.get(active_bait, 0) <= 0:
+                return await ctx.reply(f"❌ You're out of {active_bait.replace('_', ' ')}!")
+
+            # Remove 1 bait
             await self.db.db.users.update_one(
                 {"_id": str(ctx.author.id)},
-                {"$set": {"active_rod": active_rod_id}}
+                {"$inc": {f"inventory.bait.{active_bait}": -1}}
             )
-        
-        if not rod:
-            return await ctx.reply("❌ Your active rod is no longer available!")
-        
-        # Get active bait or use first available
-        active_bait_id = user_data.get("active_bait")
-        current_bait = None
-        
-        if active_bait_id:
-            current_bait = next((b for b in all_bait if b["_id"] == active_bait_id), None)
-        
-        if not current_bait:
-            current_bait = all_bait[0]  # Use first available bait
-        
-        bait_id = current_bait["_id"]
-        if not bait_id:
-            return await ctx.reply("❌ Invalid bait configuration!")
-        
-        # Remove bait
-        if not await self.remove_bait_improved(ctx.author.id, bait_id):
-            return await ctx.reply("❌ Failed to use bait!")
-        
-        # Get catch rates for this bait
-        bait_catch_rates = current_bait.get("catch_rates", {})
-        if not bait_catch_rates:
-            bait_catch_rates = self.get_bait_catch_rates(bait_id)
-        
-        # Calculate catch chances
-        base_chances = {
-            "normal": 0.7 * bait_catch_rates.get("normal", 1.0),
-            "uncommon": 0.5 * bait_catch_rates.get("uncommon", 0.05),
-            "rare": 0.3 * bait_catch_rates.get("rare", 0.1),
-            "epic": 0.15 * bait_catch_rates.get("epic", 0.05),
-            "legendary": 0.08 * bait_catch_rates.get("legendary", 0.02),
-            "mythical": 0.05 * bait_catch_rates.get("mythical", 0.01),
-            "event": 0.1 * bait_catch_rates.get("event", 0.0),
-            "mutated": 0.03 * bait_catch_rates.get("mutated", 0.0),
-            "insane": 0.005 * bait_catch_rates.get("insane", 0.0),
-            "master": 0.001 * bait_catch_rates.get("master", 0.0)
+
+            # Fishing logic
+            caught_type = self.determine_fish_catch(active_bait)
+            fish_value = self.calculate_fish_value(caught_type)
+            
+            fish = {
+                "type": caught_type,
+                "name": f"{caught_type.title()} Fish",
+                "value": fish_value,
+                "caught_at": datetime.datetime.now().isoformat(),
+                "bait_used": active_bait,
+                "rod_used": active_rod
+            }
+
+            if await self.db.add_fish(ctx.author.id, fish):
+                embed = discord.Embed(
+                    title=f"🎣 Caught a {caught_type.title()} Fish!",
+                    description=f"**Value:** {fish_value} {self.currency}",
+                    color=self.get_rarity_color(caught_type)
+                )
+                embed.add_field(name="🪱 Bait Used", value=active_bait.replace('_', ' '), inline=True)
+                embed.add_field(name="🎣 Rod Used", value=active_rod.replace('_', ' '), inline=True)
+                await ctx.reply(embed=embed)
+            else:
+                await ctx.reply("❌ Failed to store your catch!")
+
+        except Exception as e:
+            print(f"[FISHING ERROR] {type(e).__name__}: {str(e)}")
+            await ctx.reply("❌ An error occurred while fishing. Please try again later.")
+
+    @commands.command(name="rod", aliases=["selectrod", "changerod"])
+    async def select_rod(self, ctx, rod_name: str = None):
+        """Select or view your active fishing rod"""
+        try:
+            user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
+            if not user_data:
+                return await ctx.reply("❌ User data not found!")
+            
+            rods = user_data.get("inventory", {}).get("rod", {})
+            if not rods:
+                return await ctx.reply("You don't have any fishing rods! Get one from the shop.")
+            
+            active_gear = await self.db.get_active_fishing_gear(ctx.author.id)
+            
+            if not rod_name:
+                embed = discord.Embed(
+                    title="🎣 Your Fishing Rods",
+                    description="Select a rod using `.rod <name>`",
+                    color=discord.Color.blue()
+                )
+                
+                for rod_id in rods:
+                    rod_name_display = rod_id.replace("_", " ").title()
+                    status = "✅" if rod_id == active_gear.get("rod") else ""
+                    embed.add_field(
+                        name=f"{status} {rod_name_display}",
+                        value=f"Currently owned: {rods[rod_id]}",
+                        inline=False
+                    )
+                
+                return await ctx.reply(embed=embed)
+            
+            rod_name_clean = rod_name.lower().strip().replace(" ", "_")
+            if rod_name_clean in rods:
+                await self.db.db.users.update_one(
+                    {"_id": str(ctx.author.id)},
+                    {"$set": {"active_rod": rod_name_clean}}
+                )
+                await ctx.reply(f"🎣 Successfully set **{rod_name_clean.replace('_', ' ')}** as your active fishing rod!")
+            else:
+                await ctx.reply("❌ Couldn't find that fishing rod in your inventory!")
+                
+        except Exception as e:
+            print(f"[ROD COMMAND ERROR] {type(e).__name__}: {str(e)}")
+            await ctx.reply("❌ An error occurred while processing your request.")
+
+    def determine_fish_catch(self, bait_type):
+        """Simplified fish catch determination"""
+        # Adjust these probabilities as needed
+        probabilities = {
+            "normal": 0.7,
+            "uncommon": 0.2,
+            "rare": 0.08,
+            "epic": 0.015,
+            "legendary": 0.005
         }
         
-        # Apply rod multiplier
-        rod_mult = rod.get("multiplier", 1.0)
-        if isinstance(rod_mult, dict) and rod_mult.get("$numberInt"):
-            rod_mult = int(rod_mult["$numberInt"])
+        # Adjust based on bait type
+        bait_modifiers = {
+            "beginner_bait": {"normal": 1.5},
+            "pro_bait": {"normal": 1.2, "rare": 1.3},
+            "advanced_bait": {"rare": 1.5, "epic": 1.2},
+            "insane_bait": {"epic": 1.5, "legendary": 1.3}
+        }
         
-        chances = {k: v * rod_mult for k, v in base_chances.items()}
+        # Apply bait modifiers
+        modified_probs = probabilities.copy()
+        if bait_type in bait_modifiers:
+            for fish_type, modifier in bait_modifiers[bait_type].items():
+                if fish_type in modified_probs:
+                    modified_probs[fish_type] *= modifier
         
-        # Normalize chances if total > 1
-        total = sum(chances.values())
-        if total > 1.0:
-            chances = {k: v/total for k, v in chances.items()}
-        
-        # Add base chance for normal fish if no other fish would be caught
-        if total < 0.5:
-            chances["normal"] = max(chances["normal"], 0.5)
+        # Normalize probabilities
+        total = sum(modified_probs.values())
+        normalized = {k: v/total for k, v in modified_probs.items()}
         
         # Determine catch
         roll = random.random()
         cumulative = 0
-        caught_type = "normal"
-        
-        # Sort by rarity (rarest first) for proper probability distribution
-        rarity_order = ["master", "insane", "mythical", "legendary", "epic", "rare", "event", "mutated", "uncommon", "normal"]
-        
-        for fish_type in rarity_order:
-            if fish_type in chances:
-                cumulative += chances[fish_type]
-                if roll <= cumulative:
-                    caught_type = fish_type
-                    break
-        
-        # Value ranges for different fish types
-        value_range = {
+        for fish_type, prob in normalized.items():
+            cumulative += prob
+            if roll <= cumulative:
+                return fish_type
+        return "normal"
+
+    def calculate_fish_value(self, fish_type):
+        """Calculate fish value based on type"""
+        value_ranges = {
             "normal": (10, 100),
             "uncommon": (50, 200),
             "rare": (100, 500),
             "epic": (200, 1000),
-            "legendary": (500, 2000),
-            "mythical": (1000, 5000),
-            "event": (500, 10000),
-            "mutated": (2000, 10000),
-            "insane": (5000, 200000),
-            "master": (100000, 10000000)
-        }[caught_type]
-        
-        fish = {
-            "id": str(uuid.uuid4()),
-            "type": caught_type,
-            "name": f"{caught_type.title()} Fish",
-            "value": random.randint(*value_range),
-            "caught_at": datetime.datetime.now().isoformat(),
-            "bait_used": bait_id,
-            "rod_used": active_rod_id
+            "legendary": (500, 2000)
         }
-        
-        if await self.db.add_fish(ctx.author.id, fish):
-            embed = discord.Embed(
-                title="🎣 Caught a Fish!",
-                description=f"You caught a **{fish['name']}**!\nValue: **{fish['value']}** {self.currency}",
-                color=discord.Color.blue()
-            )
-            
-            embed.add_field(
-                name="🪱 Bait Used",
-                value=current_bait["name"],
-                inline=True
-            )
-            
-            embed.add_field(
-                name="🎣 Rod Used", 
-                value=rod["name"],
-                inline=True
-            )
-            
-            if caught_type in ["rare", "epic", "legendary", "mythical", "event", "mutated", "insane", "master"]:
-                embed.set_footer(text="Wow! That's a special catch!")
-                embed.color = discord.Color.gold()
-            
-            await ctx.reply(embed=embed)
-        else:
-            await ctx.reply("❌ Failed to store your catch!")
+        return random.randint(*value_ranges.get(fish_type, (10, 100)))
+
+    def get_rarity_color(self, rarity):
+        """Get embed color based on fish rarity"""
+        colors = {
+            "normal": discord.Color.blue(),
+            "uncommon": discord.Color.green(),
+            "rare": discord.Color.teal(),
+            "epic": discord.Color.purple(),
+            "legendary": discord.Color.gold()
+        }
+        return colors.get(rarity, discord.Color.blue())
 
     async def remove_bait_improved(self, user_id: int, bait_id: str) -> bool:
         """Improved bait removal that handles all data structures"""
@@ -376,8 +411,8 @@ class Fishing(commands.Cog):
         fish = await self.db.get_fish(ctx.author.id)
         active_gear = await self.db.get_active_fishing_gear(ctx.author.id)
         
-        # Get all bait using improved method
-        all_bait = self.get_all_bait(user_data)
+        # Get all bait
+        all_bait = await self.get_all_bait(user_data)
         
         pages = []
         
@@ -397,9 +432,10 @@ class Fishing(commands.Cog):
         else:
             active_section += "**🎣 Active Rod:** None\n"
         
-        # Show active bait if available
-        active_bait_id = user_data.get("active_bait")
+        # Show active bait if available - simplified without original_id
+        active_bait_id = active_gear.get("bait")
         active_bait = next((b for b in all_bait if b["_id"] == active_bait_id), None) if active_bait_id else None
+        
         if active_bait:
             active_section += f"**🪱 Active Bait:** {active_bait['name']} (x{active_bait['amount']})\n"
         elif all_bait:
@@ -413,9 +449,9 @@ class Fishing(commands.Cog):
             inline=False
         )
         
-        # List all rods (limited to 3 on first page)
+        # List all rods (simplified display)
         rods_text = ""
-        for rod in fishing_items["rods"][:3]:
+        for rod in fishing_items["rods"][:3]:  # Show first 3 rods
             active_status = " (Active)" if rod["_id"] == active_gear.get("rod") else ""
             rods_text += f"• {rod['name']}{active_status} ({rod['multiplier']}x)\n"
         
@@ -428,9 +464,9 @@ class Fishing(commands.Cog):
             inline=True
         )
         
-        # List all bait (limited to 3 on first page)
+        # List all bait (simplified display)
         bait_text = ""
-        for bait in all_bait[:3]:
+        for bait in all_bait[:3]:  # Show first 3 baits
             active_status = " (Active)" if bait["_id"] == active_bait_id else ""
             bait_text += f"• {bait['name']}{active_status} (x{bait['amount']})\n"
         
@@ -445,9 +481,11 @@ class Fishing(commands.Cog):
         
         equip_embed.set_footer(text="Page 1 - Use the buttons below to navigate")
         pages.append(equip_embed)
+        print("[DEBUG] Added equipment page")
         
         # Detailed rods page (if more than 3 rods)
         if len(fishing_items["rods"]) > 3:
+            print(f"[DEBUG] Creating detailed rods page with {len(fishing_items['rods'])} rods")
             rods_embed = discord.Embed(
                 title="🎣 All Fishing Rods",
                 color=discord.Color.blue()
@@ -465,6 +503,7 @@ class Fishing(commands.Cog):
         
         # Detailed bait page (if more than 3 bait)
         if len(all_bait) > 3:
+            print(f"[DEBUG] Creating detailed bait page with {len(all_bait)} bait types")
             bait_embed = discord.Embed(
                 title="🪱 All Bait",
                 color=discord.Color.blue()
@@ -482,33 +521,51 @@ class Fishing(commands.Cog):
         
         # Fish collection pages
         if fish:
+            print(f"[DEBUG] Raw fish data: {fish}")  # Add this debug line
             fish_by_type = {}
             for f in fish:
-                fish_by_type.setdefault(f["type"], []).append(f)
+                print(f"[DEBUG] Processing fish item: {f}")  # Debug each fish item
+                if not isinstance(f, dict):
+                    print(f"[WARNING] Invalid fish item (not a dict): {f}")
+                    continue
+                    
+                fish_type = f.get("type", "unknown")
+                fish_by_type.setdefault(fish_type, []).append(f)
                 
             for fish_type, fish_list in fish_by_type.items():
+                print(f"[DEBUG] Creating page for fish type: {fish_type}")
                 embed = discord.Embed(
                     title=f"🐟 {fish_type.title()} Collection",
                     color=discord.Color.blue()
                 )
                 
-                total_value = sum(f["value"] for f in fish_list)
+                total_value = sum(f.get("value", 0) for f in fish_list)
                 embed.description = f"Total Value: **{total_value}** {self.currency}\nAmount: {len(fish_list)}"
                 
-                for fish_item in sorted(fish_list, key=lambda x: x["value"], reverse=True)[:10]:
+                for fish_item in sorted(fish_list, key=lambda x: x.get("value", 0), reverse=True)[:10]:
+                    # Safely get all fields with defaults
+                    fish_id = fish_item.get("_id", "Unknown Fish")
+                    fish_value = fish_item.get("value", 0)
+                    caught_date = fish_item.get("caught_at", "Unknown date")
+                    if isinstance(caught_date, str) and "T" in caught_date:
+                        caught_date = caught_date.split("T")[0]
+                    
                     embed.add_field(
-                        name=f"{fish_item['name']} ({fish_item['value']} {self.currency})",
-                        value=f"Caught: {fish_item['caught_at'].split('T')[0]}",
+                        name=f"{fish_id} ({fish_value} {self.currency})",
+                        value=f"Caught: {caught_date}",
                         inline=True
                     )
                     
                 pages.append(embed)
         else:
+            print("[DEBUG] No fish found, creating empty collection page")
             pages.append(discord.Embed(
                 title="🐟 Fish Collection",
                 description="You haven't caught any fish yet!\nUse `.fish` to start fishing.",
                 color=discord.Color.blue()
             ))
+        
+        print(f"[DEBUG] Total pages created: {len(pages)}")
         
         class InventoryView(discord.ui.View):
             def __init__(self, pages, author, timeout=60):
@@ -516,6 +573,7 @@ class Fishing(commands.Cog):
                 self.pages = pages
                 self.author = author
                 self.current_page = 0
+                print(f"[DEBUG] InventoryView initialized with {len(pages)} pages")
                 self.update_buttons()
                 
             def update_buttons(self):
@@ -547,11 +605,13 @@ class Fishing(commands.Cog):
             
             async def interaction_check(self, interaction: discord.Interaction) -> bool:
                 if interaction.user != self.author:
+                    print(f"[DEBUG] Blocked inventory access by {interaction.user} (not owner)")
                     await interaction.response.send_message("This isn't your inventory!", ephemeral=True)
                     return False
                 return True
                     
             async def navigate(self, interaction: discord.Interaction, action: str):
+                print(f"[DEBUG] Navigation action: {action}")
                 if action == "first":
                     self.current_page = 0
                 elif action == "prev":
@@ -561,6 +621,7 @@ class Fishing(commands.Cog):
                 elif action == "last":
                     self.current_page = len(self.pages) - 1
                 
+                print(f"[DEBUG] New page index: {self.current_page}")
                 self.update_buttons()
                 await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
             
@@ -577,7 +638,9 @@ class Fishing(commands.Cog):
                 await self.navigate(interaction, "last")
         
         view = InventoryView(pages, ctx.author)
+        print("[DEBUG] Sending inventory message...")
         await ctx.reply(embed=pages[0], view=view)
+        print("[DEBUG] Inventory message sent")
 
     @commands.command(name="sellfish", aliases=["sellf", 'sell_fish', 'sf'])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -613,90 +676,81 @@ class Fishing(commands.Cog):
                 return await ctx.reply(embed=embed)
             await ctx.reply("❌ Failed to sell fish!")
 
-    @commands.command(name="rod", aliases=["selectrod", "changerod"])
-    async def select_rod(self, ctx, rod_id: str = None):
-        """Select or view your active fishing rod"""
-        fishing_items = await self.db.get_fishing_items(ctx.author.id)
-        
-        if not fishing_items["rods"]:
-            return await ctx.reply("You don't have any fishing rods! Get one from the shop.")
-        
-        active_gear = await self.db.get_active_fishing_gear(ctx.author.id)
-        
-        if not rod_id:
-            # Show list of rods with active one marked
-            embed = discord.Embed(
-                title="🎣 Your Fishing Rods",
-                description="Select a rod using `.rod <id>`",
-                color=discord.Color.blue()
-            )
-            
-            for rod in fishing_items["rods"]:
-                status = "✅" if rod["_id"] == active_gear.get("rod") else ""
-                embed.add_field(
-                    name=f"{status} {rod['name']} (ID: {rod['_id']})",
-                    value=f"Multiplier: {rod['multiplier']}x\n{rod.get('description', '')}",
-                    inline=False
-                )
-            
-            return await ctx.reply(embed=embed)
-        
-        # Try to set active rod
-        if await self.db.set_active_rod(ctx.author.id, rod_id):
-            rod = next((r for r in fishing_items["rods"] if r["_id"] == rod_id), None)
-            if rod:
-                await ctx.reply(f"🎣 Successfully set **{rod['name']}** as your active fishing rod!")
-        else:
-            await ctx.reply("❌ Couldn't find that fishing rod in your inventory!")
+    async def get_all_bait(self, user_data):
+        """Get all bait with proper names"""
+        bait = []
+        if "inventory" in user_data and "bait" in user_data["inventory"]:
+            for bait_id, amount in user_data["inventory"]["bait"].items():
+                # Get bait details from database
+                bait_item = await self.db.db.bait.find_one({"_id": bait_id})
+                if bait_item:
+                    bait.append({
+                        "_id": bait_id,
+                        "name": bait_item.get("name", bait_id.replace("_", " ").title()),
+                        "amount": amount,
+                        "description": bait_item.get("description", "")
+                    })
+        return sorted(bait, key=lambda x: x["name"])  # Sort alphabetically
 
     @commands.command(name="bait", aliases=["selectbait", "changebait"])
-    async def select_bait(self, ctx, bait_id: str = None):
+    async def select_bait(self, ctx, bait_name: str = None):
         """Select or view your active bait"""
         user_data = await self.db.db.users.find_one({"_id": str(ctx.author.id)})
         if not user_data:
             return await ctx.reply("❌ User data not found!")
         
-        all_bait = self.get_all_bait(user_data)
+        all_bait = await self.get_all_bait(user_data)
         
         if not all_bait:
             return await ctx.reply("You don't have any bait! Get some from the shop.")
-        
-        active_bait_id = user_data.get("active_bait")
-        
-        if not bait_id:
+
+        if not bait_name:
             # Show list of bait with active one marked
             embed = discord.Embed(
                 title="🪱 Your Bait",
-                description="Select bait using `.bait <id>`",
+                description="Select bait using `.bait <name>`",
                 color=discord.Color.blue()
             )
             
+            active_bait_id = user_data.get("active_bait")
             for bait in all_bait:
                 status = "✅" if bait["_id"] == active_bait_id else ""
                 embed.add_field(
-                    name=f"{status} {bait['name']} (ID: {bait['_id']}) - x{bait['amount']}",
+                    name=f"{status} {bait['name']} - x{bait['amount']}",
                     value=f"{bait.get('description', 'No description available')}",
                     inline=False
                 )
             
             return await ctx.reply(embed=embed)
         
-        # Try to set active bait
-        bait_to_set = next((b for b in all_bait if b["_id"] == bait_id), None)
+        # Fixed the unterminated string here - added missing quote after underscore
+        bait_name_clean = bait_name.lower().replace("_", " ").strip()
+        bait_to_set = None
+        
+        for bait in all_bait:
+            bait_name_in_db = bait['name'].lower().replace("_", " ").strip()
+            if bait_name_clean == bait_name_in_db:
+                bait_to_set = bait
+                break
+        
         if bait_to_set:
             await self.db.db.users.update_one(
                 {"_id": str(ctx.author.id)},
-                {"$set": {"active_bait": bait_id}}
+                {"$set": {"active_bait": bait_to_set["_id"]}}
             )
             await ctx.reply(f"🪱 Successfully set **{bait_to_set['name']}** as your active bait!")
         else:
-            await ctx.reply("❌ Couldn't find that bait in your inventory!")
-
-    @commands.command(name="migrate", aliases=["migrate_fish"])
-    @commands.is_owner()
-    async def migrate_fish(self, ctx):
-        await self.db.migrate_to_standard_ids()
-        await ctx.reply("Migration complete!")
+            suggestions = []
+            for bait in all_bait:
+                if bait_name_clean in bait['name'].lower().replace("_", " "):
+                    suggestions.append(f"`{bait['name']}`")
+            
+            if suggestions:
+                await ctx.reply(f"❌ No exact match found. Did you mean: {', '.join(suggestions)}?")
+            else:
+                await ctx.reply("❌ Couldn't find that bait in your inventory!")
 
 async def setup(bot):
     await bot.add_cog(Fishing(bot))
+    cog = bot.get_cog("Fishing")
+

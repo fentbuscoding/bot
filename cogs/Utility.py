@@ -100,6 +100,77 @@ class Utility(commands.Cog, ErrorHandler):
             embed.add_field(name="Rules Channel", value=guild.rules_channel.mention, inline=False)
         await ctx.reply(embed=embed)
 
+
+    @commands.command(name='bugreport', aliases=['bug', 'br', 'report'])
+    async def bugreport(self, ctx, command_name: str = None, bot_response: str = None):
+        """Report a bug with a command.
+        
+        Example: .bugreport ping "bot didn't respond"
+        **PLEASE EXPLICITLY MENTION IF THE BOT DIDNT RESPOND, OR JUST LEAVE IT BLANK.**
+        """
+        if command_name is None:
+            embed = discord.Embed(
+                title="Bug Report Help",
+                description="Please provide the command name and what the bot responded (or 'none' if no response).\n"
+                            "Example: `.bugreport ping \"bot didn't respond\"`",
+                color=discord.Color.orange()
+            )
+            return await ctx.send(embed=embed)
+        
+        # Check if command exists
+        command = self.bot.get_command(command_name)
+        if command is None:
+            # Check aliases
+            for cmd in self.bot.commands:
+                if command_name.lower() in cmd.aliases:
+                    command = cmd
+                    break
+            else:
+                return await ctx.send("That command doesn't exist. Please check the spelling.")
+        
+        if len(bot_response) > 1000:
+            return await ctx.send("The bot response is too long. Please keep it under 1000 characters.")
+        if not bot_response:
+            bot_response = "No response provided"
+        else:
+            if len(bot_response) < len("bot didn't respond"):
+                return await ctx.send("Please provide a more detailed bot response. It should be at least 11 characters long.")
+        if not command:
+            return await ctx.send("Command not found. Please check the command name.")
+
+        # Prepare the report
+        report = (
+            f"**Bug Report**\n\n"
+            f"**User:** {ctx.author} ({ctx.author.id})\n"
+            f"**Command:** {command.qualified_name}\n"
+            f"**Bot Response:** {bot_response if bot_response else 'No response'}\n"
+            f"**Channel:** {ctx.channel.mention}\n"
+            f"**Time:** {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+        
+        # Log the report
+        self.logger.warning(f"Bug reported for command {command.qualified_name} by {ctx.author}: {bot_response}")
+        
+        # Send confirmation
+        embed = discord.Embed(
+            title="Bug Report Submitted",
+            description="Thank you for reporting this issue! The developers will look into it.",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+        
+        # Optionally send to a logging channel (if configured)
+        if hasattr(self.bot, 'log_channel'):
+            try:
+                embed = discord.Embed(
+                    title="🚨 New Bug Report",
+                    description=report,
+                    color=discord.Color.red()
+                )
+                await self.bot.log_channel.send(embed=embed)
+            except Exception as e:
+                self.logger.error(f"Failed to send bug report to log channel: {e}")
+
     @commands.command(aliases=['ui'])
     async def userinfo(self, ctx, user: discord.Member = None):
         user = user or ctx.author

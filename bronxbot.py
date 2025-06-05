@@ -1,4 +1,9 @@
+# TODO: Add support for slash commands and improve error handling
+# FIXME: Handle replies if the message is deleted before the bot sends the message
+# BronxBot - A Discord bot for the Bronx community
+
 import discord
+import signal
 import json
 import random
 import time
@@ -461,6 +466,43 @@ async def restart(ctx):
     
     os.execv(sys.executable, ['python'] + sys.argv)
 
+class ShutdownHandler:
+    def __init__(self, bot):
+        self.bot = bot
+        self.shutdown_channels = [
+            1314685928614264852,
+            1377534851963555901
+        ]
+        signal.signal(signal.SIGINT, self.handle_signal)
+        
+    async def send_shutdown_message(self):
+        """Send shutdown message to specified channels"""
+        embed = discord.Embed(
+            title="⚠️ Bot Shutting Down",
+            description="The bot is being shut down gracefully. It should restart automatically if running in a managed environment.",
+            color=discord.Color.orange()
+        )
+        
+        for channel_id in self.shutdown_channels:
+            try:
+                channel = self.bot.get_channel(channel_id)
+                if channel:
+                    await channel.send(embed=embed)
+            except Exception as e:
+                logging.error(f"Failed to send shutdown message to channel {channel_id}: {e}")
+    
+    def handle_signal(self, signum, frame):
+        """Handle SIGINT signal"""
+        logging.info("Received shutdown signal, sending notifications...")
+        
+        async def shutdown():
+            await self.send_shutdown_message()
+            await self.bot.close()
+            logging.info("Bot has shut down gracefully")
+            sys.exit(0)
+            
+        asyncio.create_task(shutdown())
+
 @bot.event
 async def on_message(message):
     """Handle messages"""
@@ -500,6 +542,7 @@ if __name__ == "__main__":
         system("clear" if os.name == "posix" else "cls")
         if os.name == "posix":
             sys.stdout.write("\x1b]2;BronxBot (DEV)\x07")
+        shutdown_handler = ShutdownHandler(bot)
         bot.run(config['DEV_TOKEN'], log_handler=None)  # Disable default discord.py logging
     else:
         try:

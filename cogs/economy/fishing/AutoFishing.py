@@ -20,7 +20,7 @@ class AutoFishing(commands.Cog):
         self.AUTOFISHER_PRICE_MULTIPLIER = 2.5
         self.BASE_EFFICIENCY_UPGRADE_PRICE = 500
         self.EFFICIENCY_PRICE_MULTIPLIER = 1.8
-        self.BASE_FISHING_INTERVAL = 300  # 5 minutes base
+        self.BASE_CATCH_CHANCE = 0.5  # 50% base chance per cycle
         self.MAX_EFFICIENCY_LEVEL = 50
         self.MAX_AUTOFISHERS = 10
         self.BAIT_COST = 50  # Cost for autofisher to buy bait
@@ -66,20 +66,18 @@ class AutoFishing(commands.Cog):
             if not fishing_items["rods"]:
                 return  # No rods, can't autofish
                 
-            current_time = datetime.datetime.now()
-            last_fish_time = datetime.datetime.fromisoformat(autofisher_data.get("last_fish_time", "2000-01-01T00:00:00"))
-            
-            # Calculate fishing interval
-            efficiency_level = autofisher_data.get("efficiency_level", 1)
-            fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))
-            
-            if (current_time - last_fish_time).total_seconds() < fishing_interval:
-                return
-                
             autofisher_count = autofisher_data["count"]
             autofisher_balance = autofisher_data.get("balance", 0)
+            efficiency_level = autofisher_data.get("efficiency_level", 1)
+            
+            # Calculate catch chance based on efficiency
+            catch_chance = min(0.95, self.BASE_CATCH_CHANCE * (1 + (efficiency_level * 0.02)))
             
             for _ in range(autofisher_count):
+                # Only attempt to fish if random check passes
+                if random.random() > catch_chance:
+                    continue
+                    
                 # Handle bait management
                 if not fishing_items["bait"]:
                     if autofisher_balance >= self.BAIT_COST:
@@ -94,9 +92,9 @@ class AutoFishing(commands.Cog):
                             autofisher_balance -= self.BAIT_COST
                             fishing_items["bait"] = [bait]
                         else:
-                            break
+                            continue
                     else:
-                        break
+                        continue
                 
                 bait = fishing_items["bait"][0]
                 rod = fishing_items["rods"][0]
@@ -105,12 +103,12 @@ class AutoFishing(commands.Cog):
                 bait_id = bait.get("_id", bait.get("id"))
                 if not bait_id:
                     self.logger.error(f"No valid bait ID found for user {user_id}")
-                    break
+                    continue
                     
                 # Remove bait
                 if not await db.remove_bait(user_id, bait_id):
                     self.logger.error(f"Failed to remove bait for user {user_id}")
-                    break
+                    continue
                     
                 # Update local bait count
                 bait["amount"] -= 1
@@ -126,7 +124,7 @@ class AutoFishing(commands.Cog):
                     "type": caught_type,
                     "name": f"{caught_type.title()} Fish",
                     "value": fish_value,
-                    "caught_at": current_time.isoformat(),
+                    "caught_at": datetime.datetime.utcnow().isoformat(),
                     "bait_used": bait_id,
                     "rod_used": rod.get("_id", rod.get("id")),
                     "auto_caught": True
@@ -135,9 +133,8 @@ class AutoFishing(commands.Cog):
                 if not await db.add_fish(user_id, fish):
                     self.logger.error(f"Failed to add fish for user {user_id}")
             
-            # Update autofisher data
+            # Update autofisher data (only balance changes)
             await db.update_autofisher_data(user_id, {
-                "last_fish_time": current_time.isoformat(),
                 "balance": autofisher_balance
             })
             
@@ -231,12 +228,9 @@ class AutoFishing(commands.Cog):
                 await ctx.reply(embed=embed, view=view)
             return
         
-        # Calculate next fishing time
-        last_fish_time = datetime.datetime.fromisoformat(autofisher_data.get("last_fish_time", "2000-01-01T00:00:00"))
+        # Calculate catch chance
         efficiency_level = autofisher_data.get("efficiency_level", 1)
-        fishing_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level - 1))
-        next_fish_time = last_fish_time + datetime.timedelta(seconds=fishing_interval)
-        time_until_next = (next_fish_time - datetime.datetime.utcnow()).total_seconds()
+        catch_chance = min(0.95, self.BASE_CATCH_CHANCE * (1 + (efficiency_level * 0.02)))
         
         embed = discord.Embed(
             title="🤖 Your Autofisher Status",
@@ -247,14 +241,8 @@ class AutoFishing(commands.Cog):
             name="📊 Statistics",
             value=f"**Autofishers:** {autofisher_data['count']}/{self.MAX_AUTOFISHERS}\n"
                   f"**Efficiency Level:** {efficiency_level}/{self.MAX_EFFICIENCY_LEVEL}\n"
+                  f"**Catch Chance:** {catch_chance*100:.1f}% per cycle\n"
                   f"**Autofisher Balance:** {autofisher_data.get('balance', 0)} {self.currency}",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="⏰ Timing",
-            value=f"**Fishing Interval:** {fishing_interval/60:.1f} minutes\n"
-                  f"**Next Fish:** {'Now!' if time_until_next <= 0 else f'{time_until_next/60:.1f} minutes'}",
             inline=False
         )
         
@@ -485,7 +473,6 @@ class AutoFishing(commands.Cog):
             # Process purchase
             if await db.update_balance(ctx.author.id, -cost):
                 autofisher_data["count"] += 1
-                autofisher_data["last_fish_time"] = datetime.datetime.utcnow().isoformat()
                 await db.set_autofisher_data(ctx.author.id, autofisher_data)
                 
                 success_embed = discord.Embed(
@@ -538,7 +525,7 @@ class AutoFishing(commands.Cog):
     @auto.command(name="upgrade", aliases=["eff", "efficiency"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def auto_upgrade(self, ctx):
-        """Upgrade autofisher efficiency (faster fishing)"""
+        """Upgrade autofisher efficiency (better catch chance)"""
         await self.handle_efficiency_upgrade(ctx, is_initial=True)
 
     async def handle_efficiency_upgrade(self, ctx, is_initial=False):
@@ -603,12 +590,12 @@ class AutoFishing(commands.Cog):
                 autofisher_data["efficiency_level"] = efficiency_level + 1
                 await db.set_autofisher_data(ctx.author.id, autofisher_data)
                 
-                new_interval = self.BASE_FISHING_INTERVAL * (0.85 ** (efficiency_level))
+                new_catch_chance = min(0.95, self.BASE_CATCH_CHANCE * (1 + (efficiency_level * 0.02)))
                 
                 success_embed = discord.Embed(
                     title="⚡ Efficiency Upgraded!",
                     description=f"New efficiency level: **{efficiency_level + 1}**\n"
-                            f"New fishing interval: **{new_interval/60:.1f} minutes**",
+                            f"New catch chance: **{new_catch_chance*100:.1f}%** per cycle",
                     color=discord.Color.green()
                 )
                 

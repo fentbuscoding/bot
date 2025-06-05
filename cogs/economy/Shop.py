@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, Dict, List, Union
 import os
 import json
+import asyncio
 from discord.ui import Button, View, Select, Modal, TextInput
 
 with open('data/config.json', 'r') as f:
@@ -177,17 +178,37 @@ class Shop(commands.Cog):
         self.bait = self.db.bait
         self.rods = self.db.rods
         self.potions = self.db.potions
-        self.supported_types = ["rod", "bait", "pickaxe", "upgrade", "potion"]
+        
+        # Define shop types and their aliases
+        self.shop_aliases = {
+            'rod': ['rods', 'fishingrod', 'fishingrods'],
+            'bait': ['baits', 'fishingbait'],
+            'upgrade': ['upg', 'upgrades', 'perks'],
+            'potion': ['potions', 'boost', 'boosts', 'pot']
+        }
+        self.supported_types = list(self.shop_aliases.keys())
+
+    def resolve_shop_type(self, input_type: str) -> Optional[str]:
+        """Resolve a shop type from its name or aliases"""
+        input_type = input_type.lower()
+        for main_type, aliases in self.shop_aliases.items():
+            if input_type == main_type or input_type in aliases:
+                return main_type
+        return None
 
     async def get_collection(self, item_type: str):
         """Get the appropriate collection for the item type"""
-        if item_type == "rod":
+        resolved_type = self.resolve_shop_type(item_type)
+        if not resolved_type:
+            return None
+            
+        if resolved_type == "rod":
             return self.rods
-        elif item_type == "bait":
+        elif resolved_type == "bait":
             return self.bait
-        elif item_type == "upgrade":
+        elif resolved_type == "upgrade":
             return self.upgrades
-        elif item_type == "potion":
+        elif resolved_type == "potion":
             return self.potions
         return None
 
@@ -229,70 +250,15 @@ class Shop(commands.Cog):
             
 
     async def add_item_to_inventory(self, user_id: int, item_id: str, item_type: str, amount: int = 1) -> bool:
-        """Add an item to user's inventory with special handling for baits"""
+        """Simplified inventory addition for both rods and bait"""
         try:
-            # Special case for bait items
-            if item_type == "bait":
-                # Check if we should use the object structure (preferred) or array structure
-                user = await self.get_user_data(user_id)
-                
-                if user and 'inventory' in user and 'bait' in user['inventory'] and isinstance(user['inventory']['bait'], dict):
-                    # Use the object structure in inventory.bait
-                    inventory_field = f"inventory.bait.{item_id}"
-                else:
-                    # Fallback to array structure (should be migrated eventually)
-                    inventory_field = "bait"
-                    
-                    # Ensure we're pushing to an array
-                    await self.db.users.update_one(
-                        {"_id": str(user_id)},
-                        {"$setOnInsert": {"bait": []}},
-                        upsert=True
-                    )
-            else:
-                # Standard handling for other item types
-                inventory_field = f"inventory.{item_type}.{item_id}"
-            
-            # Perform the update
-            if item_type == "bait" and inventory_field == "bait":
-                # For array structure, we need to find and update or push new item
-                user = await self.get_user_data(user_id)
-                existing_item = next((item for item in user.get('bait', []) if item.get('_id') == item_id), None)
-                
-                if existing_item:
-                    # Update existing item's amount
-                    result = await self.db.users.update_one(
-                        {"_id": str(user_id), "bait._id": item_id},
-                        {"$inc": {"bait.$.amount": amount}}
-                    )
-                else:
-                    # Push new item to array
-                    item_data = await self.get_item(item_id, item_type)
-                    if not item_data:
-                        return False
-                        
-                    new_item = {
-                        "_id": item_id,
-                        "name": item_data.get('name', 'Unknown Bait'),
-                        "amount": amount,
-                        "description": item_data.get('description', ''),
-                        "catch_rates": item_data.get('catch_rates', {})
-                    }
-                    
-                    result = await self.db.users.update_one(
-                        {"_id": str(user_id)},
-                        {"$push": {"bait": new_item}}
-                    )
-            else:
-                # Standard update for object structure
-                result = await self.db.users.update_one(
-                    {"_id": str(user_id)},
-                    {"$inc": {inventory_field: amount}},
-                    upsert=True
-                )
-            
+            inventory_field = f"inventory.{item_type}.{item_id}"
+            result = await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$inc": {inventory_field: amount}},
+                upsert=True
+            )
             return result.modified_count > 0 or result.upserted_id is not None
-            
         except Exception as e:
             print(f"Error adding item to inventory: {e}")
             return False
@@ -340,7 +306,7 @@ class Shop(commands.Cog):
         print("=== Purchase successful! ===")
         return True
 
-    @commands.command()
+    @commands.command(aliases=['store'])
     async def shop(self, ctx, shop_type: str = None):
         """Display the shop interface"""
         if not shop_type:
@@ -354,23 +320,30 @@ class Shop(commands.Cog):
             view.add_item(ShopTypeSelect(self))
             await ctx.send(embed=embed, view=view)
         else:
-            await self.display_shop(ctx, shop_type)
+            # Resolve the shop type from aliases
+            resolved_type = self.resolve_shop_type(shop_type)
+            if not resolved_type:
+                await ctx.send("Invalid shop type! Available types: rods, bait, upgrades, potions")
+                return
+            
+            await self.display_shop(ctx, resolved_type)
 
     async def display_shop(self, interaction: Union[discord.Interaction, commands.Context], shop_type: str):
         """Display the shop for a specific type"""
-        if shop_type not in self.supported_types:
+        resolved_type = self.resolve_shop_type(shop_type)
+        if not resolved_type:
             if isinstance(interaction, discord.Interaction):
                 await interaction.response.send_message("Invalid shop type!", ephemeral=True)
             else:
                 await interaction.send("Invalid shop type!")
             return
         
-        items = await self.get_shop_items(shop_type)
+        items = await self.get_shop_items(resolved_type)
         if not items:
             if isinstance(interaction, discord.Interaction):
-                await interaction.response.send_message(f"No items found in the {shop_type} shop!", ephemeral=True)
+                await interaction.response.send_message(f"No items found in the {resolved_type} shop!", ephemeral=True)
             else:
-                await interaction.send(f"No items found in the {shop_type} shop!")
+                await interaction.send(f"No items found in the {resolved_type} shop!")
             return
         
         # Get the user ID correctly for both Interaction and Context objects
@@ -378,7 +351,7 @@ class Shop(commands.Cog):
         user_balance = await self.get_wallet(user_id)
         
         embed = discord.Embed(
-            title=f"{shop_type.capitalize()} Shop",
+            title=f"{resolved_type.capitalize()} Shop",
             description=f"Your balance: {user_balance}{self.currency}\n\nSelect an item to purchase:",
             color=discord.Color.blue()
         )
@@ -393,59 +366,318 @@ class Shop(commands.Cog):
                 inline=False
             )
         
-        view = ShopView(self, shop_type, items, user_balance, timeout=180)
+        view = ShopView(self, resolved_type, items, user_balance, timeout=180)
         
         if isinstance(interaction, discord.Interaction):
             await interaction.response.edit_message(embed=embed, view=view)
         else:
             await interaction.send(embed=embed, view=view)
 
-    @commands.command()
-    async def buy(self, ctx, item_id: str = None, amount: int = 1):
-        """Buy an item from the shop"""
-        if not item_id:
-            await ctx.send(f"Please specify an item ID! Use `{ctx.prefix}shop` to browse items.")
-            return
+
+    # Update the ShopTypeSelect options to use the main types
+    class ShopTypeSelect(Select):
+        def __init__(self, cog, *args, **kwargs):
+            options = [
+                discord.SelectOption(label="Fishing Rods", value="rod", description="Upgrade your fishing gear"),
+                discord.SelectOption(label="Baits", value="bait", description="Better bait for better catches"),
+                discord.SelectOption(label="Upgrades", value="upgrade", description="Permanent account upgrades"),
+                discord.SelectOption(label="Potions", value="potion", description="Temporary boosts and effects"),
+            ]
+            super().__init__(placeholder="Select a shop type...", options=options, *args, **kwargs)
+            self.cog = cog
         
+        async def callback(self, interaction: discord.Interaction):
+            await self.cog.display_shop(interaction, self.values[0])
+
+    @commands.command(name="sell", aliases=['sellitem'])
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def sell_item(self, ctx, item_id: str, amount: int = 1):
+        """Sell items from your inventory back to the shop"""
         if amount <= 0:
-            await ctx.send("Amount must be positive!")
-            return
+            return await ctx.reply("❌ Amount must be positive!")
         
-        # Determine item type by checking all collections
-        item = None
-        item_type = None
-        for collection_type in self.supported_types:
-            collection = await self.get_collection(collection_type)
-            if collection is None:  # Skip if collection doesn't exist
-                continue
-            found_item = await collection.find_one({"_id": item_id})
-            if found_item:
-                item = found_item
-                item_type = collection_type
-                break
-        
-        if not item:
-            await ctx.send("Item not found!")
-            return
-        
-        total_price = item['price'] * amount
-        user_balance = await self.get_wallet(ctx.author.id)
-        
-        if user_balance < total_price:
-            await ctx.send(f"You don't have enough {self.currency}! You need {total_price}{self.currency} but only have {user_balance}{self.currency}.")
-            return
-        
-        success = await self.process_purchase(ctx.author.id, item_id, amount, item_type)
-        if success:
-            embed = discord.Embed(
-                title="Purchase Successful!",
-                description=f"You bought {amount}x **{item['name']}** for {total_price}{self.currency}",
-                color=discord.Color.green()
+        try:
+            # Get user data and inventory
+            user_data = await self.get_user_data(ctx.author.id)
+            if not user_data:
+                return await ctx.reply("❌ User data not found!")
+            
+            inventory = user_data.get("inventory", {})
+            
+            # Check all possible item types
+            item_type = None
+            item_data = None
+            
+            # Search through all inventory categories
+            for category in ['rod', 'bait', 'upgrade', 'potion']:
+                if item_id in inventory.get(category, {}):
+                    item_type = category
+                    current_amount = inventory[category][item_id]
+                    break
+            
+            if not item_type:
+                return await ctx.reply("❌ Item not found in your inventory!")
+            
+            if current_amount < amount:
+                return await ctx.reply(f"❌ You only have {current_amount} of this item!")
+            
+            # Get item data from the appropriate collection
+            collection = await self.get_collection(item_type)
+            if not collection:
+                return await ctx.reply("❌ Invalid item type!")
+            
+            item_data = await collection.find_one({"_id": item_id})
+            if not item_data:
+                return await ctx.reply("❌ Item data not found in shop!")
+            
+            # Check if item has a sell price (default to 50% of purchase price if not)
+            sell_price = item_data.get('sell_price', int(item_data.get('price', 0) * 0.5))
+            if sell_price <= 0:
+                return await ctx.reply("❌ This item cannot be sold!")
+            
+            total_value = sell_price * amount
+            
+            # Confirm sale with user
+            confirm_embed = discord.Embed(
+                title="🛒 Confirm Sale",
+                description=f"Sell {amount}x **{item_data['name']}** for {total_value}{self.currency}?",
+                color=discord.Color.orange()
             )
-            await ctx.send(embed=embed)
+            confirm_embed.set_footer(text="React with ✅ to confirm or ❌ to cancel")
+            
+            confirm_msg = await ctx.reply(embed=confirm_embed)
+            await confirm_msg.add_reaction("✅")
+            await confirm_msg.add_reaction("❌")
+            
+            def check(reaction, user):
+                return user == ctx.author and str(reaction.emoji) in ["✅", "❌"] and reaction.message.id == confirm_msg.id
+            
+            try:
+                reaction, _ = await self.bot.wait_for("reaction_add", timeout=30.0, check=check)
+                
+                if str(reaction.emoji) == "❌":
+                    return await confirm_msg.edit(embed=discord.Embed(
+                        description="❌ Sale cancelled",
+                        color=discord.Color.red()
+                    ))
+                
+                # Process the sale
+                # Remove items from inventory
+                await self.db.users.update_one(
+                    {"_id": str(ctx.author.id)},
+                    {"$inc": {f"inventory.{item_type}.{item_id}": -amount}}
+                )
+                
+                # Clean up if amount reaches 0
+                if current_amount - amount <= 0:
+                    await self.db.users.update_one(
+                        {"_id": str(ctx.author.id)},
+                        {"$unset": {f"inventory.{item_type}.{item_id}": ""}}
+                    )
+                
+                # Add money to wallet
+                await self.update_wallet(ctx.author.id, total_value)
+                
+                # Send success message
+                success_embed = discord.Embed(
+                    title="💰 Sale Complete!",
+                    description=f"Sold {amount}x **{item_data['name']}** for {total_value}{self.currency}",
+                    color=discord.Color.green()
+                )
+                await confirm_msg.edit(embed=success_embed)
+                await confirm_msg.clear_reactions()
+                
+            except asyncio.TimeoutError:
+                await confirm_msg.edit(embed=discord.Embed(
+                    description="⌛ Sale timed out",
+                    color=discord.Color.red()
+                ))
+                await confirm_msg.clear_reactions()
+        
+        except Exception as e:
+            print(f"Error in sell command: {e}")
+            await ctx.reply("❌ An error occurred while processing your sale!")
+
+    @commands.command(name="inventory", aliases=['inv', 'items'])
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def show_inventory(self, ctx):
+        """View your inventory with all items and quick-sell options"""
+        user_data = await self.get_user_data(ctx.author.id)
+        if not user_data:
+            return await ctx.reply("❌ User data not found!")
+        
+        inventory = user_data.get("inventory", {})
+        
+        # Organize items by category
+        categories = {
+            "🎣 Fishing Rods": ("rod", inventory.get("rod", {})),
+            "🪱 Bait": ("bait", inventory.get("bait", {})),
+            "⚡ Upgrades": ("upgrade", inventory.get("upgrade", {})),
+            "🧪 Potions": ("potion", inventory.get("potion", {})),
+        }
+        
+        # Create pages for each category (only those with items)
+        pages = []
+        for category_name, (item_type, items) in categories.items():
+            if not items:  # Skip empty categories
+                continue
+                
+            embed = discord.Embed(
+                title=f"{ctx.author.display_name}'s {category_name}",
+                color=discord.Color.blue()
+            )
+            
+            # Get the correct collection
+            collection = await self.get_collection(item_type)
+            if not collection:
+                continue  # Skip if collection doesn't exist
+                
+            # Add items to embed
+            for item_id, amount in items.items():
+                item_data = await collection.find_one({"_id": item_id})
+                if not item_data:
+                    continue
+                    
+                sell_price = item_data.get('sell_price', int(item_data.get('price', 0)) * 0.5)
+                embed.add_field(
+                    name=f"{item_data['name']} (x{amount})",
+                    value=f"{item_data.get('description', 'No description')}\n"
+                        f"Sell Value: {sell_price}{self.currency}",
+                    inline=False
+                )
+            
+            if not embed.fields:  # Skip if no valid items were added
+                continue
+                
+            pages.append((embed, item_type))  # Store embed with its item type
+        
+        if not pages:
+            return await ctx.reply("Your inventory is empty!")
+        
+        class InventoryView(discord.ui.View):
+            def __init__(self, cog, pages, author, timeout=60):
+                super().__init__(timeout=timeout)
+                self.cog = cog
+                self.pages = pages
+                self.author = author
+                self.current_page = 0
+                
+                # Disable navigation buttons if only one page
+                if len(pages) == 1:
+                    for item in self.children:
+                        if isinstance(item, discord.ui.Button) and item.emoji in ["⬅️", "➡️"]:
+                            item.disabled = True
+            
+            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                return interaction.user == self.author
+            
+            @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.blurple)
+            async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if self.current_page > 0:
+                    self.current_page -= 1
+                    await self.update_ui(interaction)
+            
+            @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.blurple)
+            async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if self.current_page < len(self.pages) - 1:
+                    self.current_page += 1
+                    await self.update_ui(interaction)
+            
+            async def update_ui(self, interaction: discord.Interaction):
+                """Update the UI for the current page"""
+                embed, item_type = self.pages[self.current_page]
+                
+                # Clear existing sell buttons (keep navigation buttons)
+                for child in self.children.copy():
+                    if isinstance(child, discord.ui.Button) and child.custom_id and child.custom_id.startswith("sell_"):
+                        self.remove_item(child)
+                
+                # Add sell buttons for current page items
+                user_data = await self.cog.get_user_data(self.author.id)
+                current_items = user_data.get("inventory", {}).get(item_type, {})
+                
+                for i, field in enumerate(embed.fields):
+                    item_name = field.name.split(" (x")[0]
+                    item_id = item_name.lower().replace(" ", "_")
+                    if item_id in current_items:
+                        sell_button = discord.ui.Button(
+                            label=f"Sell 1 {item_name}",
+                            style=discord.ButtonStyle.red,
+                            custom_id=f"sell_{item_id}",
+                            row=1
+                        )
+                        
+                        async def sell_callback(interaction: discord.Interaction, item_id=item_id):
+                            await self.handle_sell(interaction, item_id, item_type, 1)
+                        
+                        sell_button.callback = sell_callback
+                        self.add_item(sell_button)
+                
+                await interaction.response.edit_message(embed=embed, view=self)
+            
+            async def handle_sell(self, interaction: discord.Interaction, item_id: str, item_type: str, amount: int):
+                # Get current user data
+                user_data = await self.cog.get_user_data(interaction.user.id)
+                if not user_data:
+                    await interaction.followup.send("❌ User data not found!", ephemeral=True)
+                    return
+                
+                current_amount = user_data.get("inventory", {}).get(item_type, {}).get(item_id, 0)
+                if current_amount < amount:
+                    await interaction.followup.send(
+                        f"❌ You don't have enough {item_id.replace('_', ' ')}!", 
+                        ephemeral=True
+                    )
+                    return
+                
+                # Get item data
+                collection = await self.cog.get_collection(item_type)
+                if not collection:
+                    await interaction.followup.send("❌ Invalid item type!", ephemeral=True)
+                    return
+                
+                item_data = await collection.find_one({"_id": item_id})
+                if not item_data:
+                    await interaction.followup.send("❌ Item data not found!", ephemeral=True)
+                    return
+                
+                sell_price = item_data.get('sell_price', int(item_data.get('price', 0)*0.5))
+                total_value = sell_price * amount
+                
+                # Process sale
+                await self.cog.db.users.update_one(
+                    {"_id": str(interaction.user.id)},
+                    {"$inc": {
+                        f"inventory.{item_type}.{item_id}": -amount,
+                        "wallet": total_value
+                    }}
+                )
+                
+                # Clean up if amount reaches 0
+                if current_amount - amount <= 0:
+                    await self.cog.db.users.update_one(
+                        {"_id": str(interaction.user.id)},
+                        {"$unset": {f"inventory.{item_type}.{item_id}": ""}}
+                    )
+                
+                # Send success message
+                await interaction.followup.send(
+                    f"✅ Sold {amount}x {item_data['name']} for {total_value}{self.cog.currency}!",
+                    ephemeral=True
+                )
+                
+                # Update the inventory display
+                await self.update_ui(interaction)
+        
+        view = InventoryView(self, pages, ctx.author)
+
+        # Send the initial message
+        if pages:
+            message = await ctx.reply(embed=pages[0][0], view=view)
+            # Trigger initial UI update to add sell buttons
+            await view.update_ui(await message.channel.fetch_message(message.id))
         else:
-            await ctx.send("There was an error processing your purchase. Please try again.")
+            await ctx.reply("Your inventory is empty!")
 
 async def setup(bot):
-    cog = Shop(bot)
     await bot.add_cog(Shop(bot))
