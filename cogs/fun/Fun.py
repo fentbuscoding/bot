@@ -485,10 +485,53 @@ class Fun(commands.Cog, ErrorHandler):
         if ctx.command and ctx.command.cog_name == self.__class__.__name__:
             await self.handle_error(ctx, error)
 
+    @commands.command()
+    async def dadjoke(self, ctx):
+        """get a random dad joke"""
+        jokes = [
+            "I'm afraid for the calendar. Its days are numbered.",
+            "Why don't skeletons fight each other? They don't have the guts.",
+            "What do you call cheese that isn't yours? Nacho cheese.",
+            "I only know 25 letters of the alphabet. I don't know y.",
+            "Why did the scarecrow win an award? Because he was outstanding in his field."
+        ]
+        await ctx.reply(f"😂 ```{random.choice(jokes)}```")
+
+    @commands.command()
+    async def roast(self, ctx, user: discord.Member = None):
+        """roast someone (all in good fun!)"""
+        user = user or ctx.author
+        roasts = [
+            "I'd agree with you, but then we'd both be wrong.",
+            "If I wanted to kill myself, I'd climb your ego and jump to your IQ.",
+            "You have the right to remain silent because whatever you say will probably be stupid anyway.",
+            "I'm not saying you're dumb, but you bring a ruler to bed to see how long you slept.",
+            "You are the reason the gene pool needs a lifeguard."
+        ]
+        await ctx.reply(f"🔥 ```{user.display_name}, {random.choice(roasts)}```")
+
+    @commands.command()
+    async def compliment(self, ctx, user: discord.Member = None):
+        """give someone a wholesome compliment"""
+        user = user or ctx.author
+        compliments = [
+            "You're like a ray of sunshine on a really dreary day.",
+            "You have impeccable manners.",
+            "You are making a difference.",
+            "You're more helpful than you realize.",
+            "You light up the room."
+        ]
+        await ctx.reply(f"😊 ```{user.display_name}, {random.choice(compliments)}```")
+
+    @commands.command()
+    async def reverse(self, ctx, *, text: str):
+        """reverse your text"""
+        reversed_text = text[::-1]
+        await ctx.reply(f"🔄 ```{reversed_text}```")
 
 async def setup(bot):
+    logger = CogLogger("Fun")
     try:
-        logger = CogLogger("Fun")
         await bot.add_cog(Fun(bot))
     except Exception as e:
         logger.error(f"Failed to load Fun cog: {e}")
