@@ -183,6 +183,7 @@ COG_DATA = {
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
+        "cogs.fun.other": "success",
         #"cogs.Security": "success", disabled for now
         #"cogs.LastFm": "disabled",  disabled for now
     },
