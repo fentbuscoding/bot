@@ -18,6 +18,7 @@ class Utility(commands.Cog, ErrorHandler):
         self.logger = CogLogger(self.__class__.__name__)
         self.bot.launch_time = discord.utils.utcnow()
         self.logger.info("Utility cog initialized")
+        self.bot.log_channel = 1377305324347981937
 
     @commands.command(name="ping", aliases=["pong"])
     async def ping(self, ctx):
@@ -108,6 +109,10 @@ class Utility(commands.Cog, ErrorHandler):
         Example: .bugreport ping "bot didn't respond"
         **PLEASE EXPLICITLY MENTION IF THE BOT DIDNT RESPOND, OR JUST LEAVE IT BLANK.**
         """
+        
+        print(command_name)
+        print(bot_response)
+
         if command_name is None:
             embed = discord.Embed(
                 title="Bug Report Help",
@@ -133,7 +138,7 @@ class Utility(commands.Cog, ErrorHandler):
         if not bot_response:
             bot_response = "No response provided"
         else:
-            if len(bot_response) < len("bot didn't respond"):
+            if len(bot_response) < 10:
                 return await ctx.send("Please provide a more detailed bot response. It should be at least 11 characters long.")
         if not command:
             return await ctx.send("Command not found. Please check the command name.")

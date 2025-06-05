@@ -140,7 +140,7 @@ class Fishing(commands.Cog):
             raise
 
     def get_default_catch_rates(self, bait_name):
-        """Return default catch rates for different bait types"""
+        """Return default catch rates for determine_fish_catchdifferent bait types"""
         rates = {
             "beginner_bait": {"normal": 1.5},
             "pro_bait": {"normal": 1.2, "rare": 1.1},
@@ -203,7 +203,7 @@ class Fishing(commands.Cog):
             )
 
             # Fishing logic
-            caught_type = self.determine_fish_catch(active_bait)
+            caught_type = (await self.determine_fish_catch(active_bait))
             fish_value = self.calculate_fish_value(caught_type)
             
             fish = {
@@ -277,44 +277,50 @@ class Fishing(commands.Cog):
             print(f"[ROD COMMAND ERROR] {type(e).__name__}: {str(e)}")
             await ctx.reply("❌ An error occurred while processing your request.")
 
-    def determine_fish_catch(self, bait_type):
-        """Simplified fish catch determination"""
-        # Adjust these probabilities as needed
-        probabilities = {
-            "normal": 0.7,
-            "uncommon": 0.2,
-            "rare": 0.08,
-            "epic": 0.015,
-            "legendary": 0.005
-        }
-        
-        # Adjust based on bait type
-        bait_modifiers = {
-            "beginner_bait": {"normal": 1.5},
-            "pro_bait": {"normal": 1.2, "rare": 1.3},
-            "advanced_bait": {"rare": 1.5, "epic": 1.2},
-            "insane_bait": {"epic": 1.5, "legendary": 1.3}
-        }
-        
-        # Apply bait modifiers
-        modified_probs = probabilities.copy()
-        if bait_type in bait_modifiers:
-            for fish_type, modifier in bait_modifiers[bait_type].items():
-                if fish_type in modified_probs:
-                    modified_probs[fish_type] *= modifier
-        
-        # Normalize probabilities
-        total = sum(modified_probs.values())
-        normalized = {k: v/total for k, v in modified_probs.items()}
-        
-        # Determine catch
-        roll = random.random()
-        cumulative = 0
-        for fish_type, prob in normalized.items():
-            cumulative += prob
-            if roll <= cumulative:
-                return fish_type
-        return "normal"
+    async def determine_fish_catch(self, bait_type):
+        """Determine fish catch based on bait's catch rates"""
+        try:
+            # Get the bait's configuration from database
+            bait_config = await self.db.db.bait.find_one({"_id": bait_type})
+            if not bait_config:
+                return "normal"  # Fallback if bait not found
+            if 'insane' in bait_type.lower:
+                return "insane"
+            # Get the catch rates from the bait config
+            catch_rates = bait_config.get("catch_rates", {})
+            if not catch_rates:
+                return "normal"  # Fallback if no catch rates defined
+            
+            # Special handling for insane_bait
+            if bait_type == "insane_bait":
+                # Insane bait should only catch mutated or insane fish
+                roll = random.random()
+                if roll < 0.9:  # 90% chance for mutated
+                    return "mutated"
+                else:  # 10% chance for insane
+                    return "insane"
+            
+            # For other baits, use their configured catch rates
+            total = sum(catch_rates.values())
+            if total <= 0:
+                return "normal"  # Fallback if all rates are zero
+                
+            # Normalize probabilities
+            normalized = {k: v/total for k, v in catch_rates.items()}
+            
+            # Determine catch
+            roll = random.random()
+            cumulative = 0
+            for fish_type, prob in normalized.items():
+                cumulative += prob
+                if roll <= cumulative:
+                    return fish_type
+                    
+            return "normal"  # Fallback if something went wrong
+            
+        except Exception as e:
+            print(f"[FISH CATCH ERROR] {str(e)}")
+            return "normal"
 
     def calculate_fish_value(self, fish_type):
         """Calculate fish value based on type"""
@@ -323,7 +329,10 @@ class Fishing(commands.Cog):
             "uncommon": (50, 200),
             "rare": (100, 500),
             "epic": (200, 1000),
-            "legendary": (500, 2000)
+            "legendary": (500, 2000),
+            "mutated": (1000, 5000),
+            "insane": (5000, 20000),
+            "master": (100000, 5000000)
         }
         return random.randint(*value_ranges.get(fish_type, (10, 100)))
 
@@ -334,7 +343,9 @@ class Fishing(commands.Cog):
             "uncommon": discord.Color.green(),
             "rare": discord.Color.teal(),
             "epic": discord.Color.purple(),
-            "legendary": discord.Color.gold()
+            "legendary": discord.Color.gold(),
+            "mutated": discord.Color.dark_purple(),
+            "insane": discord.Color.dark_red()
         }
         return colors.get(rarity, discord.Color.blue())
 
@@ -752,5 +763,4 @@ class Fishing(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Fishing(bot))
-    cog = bot.get_cog("Fishing")
 
