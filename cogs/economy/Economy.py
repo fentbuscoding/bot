@@ -284,6 +284,32 @@ class Economy(commands.Cog):
         await db.update_wallet(ctx.author.id, stolen, ctx.guild.id)
         await ctx.reply(f"You stole **{stolen}** {self.currency} from {victim.mention}!")
 
+    
+    @commands.command(hidden=True)
+    @commands.is_owner()
+    async def give(self, ctx, user: discord.Member, amount: int):
+        """Give money to a user"""
+        if amount <= 0:
+            return await ctx.reply("Amount must be positive!")
+
+        await db.update_wallet(user.id, amount, ctx.guild.id)
+        await ctx.reply(f"Gave **{amount}** {self.currency} to {user.mention}")
+    
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def take(self, ctx, user: discord.Member, amount: int):
+        """Take money from a user"""
+        if amount <= 0:
+            return await ctx.reply("Amount must be positive!")
+
+        wallet_balance = await db.get_wallet_balance(user.id, ctx.guild.id)
+        if wallet_balance < amount:
+            return await ctx.reply("User has insufficient funds!")
+
+        await db.update_wallet(user.id, -amount, ctx.guild.id)
+        await ctx.reply(f"Took **{amount}** {self.currency} from {user.mention}")
+
+
     @commands.command(aliases=['lb', 'glb'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def leaderboard(self, ctx, scope: str = "server"):
