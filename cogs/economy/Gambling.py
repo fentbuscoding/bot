@@ -700,6 +700,8 @@ class Gambling(commands.Cog):
         """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
+        elif auto_cashout > 0 & auto_cashout < 1.35 or auto_cashout < 0:
+            return await ctx.reply("❌ Autocashout must be greater than 1.35!")
         
         self.active_games.add(ctx.author.id)
         
