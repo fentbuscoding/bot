@@ -1,13 +1,33 @@
 import discord
 from discord.ext import commands
-from motor.motor_asyncio import AsyncIOMotorClient
+from utils.db import async_db as db
 from typing import Optional, Dict, List, Union
 import os
 import json
 from discord.ui import Button, View, Select, Modal, TextInput
 
-with open('data/config.json', 'r') as f:
-    config = json.load(f)
+# Load shop data from JSON files
+def load_shop_data():
+    shop_data = {}
+    shop_files = {
+        'rod': 'data/shop/rods.json',
+        'bait': 'data/shop/bait.json', 
+        'upgrade': 'data/shop/upgrades.json',
+        'potion': 'data/shop/potions.json',
+        'item': 'data/shop/items.json'
+    }
+    
+    for shop_type, file_path in shop_files.items():
+        try:
+            with open(file_path, 'r') as f:
+                shop_data[shop_type] = json.load(f)
+        except FileNotFoundError:
+            shop_data[shop_type] = {}
+    
+    return shop_data
+
+# Load shop data at module level
+SHOP_DATA = load_shop_data()
 
 class BuyModal(Modal, title="Purchase Confirmation"):
     def __init__(self, item: Dict, max_amount: int, currency: str, *args, **kwargs):
@@ -83,10 +103,11 @@ class ShopItemButton(Button):
 class ShopTypeSelect(Select):
     def __init__(self, cog, *args, **kwargs):
         options = [
-            discord.SelectOption(label="Fishing Rods", value="rod", description="Upgrade your fishing gear"),
-            discord.SelectOption(label="Baits", value="bait", description="Better bait for better catches"),
-            discord.SelectOption(label="Upgrades", value="upgrade", description="Permanent account upgrades"),
-            discord.SelectOption(label="Potions", value="potion", description="Temporary boosts and effects"),
+            discord.SelectOption(label="Fishing Rods", value="rod", description="Upgrade your fishing gear", emoji="🎣"),
+            discord.SelectOption(label="Baits", value="bait", description="Better bait for better catches", emoji="🪱"),
+            discord.SelectOption(label="Items", value="item", description="Various useful items", emoji="📦"),
+            discord.SelectOption(label="Upgrades", value="upgrade", description="Permanent account upgrades", emoji="⬆️"),
+            discord.SelectOption(label="Potions", value="potion", description="Temporary boosts and effects", emoji="🧪"),
         ]
         super().__init__(placeholder="Select a shop type...", options=options, *args, **kwargs)
         self.cog = cog
@@ -125,8 +146,17 @@ class ShopView(View):
         start_idx = self.current_page * self.items_per_page
         end_idx = start_idx + self.items_per_page
         for item in self.items[start_idx:end_idx]:
+            rarity_emoji = {
+                "common": "⚪",
+                "uncommon": "🟢", 
+                "rare": "🔵",
+                "epic": "🟣",
+                "legendary": "🟠",
+                "mythical": "🔴"
+            }.get(item.get('rarity', 'common'), "⚪")
+            
             embed.add_field(
-                name=f"{item['name']} - {item['price']}{self.cog.currency}",
+                name=f"{rarity_emoji} {item['name']} - {item['price']}{self.cog.currency}",
                 value=item.get('description', 'No description available'),
                 inline=False
             )
@@ -167,63 +197,47 @@ class ShopView(View):
 class Shop(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.currency = "💰"  # Customize your currency symbol
+        self.currency = "<:bronkbuk:1377389238290747582>"  # Use the same currency as other cogs
+        self.supported_types = ["rod", "bait", "upgrade", "potion", "item"]
         
-        # Motor MongoDB connection
-        self.mongo_uri = config['MONGO_URI']
-        self.client = AsyncIOMotorClient(self.mongo_uri)
-        self.db = self.client.bronxbot
-        self.upgrades = self.db.upgrades
-        self.bait = self.db.bait
-        self.rods = self.db.rods
-        self.potions = self.db.potions
-        self.supported_types = ["rod", "bait", "pickaxe", "upgrade", "potion"]
+        # Load shop data from JSON files
+        self.shop_data = SHOP_DATA
 
-    async def get_collection(self, item_type: str):
-        """Get the appropriate collection for the item type"""
-        if item_type == "rod":
-            return self.rods
-        elif item_type == "bait":
-            return self.bait
-        elif item_type == "upgrade":
-            return self.upgrades
-        elif item_type == "potion":
-            return self.potions
-        return None
-
-    async def get_item(self, item_id: str, item_type: str) -> Optional[Dict]:
-        """Get an item from the appropriate collection"""
-        collection = await self.get_collection(item_type)
-        if not collection:
-            return None
-        item = await collection.find_one({"id": item_id})
-        if not item:
-            item = await collection.find_one({"_id": item_id})
-        return item
-
-    async def get_shop_items(self, item_type: str) -> List[Dict]:
+    def get_shop_items(self, item_type: str) -> List[Dict]:
         """Get all items of a specific type, sorted by price (cheapest first)"""
-        collection = await self.get_collection(item_type)
-        if not collection:
+        if item_type not in self.shop_data:
             return []
         
+        items = []
+        for item_id, item_data in self.shop_data[item_type].items():
+            item_data['_id'] = item_id  # Add the ID to the item data
+            item_data['type'] = item_type  # Add the type for consistency
+            items.append(item_data)
+        
         # Sort items by price in ascending order (cheapest first)
-        items = await collection.find().sort("price", 1).to_list(None)
+        items.sort(key=lambda x: x.get('price', 0))
         return items
 
-    # Database helper methods
-    async def get_user_data(self, user_id: int) -> Dict:
-        """Get user's document from database"""
-        return await self.db.users.find_one({"_id": str(user_id)})
+    def get_item(self, item_id: str, item_type: str) -> Optional[Dict]:
+        """Get an item from the JSON data"""
+        if item_type not in self.shop_data:
+            return None
+        
+        item_data = self.shop_data[item_type].get(item_id)
+        if item_data:
+            item_data['_id'] = item_id
+            item_data['type'] = item_type
+        return item_data
 
+    # Database helper methods
     async def get_wallet(self, user_id: int) -> int:
         """Get user's wallet balance"""
-        user = await self.get_user_data(user_id)
-        return user.get('wallet', 0) if user else 0
+        user_data = await db.db.users.find_one({"_id": str(user_id)})
+        return user_data.get('wallet', 0) if user_data else 0
 
     async def update_wallet(self, user_id: int, amount: int) -> bool:
         """Update user's wallet balance"""
-        result = await self.db.users.update_one(
+        result = await db.db.users.update_one(
             {"_id": str(user_id)},
             {"$inc": {"wallet": amount}},
             upsert=True
@@ -232,17 +246,40 @@ class Shop(commands.Cog):
 
     async def add_item_to_inventory(self, user_id: int, item_id: str, item_type: str, amount: int = 1) -> bool:
         """Add an item to user's inventory"""
-        inventory_field = f"inventory.{item_type}.{item_id}"
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$inc": {inventory_field: amount}},
-            upsert=True
-        )
+        if item_type in ["rod", "bait"]:
+            # For fishing items, use the inventory structure
+            inventory_field = f"inventory.{item_type}.{item_id}"
+            result = await db.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$inc": {inventory_field: amount}},
+                upsert=True
+            )
+        elif item_type == "potion":
+            # For potions, add to potions array
+            potion_data = {
+                "_id": item_id,
+                "amount": amount,
+                "expires_at": None  # Set when consumed
+            }
+            result = await db.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$push": {"potions": potion_data}},
+                upsert=True
+            )
+        else:
+            # For other items, use general inventory
+            inventory_field = f"inventory.{item_type}.{item_id}"
+            result = await db.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$inc": {inventory_field: amount}},
+                upsert=True
+            )
+        
         return result.modified_count > 0 or result.upserted_id is not None
 
     async def process_purchase(self, user_id: int, item_id: str, amount: int, item_type: str) -> bool:
         """Process a purchase transaction"""
-        item = await self.get_item(item_id, item_type)
+        item = self.get_item(item_id, item_type)
         if not item:
             return False
         
@@ -286,7 +323,7 @@ class Shop(commands.Cog):
                 await interaction.send("Invalid shop type!")
             return
         
-        items = await self.get_shop_items(shop_type)
+        items = self.get_shop_items(shop_type)
         if not items:
             if isinstance(interaction, discord.Interaction):
                 await interaction.response.send_message(f"No items found in the {shop_type} shop!", ephemeral=True)
@@ -308,8 +345,17 @@ class Shop(commands.Cog):
         start_idx = 0
         end_idx = min(5, len(items))
         for item in items[start_idx:end_idx]:
+            rarity_emoji = {
+                "common": "⚪",
+                "uncommon": "🟢", 
+                "rare": "🔵",
+                "epic": "🟣",
+                "legendary": "🟠",
+                "mythical": "🔴"
+            }.get(item.get('rarity', 'common'), "⚪")
+            
             embed.add_field(
-                name=f"{item['name']} - {item['price']}{self.currency}",
+                name=f"{rarity_emoji} {item['name']} - {item['price']}{self.currency}",
                 value=item.get('description', 'No description available'),
                 inline=False
             )
@@ -339,11 +385,11 @@ class Shop(commands.Cog):
                 await ctx.send("Amount must be positive!")
                 return
             
-            # Determine item type
+            # Determine item type by searching all shop types
             item = None
             item_type = None
             for collection_type in self.supported_types:
-                found_item = await self.get_item(item_id, collection_type)
+                found_item = self.get_item(item_id, collection_type)
                 if found_item:
                     item = found_item
                     item_type = collection_type
@@ -375,9 +421,18 @@ class Shop(commands.Cog):
             
             success = await self.process_purchase(ctx.author.id, item_id, amount, item_type)
             if success:
+                rarity_emoji = {
+                    "common": "⚪",
+                    "uncommon": "🟢", 
+                    "rare": "🔵",
+                    "epic": "🟣",
+                    "legendary": "🟠",
+                    "mythical": "🔴"
+                }.get(item.get('rarity', 'common'), "⚪")
+                
                 embed = discord.Embed(
                     title="Purchase Successful!",
-                    description=f"You bought {amount}x **{item['name']}** for {total_price}{self.currency}",
+                    description=f"You bought {amount}x {rarity_emoji} **{item['name']}** for {total_price}{self.currency}",
                     color=discord.Color.green()
                 )
                 await ctx.send(embed=embed)

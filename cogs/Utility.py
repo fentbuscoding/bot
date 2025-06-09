@@ -8,6 +8,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from typing import Optional
 from utils.error_handler import ErrorHandler
+from utils.restart_manager import RestartConfirmView
 
 class Utility(commands.Cog, ErrorHandler):
     """Utility commands for server management and fun."""
@@ -526,6 +527,339 @@ class Utility(commands.Cog, ErrorHandler):
         pages.append(misc_embed)
 
         return pages
+
+    @commands.command()
+    @commands.is_owner()
+    async def restart(self, ctx):
+        """Smart restart that waits for optimal conditions"""
+        await self._smart_restart(ctx)
+
+    async def _smart_restart(self, ctx):
+        """Perform intelligent restart with activity checking"""
+        try:
+            # Check for active games and activities
+            blocking_activities = await self._check_blocking_activities()
+            
+            if not blocking_activities:
+                # Safe to restart immediately
+                embed = discord.Embed(
+                    title="🔄 Restarting Bot",
+                    description="No active games detected. Restarting now...",
+                    color=discord.Color.green()
+                )
+                await ctx.reply(embed=embed)
+                
+                # Give a moment for the message to send
+                await asyncio.sleep(2)
+                await self._perform_restart()
+                return
+            
+            # Calculate estimated wait time
+            estimated_wait = await self._estimate_wait_time(blocking_activities)
+            
+            # Show blocking activities and estimated time
+            embed = discord.Embed(
+                title="⏳ Restart Delayed",
+                description="Bot will restart when activities complete",
+                color=discord.Color.orange()
+            )
+            
+            # List blocking activities
+            activities_text = ""
+            for activity in blocking_activities:
+                activities_text += f"• {activity['type']}: {activity['description']}\n"
+            
+            embed.add_field(
+                name="🎮 Active Games/Activities",
+                value=activities_text,
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⏰ Estimated Wait Time",
+                value=f"Approximately {estimated_wait} minutes",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🔄 Auto-Restart",
+                value="Bot will restart automatically when safe",
+                inline=True
+            )
+            
+            embed.set_footer(text="Use 'restart force' to override (not recommended)")
+            
+            message = await ctx.reply(embed=embed)
+            
+            # Start monitoring for restart opportunity
+            await self._monitor_for_restart(ctx, message)
+            
+        except Exception as e:
+            self.logger.error(f"Smart restart error: {e}")
+            await ctx.reply("❌ Error during restart process")
+
+    async def _check_blocking_activities(self):
+        """Check for activities that should block restart"""
+        blocking_activities = []
+        
+        try:
+            # Check gambling games
+            gambling_cog = self.bot.get_cog("Gambling")
+            if gambling_cog and hasattr(gambling_cog, 'active_games'):
+                if gambling_cog.active_games:
+                    blocking_activities.append({
+                        'type': 'Gambling Games',
+                        'description': f"{len(gambling_cog.active_games)} active gambling games",
+                        'count': len(gambling_cog.active_games)
+                    })
+            
+            # Check multiplayer games
+            multiplayer_cog = self.bot.get_cog("Multiplayer")
+            if multiplayer_cog and hasattr(multiplayer_cog, 'active_games'):
+                if multiplayer_cog.active_games:
+                    blocking_activities.append({
+                        'type': 'Multiplayer Games',
+                        'description': f"{len(multiplayer_cog.active_games)} active multiplayer games",
+                        'count': len(multiplayer_cog.active_games)
+                    })
+            
+            # Check vote bans
+            voteban_cog = self.bot.get_cog("VoteBans")
+            if voteban_cog and hasattr(voteban_cog, 'vote_data'):
+                active_votes = sum(1 for vote in voteban_cog.vote_data.values() 
+                                 if not vote.get("completed", True))
+                if active_votes > 0:
+                    blocking_activities.append({
+                        'type': 'Vote Bans',
+                        'description': f"{active_votes} active vote ban(s)",
+                        'count': active_votes
+                    })
+            
+            # Check giveaways
+            giveaway_cog = self.bot.get_cog("Giveaway")
+            if giveaway_cog and hasattr(giveaway_cog, 'active_giveaways'):
+                if giveaway_cog.active_giveaways:
+                    blocking_activities.append({
+                        'type': 'Giveaways',
+                        'description': f"{len(giveaway_cog.active_giveaways)} active giveaway(s)",
+                        'count': len(giveaway_cog.active_giveaways)
+                    })
+            
+            # Check critical background tasks
+            critical_tasks = await self._check_critical_tasks()
+            if critical_tasks:
+                blocking_activities.append({
+                    'type': 'Background Tasks',
+                    'description': f"{len(critical_tasks)} critical tasks running",
+                    'count': len(critical_tasks)
+                })
+            
+        except Exception as e:
+            self.logger.error(f"Error checking blocking activities: {e}")
+        
+        return blocking_activities
+
+    async def _check_critical_tasks(self):
+        """Check for critical background tasks that shouldn't be interrupted"""
+        critical_tasks = []
+        
+        try:
+            # Check for active loops in cogs
+            for cog_name, cog in self.bot.cogs.items():
+                # Check for running tasks/loops
+                if hasattr(cog, 'check_giveaways') and not cog.check_giveaways.is_running():
+                    continue
+                elif hasattr(cog, 'verify_reactions') and cog.verify_reactions.is_running():
+                    critical_tasks.append(f"{cog_name} - Reaction Verification")
+                elif hasattr(cog, 'reset_bazaar') and cog.reset_bazaar.is_running():
+                    critical_tasks.append(f"{cog_name} - Bazaar Reset")
+                elif hasattr(cog, 'process_message_edits'):
+                    # Check if there are pending edits
+                    if hasattr(cog, 'message_edit_queue') and not cog.message_edit_queue.empty():
+                        critical_tasks.append(f"{cog_name} - Message Edit Queue")
+        
+        except Exception as e:
+            self.logger.error(f"Error checking critical tasks: {e}")
+        
+        return critical_tasks
+
+    async def _estimate_wait_time(self, blocking_activities):
+        """Estimate how long until restart conditions are met"""
+        max_wait = 0
+        
+        for activity in blocking_activities:
+            activity_type = activity['type']
+            count = activity.get('count', 1)
+            
+            if activity_type == 'Gambling Games':
+                # Most gambling games finish within 5 minutes
+                max_wait = max(max_wait, 5)
+            elif activity_type == 'Multiplayer Games':
+                # Multiplayer games can take 10-15 minutes
+                max_wait = max(max_wait, 15)
+            elif activity_type == 'Vote Bans':
+                # Vote bans can take a while if not enough votes
+                max_wait = max(max_wait, 30)
+            elif activity_type == 'Giveaways':
+                # Check actual giveaway end times if possible
+                giveaway_cog = self.bot.get_cog("Giveaway")
+                if giveaway_cog and hasattr(giveaway_cog, 'active_giveaways'):
+                    try:
+                        from datetime import datetime
+                        now = datetime.now()
+                        max_giveaway_wait = 0
+                        
+                        for giveaway in giveaway_cog.active_giveaways.values():
+                            if 'end_time' in giveaway:
+                                end_time = giveaway['end_time']
+                                if hasattr(end_time, 'timestamp'):
+                                    wait_minutes = (end_time - now).total_seconds() / 60
+                                    max_giveaway_wait = max(max_giveaway_wait, wait_minutes)
+                        
+                        max_wait = max(max_wait, max_giveaway_wait)
+                    except:
+                        max_wait = max(max_wait, 60)  # Fallback
+            elif activity_type == 'Background Tasks':
+                # Background tasks usually finish quickly
+                max_wait = max(max_wait, 2)
+        
+        return max(1, int(max_wait))  # At least 1 minute
+
+    async def _monitor_for_restart(self, ctx, status_message):
+        """Monitor activities and restart when safe"""
+        check_interval = 30  # Check every 30 seconds
+        max_wait_time = 3600  # Maximum 1 hour wait
+        elapsed_time = 0
+        
+        while elapsed_time < max_wait_time:
+            await asyncio.sleep(check_interval)
+            elapsed_time += check_interval
+            
+            # Check if conditions are now safe
+            blocking_activities = await self._check_blocking_activities()
+            
+            if not blocking_activities:
+                # Conditions are now safe - restart
+                embed = discord.Embed(
+                    title="🔄 Restarting Bot",
+                    description="All activities completed. Restarting now...",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="⏰ Wait Time",
+                    value=f"Waited {elapsed_time // 60} minutes {elapsed_time % 60} seconds",
+                    inline=True
+                )
+                
+                try:
+                    await status_message.edit(embed=embed)
+                except:
+                    await ctx.send(embed=embed)
+                
+                await asyncio.sleep(2)
+                await self._perform_restart()
+                return
+            
+            # Update status every 5 minutes
+            if elapsed_time % 300 == 0:  # Every 5 minutes
+                try:
+                    updated_wait = await self._estimate_wait_time(blocking_activities)
+                    
+                    embed = discord.Embed(
+                        title="⏳ Still Waiting to Restart",
+                        description="Monitoring activities for safe restart window",
+                        color=discord.Color.orange()
+                    )
+                    
+                    activities_text = ""
+                    for activity in blocking_activities:
+                        activities_text += f"• {activity['type']}: {activity['description']}\n"
+                    
+                    embed.add_field(
+                        name="🎮 Remaining Activities",
+                        value=activities_text,
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="⏰ Elapsed Time",
+                        value=f"{elapsed_time // 60} minutes",
+                        inline=True
+                    )
+                    
+                    embed.add_field(
+                        name="📊 Estimated Remaining",
+                        value=f"~{updated_wait} minutes",
+                        inline=True
+                    )
+                    
+                    await status_message.edit(embed=embed)
+                except Exception as e:
+                    self.logger.error(f"Error updating restart status: {e}")
+        
+        # Timeout reached
+        embed = discord.Embed(
+            title="⚠️ Restart Timeout",
+            description="Maximum wait time exceeded. Consider using 'restart force'",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="⏰ Total Wait Time",
+            value="1 hour (maximum)",
+            inline=True
+        )
+        
+        try:
+            await status_message.edit(embed=embed)
+        except:
+            await ctx.send(embed=embed)
+
+    async def _perform_restart(self):
+        """Actually restart the bot"""
+        try:
+            self.logger.info("Performing bot restart...")
+            
+            # Close background tasks gracefully
+            await self._graceful_shutdown()
+            
+            # Restart the bot
+            import os
+            import sys
+            os.execv(sys.executable, ['python'] + sys.argv)
+            
+        except Exception as e:
+            self.logger.error(f"Restart failed: {e}")
+
+    async def _graceful_shutdown(self):
+        """Gracefully shutdown background tasks"""
+        try:
+            # Stop all running tasks in cogs
+            for cog_name, cog in self.bot.cogs.items():
+                if hasattr(cog, 'cog_unload'):
+                    try:
+                        cog.cog_unload()
+                    except Exception as e:
+                        self.logger.warning(f"Error unloading {cog_name}: {e}")
+            
+            # Close aiohttp session if it exists
+            if hasattr(self.bot, 'session') and self.bot.session:
+                await self.bot.session.close()
+                
+        except Exception as e:
+            self.logger.error(f"Error during graceful shutdown: {e}")
+
+    @commands.command()
+    @commands.is_owner()
+    async def restart_force(self, ctx):
+        """Force restart immediately (not recommended during active games)"""
+        embed = discord.Embed(
+            title="⚠️ Force Restart",
+            description="This will restart immediately, potentially disrupting active games!",
+            color=discord.Color.red()
+        )
+        
+        view = RestartConfirmView(self, ctx)
+        await ctx.reply(embed=embed, view=view)
 
 async def setup(bot):
     logger = CogLogger("Utility")

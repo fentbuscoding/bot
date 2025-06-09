@@ -136,7 +136,7 @@ class BronxBot(commands.AutoShardedBot):
             async with aiohttp.ClientSession() as session:
                 endpoints = {
                     'prod': 'https://bronxbot.onrender.com/api/stats',
-                    'dev': 'http://localhost:5000/api/stats'
+                    #'dev': 'http://localhost:5000/api/stats'
                 }
                 
                 for env, url in endpoints.items():
@@ -144,7 +144,8 @@ class BronxBot(commands.AutoShardedBot):
                         async with session.post(url, json=stats) as resp:
                             result = await resp.text()
                             if resp.status == 200:
-                                logging.info(f"[{env.upper()}] Stats updated successfully: {result}")
+                                #logging.info(f"[{env.upper()}] Stats updated successfully: {result}")
+                                pass
                             else:
                                 logging.error(f"[{env.upper()}] Failed to update stats: {resp.status} - {result}")
                                 
@@ -529,24 +530,6 @@ async def syncslash(ctx):
     except Exception as e:
         await ctx.send(f"Failed to sync commands: {e}")
 
-@bot.command(name="restart", aliases=["reboot"])
-@commands.is_owner()
-async def restart(ctx):
-    """Restart the bot"""
-    embed = discord.Embed(
-        description="🔄 Restarting bot...",
-        color=discord.Color.orange()
-    )
-    msg = await ctx.reply(embed=embed)
-    
-    with open("data/restart_info.json", "w") as f:
-        json.dump({
-            "channel_id": ctx.channel.id,
-            "message_id": msg.id
-        }, f)
-    
-    os.execv(sys.executable, ['python'] + sys.argv)
-
 @bot.event
 async def on_message(message):
     """Handle messages"""
@@ -557,6 +540,43 @@ async def on_message(message):
             if message.channel.id in [1378156495144751147, 1260347806699491418]:
                 return await message.reply("<#1314685928614264852>")
     await bot.process_commands(message)
+
+@bot.event
+async def on_message_edit(before, after):
+    """Handle message edits and re-process commands if edited"""
+    # Ignore bot messages
+    if after.author.bot:
+        return
+    
+    # Ignore if message content didn't change (e.g., embed updates)
+    if before.content == after.content:
+        return
+    
+    # Only process if the edited message starts with a command prefix
+    if not after.content.startswith(bot.command_prefix):
+        return
+    
+    # Check if the message is in a main guild and restricted channel
+    if after.guild and after.guild.id in bot.MAIN_GUILD_IDS:
+        if after.channel.id in [1378156495144751147, 1260347806699491418]:
+            return await after.reply("<#1314685928614264852>")
+    
+    try:
+        # Re-process the edited message as a command
+        await bot.process_commands(after)
+        
+        # Log the command edit for debugging
+        command_name = after.content.split()[0][1:] if after.content.split() else "unknown"
+        logging.info(f"Command edited and re-processed: {command_name} by {after.author} ({after.author.id}) in {after.guild.name if after.guild else 'DM'}")
+        
+    except Exception as e:
+        # Log any errors but don't crash
+        logging.error(f"Error processing edited command: {e}")
+        # Optionally, you could add a small reaction or reply to indicate the edit was processed
+        try:
+            await after.add_reaction("🔄")  # Indicate command was re-processed
+        except:
+            pass  # Ignore if we can't add reactions
 
 if os.path.exists("data/restart_info.json"):
     try:

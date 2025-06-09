@@ -204,6 +204,12 @@ self.slot_symbols = [
 > - all
 > sell your fish based on `id`
 
+`.fishstats`, `.fstats`
+> view global fish leaderboards showing the biggest and most expensive fish ever caught with details about who caught them, when, and what gear was used
+
+`.myfishstats [user]`, `.myfs`
+> view personal fishing statistics including total catches, value, weight, rarity breakdown, personal records, and recent catches
+
 # Fun
 > Literally slop commands, these just do random things and don't belong anywhere
 

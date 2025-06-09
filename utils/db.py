@@ -932,7 +932,7 @@ class AsyncDatabase:
             return False, f"Insufficient funds! You need {cost:,} coins but only have {wallet_balance:,}."
         
         # Check if user has required item (for levels >= 20)
-        if current_level >= 20:
+        if item_required:
             inventory = await self.get_inventory(user_id)
             has_token = False
             
@@ -952,7 +952,7 @@ class AsyncDatabase:
                 return False, "Failed to deduct upgrade cost!"
             
             # 2. Remove ONE interest token if needed (not all of them!)
-            if current_level >= 20:
+            if item_required:
                 token_removed = await self.remove_from_inventory(user_id, None, "interest_token", 1)
                 if not token_removed:
                     # Try with name instead of ID
@@ -977,7 +977,7 @@ class AsyncDatabase:
             else:
                 # Something went wrong, refund everything
                 await self.update_wallet(user_id, cost)
-                if current_level >= 20:
+                if item_required:
                     # Add the token back (create new token item)
                     token_item = {
                         "id": "interest_token",

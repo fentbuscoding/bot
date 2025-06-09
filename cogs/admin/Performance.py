@@ -9,7 +9,7 @@ from utils.db import async_db
 from utils.command_tracker import usage_tracker
 from cogs.logging.logger import CogLogger
 
-class PerformanceMonitoring(commands.Cog):
+class Performance(commands.Cog):
     """Performance monitoring and diagnostics"""
     
     def __init__(self, bot):
@@ -112,7 +112,8 @@ class PerformanceMonitoring(commands.Cog):
                 scalability_metrics = self.bot.scalability_manager.get_metrics()
                 
                 cache_status = scalability_metrics['cache_status']
-                cache_emoji = "✅" if cache_status == 'connected' else "❌"
+                cache_emoji = "✅" if cache_status in ['redis', 'memory'] else "❌"
+                cache_display = "Redis" if cache_status == 'redis' else "Memory (No Redis)"
                 
                 perf_metrics = scalability_metrics['performance']
                 cache_hit_rate = 0
@@ -121,7 +122,7 @@ class PerformanceMonitoring(commands.Cog):
                                     (perf_metrics['cache_hits'] + perf_metrics['cache_misses'])) * 100
                 
                 scalability_status = (
-                    f"{cache_emoji} **Cache:** {cache_status.title()}\n"
+                    f"{cache_emoji} **Cache:** {cache_display}\n"
                     f"📊 **Hit Rate:** {cache_hit_rate:.1f}%\n"
                     f"🔄 **Queued Requests:** {perf_metrics['requests_queued']:,}\n"
                     f"⚡ **Background Tasks:** {scalability_metrics['background_tasks']}\n"
@@ -363,7 +364,8 @@ class PerformanceMonitoring(commands.Cog):
             
             # Cache status
             cache_status = metrics['cache_status']
-            cache_emoji = "✅" if cache_status == 'connected' else "❌"
+            cache_emoji = "✅" if cache_status in ['redis', 'memory'] else "❌"
+            cache_display = "Redis" if cache_status == 'redis' else "Memory (No Redis)"
             
             cache_hit_rate = 0
             total_requests = perf['cache_hits'] + perf['cache_misses']
@@ -373,7 +375,7 @@ class PerformanceMonitoring(commands.Cog):
             embed.add_field(
                 name="💾 Cache System",
                 value=(
-                    f"{cache_emoji} **Status:** {cache_status.title()}\n"
+                    f"{cache_emoji} **Status:** {cache_display}\n"
                     f"📈 **Hit Rate:** {cache_hit_rate:.1f}%\n"
                     f"📊 **Total Requests:** {total_requests:,}"
                 ),
@@ -419,4 +421,4 @@ class PerformanceMonitoring(commands.Cog):
             await ctx.reply(f"❌ Error getting scalability metrics: {e}")
 
 async def setup(bot):
-    await bot.add_cog(PerformanceMonitoring(bot))
+    await bot.add_cog(Performance(bot))

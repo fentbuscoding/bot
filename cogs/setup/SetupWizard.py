@@ -628,7 +628,7 @@ class SetupWizard:
         await message.edit(embed=embed)
 
 
-class SetupCommands(commands.Cog):
+class Setup(commands.Cog):
     """Setup wizard commands"""
     
     def __init__(self, bot):
@@ -690,4 +690,4 @@ class SetupCommands(commands.Cog):
         await ctx.reply(embed=embed)
 
 async def setup(bot):
-    await bot.add_cog(SetupCommands(bot))
+    await bot.add_cog(Setup(bot))

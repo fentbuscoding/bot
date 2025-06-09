@@ -196,9 +196,11 @@ class CacheManager:
             
             await self.redis.ping()
             self.logger.info("Connected to Redis cache")
+            self.redis_available = True
         except Exception as e:
-            self.logger.warning(f"Redis connection failed: {e}. Using in-memory cache fallback")
+            self.logger.info(f"Redis not available ({e}). Using efficient in-memory cache")
             self.redis = None
+            self.redis_available = False
     
     async def get(self, key: str, default=None) -> Any:
         """Get value from cache"""
@@ -451,9 +453,11 @@ class ScalabilityManager:
         """Get scalability metrics"""
         task_stats = self.task_manager.get_task_stats()
         
+        cache_status = 'redis' if self.cache.redis else 'memory'
+        
         return {
             'performance': self.metrics,
-            'cache_status': 'connected' if self.cache.redis else 'disconnected',
+            'cache_status': cache_status,
             'background_tasks': len(self.task_manager.tasks),
             'task_statistics': task_stats,
             'rate_limit_status': {

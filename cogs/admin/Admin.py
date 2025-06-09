@@ -631,6 +631,46 @@ class Admin(commands.Cog):
             self.logger.error(f"Failed to reset economy: {e}")
             await ctx.reply("❌ An error occurred while resetting the economy")
 
+    @commands.command()
+    @commands.is_owner()
+    async def reset(self, ctx, user: discord.Member, new_balance: int = 0):
+        """Reset a user's economic data and set their balance to a specified amount
+        Usage: .reset @user [new_balance]"""
+        
+        try:
+            # Reset user data completely
+            result = await self.db.db.users.delete_one({"_id": str(user.id)})
+            
+            # Set new balance if specified
+            if new_balance > 0:
+                await self.db.update_wallet(user.id, new_balance)
+            
+            # Remove active potions
+            await self.db.db.active_potions.delete_many({"user_id": str(user.id)})
+            
+            embed = discord.Embed(
+                title="✅ User Reset Complete",
+                description=(
+                    f"**User:** {user.mention}\n"
+                    f"**Data Reset:** {'✅' if result.deleted_count > 0 else '⚠️ No data found'}\n"
+                    f"**New Balance:** {new_balance:,} {self.currency}\n\n"
+                    "**Reset Items:**\n"
+                    "• Wallet & Bank Balance\n"
+                    "• All Inventory Items\n"
+                    "• Fishing Rods & Bait\n"
+                    "• Fish Collection\n"
+                    "• Active Potions\n"
+                    "• Upgrades & Multipliers"
+                ),
+                color=discord.Color.green()
+            )
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to reset user {user.id}: {e}")
+            await ctx.reply(f"❌ Error resetting user: {e}")
+
 async def setup(bot):
     """Initialize the Admin cog with proper error handling"""
     try:

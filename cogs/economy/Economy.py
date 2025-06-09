@@ -2,6 +2,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.betting import parse_bet
+from utils.safe_reply import safe_reply
 import discord
 import random
 import json
@@ -45,7 +46,7 @@ class Economy(commands.Cog):
     async def cog_check(self, ctx):
         """Global check for all commands in this cog"""
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
-            await ctx.reply(
+            await safe_reply(ctx,
                 random.choice([f"❌ Economy commands are disabled in this channel. "
                 f"Please use them in another channel.",
                 "<#1314685928614264852> is a good place for that."])
@@ -77,12 +78,10 @@ class Economy(commands.Cog):
         if member != ctx.author:
             embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
         try:
-            await ctx.reply(embed=embed)
-        except discord.HTTPException:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            self.logger.error(f"Failed to send balance embed in {ctx.channel.name}. User: {ctx.author.id}, Member: {member.id}")
-            await ctx.send("I can't send embeds in this channel. Please check my permissions.")
+            await safe_reply(ctx, embed=embed)
+        except Exception as e:
+            self.logger.error(f"Failed to send balance embed in {ctx.channel.name}. User: {ctx.author.id}, Member: {member.id}: {e}")
+            await safe_reply(ctx, "An error occurred while displaying the balance.")
 
     @commands.command(name="deposit", aliases=["dep", 'd'])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -95,7 +94,7 @@ class Economy(commands.Cog):
                 limit = await db.get_bank_limit(ctx.author.id, ctx.guild.id)
                 space = limit - bank
                 if space <= 0:
-                    return await ctx.reply("Your bank is **full**! Upgrade your bank *(`.bu`)* to deposit more.")
+                    return await safe_reply(ctx, "Your bank is **full**! Upgrade your bank *(`.bu`)* to deposit more.")
                 
                 embed = discord.Embed(
                     description=(
@@ -111,7 +110,7 @@ class Economy(commands.Cog):
                     ),
                     color=0x2b2d31
                 )
-                return await ctx.reply(embed=embed)
+                return await safe_reply(ctx, embed=embed)
 
             wallet = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
             bank = await db.get_bank_balance(ctx.author.id, ctx.guild.id)
@@ -125,10 +124,10 @@ class Economy(commands.Cog):
                 try:
                     percentage = float(amount[:-1])
                     if not 0 < percentage <= 100:
-                        return await ctx.reply("Percentage must be between 0 and 100!")
+                        return await safe_reply(ctx, "Percentage must be between 0 and 100!")
                     amount = min(int((percentage / 100) * wallet), space)
                 except ValueError:
-                    return await ctx.reply("Invalid percentage!")
+                    return await safe_reply(ctx, "Invalid percentage!")
             else:
                 try:
                     if amount.lower().endswith('k'):
@@ -138,29 +137,29 @@ class Economy(commands.Cog):
                     else:
                         amount = int(amount)
                 except ValueError:
-                    return await ctx.reply("Invalid amount!")
+                    return await safe_reply(ctx, "Invalid amount!")
 
             if amount <= 0:
-                return await ctx.reply("Amount must be positive!")
+                return await safe_reply(ctx, "Amount must be positive!")
             if amount > wallet:
-                return await ctx.reply("You don't have that much in your wallet!")
+                return await safe_reply(ctx, "You don't have that much in your wallet!")
             if amount > space:
-                return await ctx.reply(f"Your bank can only hold {space:,} more coins!")
+                return await safe_reply(ctx, f"Your bank can only hold {space:,} more coins!")
 
             if await db.update_wallet(ctx.author.id, -amount, ctx.guild.id):
                 if await db.update_bank(ctx.author.id, amount, ctx.guild.id):
                     # Log successful deposit
                     self.stats_logger.log_command_usage("deposit")
-                    await ctx.reply(f"💰 Deposited **{amount:,}** {self.currency} into your bank!")
+                    await safe_reply(ctx, f"💰 Deposited **{amount:,}** {self.currency} into your bank!")
                 else:
                     await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
-                    await ctx.reply("❌ Failed to deposit money! Transaction reverted.")
+                    await safe_reply(ctx, "❌ Failed to deposit money! Transaction reverted.")
             else:
-                await ctx.reply("❌ Failed to deposit money!")
+                await safe_reply(ctx, "❌ Failed to deposit money!")
                 
         except Exception as e:
             self.logger.error(f"Deposit error: {e}")
-            await ctx.reply("An error occurred while processing your deposit.")
+            await safe_reply(ctx, "An error occurred while processing your deposit.")
 
     @commands.command(name="withdraw", aliases=["with", 'w'])
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -185,7 +184,7 @@ class Economy(commands.Cog):
                     ),
                     color=0x2b2d31
                 )
-                return await ctx.reply(embed=embed)
+                return await safe_reply(ctx, embed=embed)
 
             bank = await db.get_bank_balance(ctx.author.id, ctx.guild.id)
 
@@ -196,10 +195,10 @@ class Economy(commands.Cog):
                 try:
                     percentage = float(amount[:-1])
                     if not 0 < percentage <= 100:
-                        return await ctx.reply("Percentage must be between 0 and 100!")
+                        return await safe_reply(ctx, "Percentage must be between 0 and 100!")
                     amount = int((percentage / 100) * bank)
                 except ValueError:
-                    return await ctx.reply("Invalid percentage!")
+                    return await safe_reply(ctx, "Invalid percentage!")
             else:
                 try:
                     if amount.lower().endswith('k'):
@@ -209,21 +208,21 @@ class Economy(commands.Cog):
                     else:
                         amount = int(amount)
                 except ValueError:
-                    return await ctx.reply("Invalid amount!")
+                    return await safe_reply(ctx, "Invalid amount!")
 
             if amount <= 0:
-                return await ctx.reply("Amount must be positive!")
+                return await safe_reply(ctx, "Amount must be positive!")
             if amount > bank:
-                return await ctx.reply("You don't have that much in your bank!")
+                return await safe_reply(ctx, "You don't have that much in your bank!")
 
             if await db.update_bank(ctx.author.id, -amount, ctx.guild.id):
                 if await db.update_wallet(ctx.author.id, amount, ctx.guild.id):
-                    await ctx.reply(f"💸 Withdrew **{amount:,}** {self.currency} from your bank!")
+                    await safe_reply(ctx, f"💸 Withdrew **{amount:,}** {self.currency} from your bank!")
                 else:
                     await db.update_bank(ctx.author.id, amount, ctx.guild.id)
-                    await ctx.reply("❌ Failed to withdraw money! Transaction reverted.")
+                    await safe_reply(ctx, "❌ Failed to withdraw money! Transaction reverted.")
             else:
-                await ctx.reply("❌ Failed to withdraw money!")
+                await safe_reply(ctx, "❌ Failed to withdraw money!")
         except Exception as e:
             self.logger.error(f"Withdraw error: {e}")
             await ctx.reply("An error occurred while processing your withdrawal.")

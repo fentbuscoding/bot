@@ -2,6 +2,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.betting import parse_bet
+from utils.safe_reply import safe_reply
 import discord
 import random
 import asyncio
@@ -49,7 +50,7 @@ class Work(commands.Cog):
             f"You've been a valuable asset! You earned **{amount}** {self.currency}.",
             f"You've been a key contributor! You made **{amount}** {self.currency}.",
         ]
-        await ctx.reply(random.choice(responses))
+        await safe_reply(ctx, random.choice(responses))
 
 
 async def setup(bot):
