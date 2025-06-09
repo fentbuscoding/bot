@@ -5,8 +5,10 @@ from utils.db import async_db as db
 import discord
 import random
 import asyncio
+import time
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
+import time
 
 class MultiplierConverter(commands.Converter):
     async def convert(self, ctx, argument):
@@ -25,6 +27,14 @@ class Gambling(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.active_games = set()
         self.stats_logger = StatsLogger()
+        
+        # Enhanced rate limiting for message edits
+        self.message_edit_queue = asyncio.Queue()
+        self.edit_cooldown = 3.0  # 3 second cooldown between edits
+        self.last_edit_time = {}
+        
+        # Start message edit processor
+        self.bot.loop.create_task(self.process_message_edits())
         
         # Card suits and values for blackjack
         self.suits = ["♠", "♥", "♦", "♣"]
@@ -1307,7 +1317,8 @@ class Gambling(commands.Cog):
                 elif i > spin_steps * 0.8:
                     embed.title = "🎡 Roulette - Slowing down..."
                 
-                await message.edit(embed=embed)
+                # Use rate-limited editing instead of direct edit
+                await self.queue_message_edit(message, embed)
                 await asyncio.sleep(delay)
             
             # Determine if bet won
@@ -1554,6 +1565,62 @@ class Gambling(commands.Cog):
                 return int(bet_str)
         except (ValueError, AttributeError):
             return None
+
+    async def process_message_edits(self):
+        """Process message edits with rate limiting to prevent API overload"""
+        while True:
+            try:
+                # Check if there are edits in queue
+                if not self.message_edit_queue.empty():
+                    # Get the next edit
+                    edit_data = await self.message_edit_queue.get()
+                    
+                    # Check cooldown
+                    message_id = edit_data.get('message_id')
+                    current_time = time.time()
+                    
+                    if message_id in self.last_edit_time:
+                        time_diff = current_time - self.last_edit_time[message_id]
+                        if time_diff < self.edit_cooldown:
+                            # Put it back in queue and wait
+                            await asyncio.sleep(self.edit_cooldown - time_diff)
+                    
+                    # Perform the edit
+                    try:
+                        message = edit_data.get('message')
+                        embed = edit_data.get('embed')
+                        
+                        if message and embed:
+                            await message.edit(embed=embed)
+                            self.last_edit_time[message_id] = current_time
+                    
+                    except discord.HTTPException as e:
+                        if e.status == 429:  # Rate limited
+                            # Put back in queue and increase cooldown
+                            await self.message_edit_queue.put(edit_data)
+                            self.edit_cooldown = min(self.edit_cooldown * 1.5, 30.0)
+                            await asyncio.sleep(float(e.retry_after) if hasattr(e, 'retry_after') else 5)
+                        else:
+                            self.logger.error(f"Message edit error: {e}")
+                    
+                    # Mark task as done
+                    self.message_edit_queue.task_done()
+                
+                await asyncio.sleep(0.5)  # Check queue every 500ms
+                
+            except Exception as e:
+                self.logger.error(f"Error in message edit processor: {e}")
+                await asyncio.sleep(1)
+
+    async def queue_message_edit(self, message, embed):
+        """Queue a message edit for rate-limited processing"""
+        edit_data = {
+            'message': message,
+            'embed': embed,
+            'message_id': message.id,
+            'timestamp': time.time()
+        }
+        await self.message_edit_queue.put(edit_data)
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))

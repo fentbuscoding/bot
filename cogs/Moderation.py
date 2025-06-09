@@ -16,7 +16,7 @@ class Moderation(commands.Cog, ErrorHandler):
         ErrorHandler.__init__(self)
         self.bot = bot
         self.logger = CogLogger(self.__class__.__name__)
-        self.bot.launch_time = discord.utils.utcnow()
+        self.bot.launch_time = datetime.datetime.now()
         self.logger.info("Moderation cog initialized")
 
     async def log_action(self, guild_id: int, embed: discord.Embed):

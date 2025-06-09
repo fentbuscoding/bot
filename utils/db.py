@@ -2,6 +2,7 @@ import motor.motor_asyncio
 import pymongo
 import json
 import datetime
+from datetime import timedelta
 import os
 import asyncio
 import logging
@@ -9,6 +10,7 @@ from typing import Dict, Any, Optional
 import threading
 from bson import ObjectId
 import re
+import time
 
 def load_config() -> dict:
     """Load config from environment variables, then config.json as fallback."""
@@ -52,7 +54,17 @@ class AsyncDatabase:
     def client(self):
         if self._client is None:
             MONGO_URI = os.getenv('MONGO_URI', config['MONGO_URI'])
-            self._client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
+            # Configure connection pool settings for better performance
+            self._client = motor.motor_asyncio.AsyncIOMotorClient(
+                MONGO_URI,
+                maxPoolSize=50,  # Maximum connections in pool
+                minPoolSize=5,   # Minimum connections to maintain
+                maxIdleTimeMS=30000,  # Close connections after 30s idle
+                waitQueueTimeoutMS=5000,  # Timeout for getting connection
+                serverSelectionTimeoutMS=5000,  # Timeout for server selection
+                connectTimeoutMS=10000,  # Connection timeout
+                socketTimeoutMS=20000,   # Socket timeout
+            )
         return self._client
 
     @property
@@ -1293,6 +1305,85 @@ class AsyncDatabase:
             self.logger.error(f"Failed to add fishing item: {e}")
             return False
 
+    async def health_check(self) -> Dict[str, Any]:
+        """Comprehensive database health check"""
+        health_status = {
+            "status": "unknown",
+            "connection": False,
+            "latency": None,
+            "collections": {},
+            "errors": []
+        }
+        
+        try:
+            # Check connection
+            start_time = time.time()
+            await self.client.admin.command('ping')
+            latency = (time.time() - start_time) * 1000
+            
+            health_status.update({
+                "status": "healthy",
+                "connection": True,
+                "latency": f"{latency:.2f}ms"
+            })
+            
+            # Check collection counts
+            try:
+                collections = ['users', 'guilds', 'trade_history', 'global_buffs']
+                for collection in collections:
+                    count = await self.db[collection].count_documents({})
+                    health_status["collections"][collection] = count
+            except Exception as e:
+                health_status["errors"].append(f"Collection check failed: {e}")
+            
+        except Exception as e:
+            health_status.update({
+                "status": "unhealthy",
+                "connection": False,
+                "errors": [str(e)]
+            })
+        
+        return health_status
+    
+    async def optimize_database(self) -> Dict[str, Any]:
+        """Run database optimization and maintenance"""
+        if not await self.ensure_connected():
+            return {"success": False, "error": "Database not connected"}
+        
+        try:
+            results = {
+                "indexes_created": 0,
+                "collections_optimized": 0,
+                "cleanup_results": {}
+            }
+            
+            # Create performance indexes
+            indexes_to_create = [
+                ("users", [("_id", 1)]),
+                ("trade_history", [("initiator_id", 1), ("target_id", 1)]),
+                ("trade_history", [("completed_at", -1)]),
+                ("guild_settings", [("_id", 1)]),
+            ]
+            
+            for collection, index_spec in indexes_to_create:
+                try:
+                    await self.db[collection].create_index(index_spec)
+                    results["indexes_created"] += 1
+                except Exception:
+                    pass  # Index might already exist
+            
+            # Clean up old data
+            cutoff_date = datetime.now() - timedelta(days=90)
+            cleanup_result = await self.db.trade_history.delete_many({
+                "completed_at": {"$lt": cutoff_date}
+            })
+            results["cleanup_results"]["old_trades"] = cleanup_result.deleted_count
+            
+            results["collections_optimized"] = len(indexes_to_create)
+            return {"success": True, "results": results}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""
     _instance = None
@@ -1459,7 +1550,6 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
             return {}
-
 
 
 # Create global database instances

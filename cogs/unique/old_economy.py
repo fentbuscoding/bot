@@ -2909,7 +2909,7 @@ class Economy(commands.Cog):
             "type": caught_type,
             "name": f"{caught_type.title()} Fish",
             "value": random.randint(*value_range),
-            "caught_at": datetime.datetime.utcnow().isoformat(),
+            "caught_at": datetime.datetime.now().isoformat(),
             "bait_used": bait["id"],
             "rod_used": rod["id"]
         }

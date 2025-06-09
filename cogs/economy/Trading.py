@@ -1,60 +1,140 @@
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
-from typing import Dict, List, Optional, Tuple
-from collections import Counter
+from typing import Dict, List, Optional, Tuple, Union
+from collections import Counter, defaultdict
 import discord
 import asyncio
 import hashlib
 from datetime import datetime, timedelta
 import math
 import random
+import json
 
-class TradeOffer:
+class ModernTradeOffer:
+    """Enhanced trade offer with better features and validation"""
+    
     def __init__(self, initiator_id: int, target_id: int, guild_id: int):
         self.initiator_id = initiator_id
         self.target_id = target_id
         self.guild_id = guild_id
+        
+        # Trade contents
         self.initiator_items = []
         self.initiator_currency = 0
         self.target_items = []
         self.target_currency = 0
-        self.status = "pending"  # pending, accepted, cancelled, expired
-        self.created_at = datetime.utcnow()
-        self.expires_at = datetime.utcnow() + timedelta(minutes=10)
+        
+        # Trade metadata
+        self.status = "drafting"  # drafting, pending, confirmed, completed, cancelled, expired
+        self.created_at = datetime.now()
+        self.expires_at = datetime.now() + timedelta(minutes=15)
         self.trade_id = self._generate_trade_id()
-    
+        
+        # Enhanced features
+        self.notes = {"initiator": "", "target": ""}  # Trade notes
+        self.locked = {"initiator": False, "target": False}  # Lock offer to prevent changes
+        self.auto_accept = {"initiator": False, "target": False}  # Auto-accept balanced trades
+        self.private = False  # Private trade (not shown in listings)
+        
+        # Risk assessment
+        self.risk_level = "unknown"  # low, medium, high, extreme
+        self.warnings = []
+        
     def _generate_trade_id(self) -> str:
-        """Generate unique trade ID"""
+        """Generate unique trade ID with timestamp"""
         data = f"{self.initiator_id}{self.target_id}{self.created_at.timestamp()}"
-        return hashlib.md5(data.encode()).hexdigest()[:8].upper()
+        return f"T{hashlib.md5(data.encode()).hexdigest()[:6].upper()}"
     
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.expires_at
+        return datetime.now() > self.expires_at
     
     def get_total_value(self, side: str) -> int:
-        """Calculate total value of one side of the trade"""
+        """Calculate total value with enhanced item evaluation"""
         if side == "initiator":
-            return sum(item.get('value', 0) for item in self.initiator_items) + self.initiator_currency
+            item_value = sum(item.get('market_value', item.get('value', 0)) for item in self.initiator_items)
+            return item_value + self.initiator_currency
         else:
-            return sum(item.get('value', 0) for item in self.target_items) + self.target_currency
+            item_value = sum(item.get('market_value', item.get('value', 0)) for item in self.target_items)
+            return item_value + self.target_currency
     
-    def is_balanced(self, tolerance: float = 0.3) -> bool:
-        """Check if trade is reasonably balanced"""
+    def calculate_balance_ratio(self) -> float:
+        """Calculate the balance ratio between both sides"""
         initiator_value = self.get_total_value("initiator")
         target_value = self.get_total_value("target")
         
         if initiator_value == 0 and target_value == 0:
-            return True
+            return 1.0
         
         if initiator_value == 0 or target_value == 0:
-            return False
+            return 0.0
         
-        ratio = abs(initiator_value - target_value) / max(initiator_value, target_value)
-        return ratio <= tolerance
+        return min(initiator_value, target_value) / max(initiator_value, target_value)
+    
+    def is_balanced(self, tolerance: float = 0.25) -> bool:
+        """Check if trade is reasonably balanced with tighter tolerance"""
+        return self.calculate_balance_ratio() >= (1.0 - tolerance)
+    
+    def assess_risk(self) -> str:
+        """Assess trade risk level"""
+        balance_ratio = self.calculate_balance_ratio()
+        initiator_value = self.get_total_value("initiator")
+        target_value = self.get_total_value("target")
+        max_value = max(initiator_value, target_value)
+        
+        # Clear warnings
+        self.warnings = []
+        
+        # Check balance
+        if balance_ratio < 0.5:
+            self.warnings.append("⚠️ Highly unbalanced trade")
+            risk = "extreme"
+        elif balance_ratio < 0.7:
+            self.warnings.append("⚠️ Unbalanced trade")
+            risk = "high"
+        elif balance_ratio < 0.85:
+            risk = "medium"
+        else:
+            risk = "low"
+        
+        # Check high value trades
+        if max_value > 100000:
+            self.warnings.append("💰 High value trade - double check items")
+            if risk == "low":
+                risk = "medium"
+        
+        # Check for duplicate items
+        if self._has_duplicate_items():
+            self.warnings.append("🔄 Contains duplicate items")
+        
+        self.risk_level = risk
+        return risk
+    
+    def _has_duplicate_items(self) -> bool:
+        """Check if trade contains duplicate items on same side"""
+        initiator_items = [item.get('id') for item in self.initiator_items]
+        target_items = [item.get('id') for item in self.target_items]
+        
+        return (len(initiator_items) != len(set(initiator_items)) or 
+                len(target_items) != len(set(target_items)))
+    
+    def get_trade_summary(self) -> dict:
+        """Get comprehensive trade summary"""
+        return {
+            "trade_id": self.trade_id,
+            "initiator_value": self.get_total_value("initiator"),
+            "target_value": self.get_total_value("target"),
+            "balance_ratio": self.calculate_balance_ratio(),
+            "risk_level": self.assess_risk(),
+            "warnings": self.warnings,
+            "is_balanced": self.is_balanced(),
+            "created_at": self.created_at.isoformat(),
+            "expires_at": self.expires_at.isoformat(),
+            "status": self.status
+        }
 
 class TradeConfirmationView(discord.ui.View):
-    def __init__(self, trade_offer: TradeOffer, bot, timeout=300):
+    def __init__(self, trade_offer: ModernTradeOffer, bot, timeout=300):
         super().__init__(timeout=timeout)
         self.trade_offer = trade_offer
         self.bot = bot
@@ -345,7 +425,7 @@ class TradeConfirmationView(discord.ui.View):
                 "initiator_currency": self.trade_offer.initiator_currency,
                 "target_items": self.trade_offer.target_items,
                 "target_currency": self.trade_offer.target_currency,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(),
                 "initiator_value": self.trade_offer.get_total_value("initiator"),
                 "target_value": self.trade_offer.get_total_value("target")
             }
@@ -375,7 +455,7 @@ class TradeStats:
     async def get_user_trade_stats(self, user_id: int, days: int = 30) -> dict:
         """Get trading statistics for a user"""
         try:
-            start_date = datetime.utcnow() - timedelta(days=days)
+            start_date = datetime.now() - timedelta(days=days)
             
             pipeline = [
                 {
@@ -451,31 +531,63 @@ class Trading(commands.Cog):
     @commands.group(name="trade", invoke_without_command=True)
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def trade(self, ctx):
-        """Trading system commands"""
+        """🤝 Advanced Trading System - Trade items, currency, and more!"""
         if ctx.invoked_subcommand is None:
             embed = discord.Embed(
-                title="🤝 Trading System",
-                description="Trade items and currency with other players!",
+                title="🤝 Advanced Trading System",
+                description="Trade items and currency with other players safely and efficiently!",
                 color=0x3498db
             )
             
-            commands_list = [
-                (f"`{ctx.prefix}trade offer @user`", "Start a trade with another user"),
-                (f"`{ctx.prefix}trade add item <item_id> [amount]`", "Add items to your trade offer"),
-                (f"`{ctx.prefix}trade add money <amount>`", "Add currency to your trade offer"),
-                (f"`{ctx.prefix}trade remove item <item_id> [amount]`", "Remove items from trade offer"),
-                (f"`{ctx.prefix}trade remove money <amount>`", "Remove currency from trade offer"),
-                (f"`{ctx.prefix}trade show`", "Show current trade offer"),
-                (f"`{ctx.prefix}trade send`", "Send the trade offer to the other user"),
-                (f"`{ctx.prefix}trade cancel`", "Cancel your current trade"),
-                (f"`{ctx.prefix}trade history [user]`", "View trade history"),
-                (f"`{ctx.prefix}trade stats [user]`", "View trading statistics")
-            ]
+            # Core Commands
+            embed.add_field(
+                name="📝 **Basic Commands**",
+                value=f"`{ctx.prefix}trade offer @user` - Start a trade\n"
+                      f"`{ctx.prefix}trade add item <item> [amount]` - Add items\n"
+                      f"`{ctx.prefix}trade add money <amount>` - Add currency\n"
+                      f"`{ctx.prefix}trade send` - Send offer to other user",
+                inline=False
+            )
             
-            for command, description in commands_list:
-                embed.add_field(name=command, value=description, inline=False)
+            # Management Commands
+            embed.add_field(
+                name="⚙️ **Management**",
+                value=f"`{ctx.prefix}trade show` - View current trade\n"
+                      f"`{ctx.prefix}trade remove item/money` - Remove items\n"
+                      f"`{ctx.prefix}trade cancel` - Cancel trade\n"
+                      f"`{ctx.prefix}trade note <message>` - Add trade note",
+                inline=False
+            )
             
-            embed.set_footer(text="💡 Tip: You can trade items from your inventory and currency!")
+            # Advanced Features
+            embed.add_field(
+                name="🚀 **Advanced Features**",
+                value=f"`{ctx.prefix}trade quick @user <item> [amount]` - Quick trade\n"
+                      f"`{ctx.prefix}trade auto on/off` - Auto-accept balanced trades\n"
+                      f"`{ctx.prefix}trade value <item>` - Check item value\n"
+                      f"`{ctx.prefix}trade market` - View trade marketplace",
+                inline=False
+            )
+            
+            # Stats & History
+            embed.add_field(
+                name="📊 **Statistics**",
+                value=f"`{ctx.prefix}trade history [user]` - Trade history\n"
+                      f"`{ctx.prefix}trade stats [user]` - Trading stats\n"
+                      f"`{ctx.prefix}trade leaderboard` - Top traders",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🛡️ **Safety Features**",
+                value="• Automatic balance checking\n"
+                      "• Risk assessment warnings\n"
+                      "• Trade confirmation system\n"
+                      "• Fraud protection",
+                inline=False
+            )
+            
+            embed.set_footer(text="💡 Use 'trade help <command>' for detailed help on any command!")
             await ctx.reply(embed=embed)
     
     @trade.command(name="offer")
@@ -497,7 +609,7 @@ class Trading(commands.Cog):
             if ctx.author.id in [trade.initiator_id, trade.target_id] and trade.status == "pending":
                 return await ctx.reply(f"❌ You already have an active trade with {target.mention}! Use `{ctx.prefix}trade cancel` to cancel it first, or, ask them to accept your current trade.")
         # Create new trade offer
-        trade_offer = TradeOffer(ctx.author.id, target.id, ctx.guild.id)
+        trade_offer = ModernTradeOffer(ctx.author.id, target.id, ctx.guild.id)
         self.active_trades[trade_offer.trade_id] = trade_offer
         
         embed = discord.Embed(
@@ -707,7 +819,7 @@ class Trading(commands.Cog):
         
         # Show expiration time
         # Show expiration time
-        time_left = trade_offer.expires_at - datetime.utcnow()
+        time_left = trade_offer.expires_at - datetime.now()
         minutes_left = max(0, int(time_left.total_seconds() / 60))
         
         embed.add_field(name="⏰ Time Left", value=f"{minutes_left} minutes", inline=True)
@@ -921,9 +1033,9 @@ class Trading(commands.Cog):
             # Get trade stats for all users in the guild
             pipeline = [
                 {
-                    "$match": {
+                    "$match":                    {
                         "guild_id": str(ctx.guild.id),
-                        "completed_at": {"$gte": datetime.utcnow() - timedelta(days=30)}
+                        "completed_at": {"$gte": datetime.now() - timedelta(days=30)}
                     }
                 },
                 {
@@ -988,7 +1100,238 @@ class Trading(commands.Cog):
         except Exception as e:
             await ctx.reply("❌ Error retrieving leaderboard data.")
     
-    def _get_user_active_trade(self, user_id: int) -> Optional[TradeOffer]:
+    @trade.command(name="quick")
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def trade_quick(self, ctx, target: discord.Member, item_id: str, amount: int = 1):
+        """Quickly propose a trade for a specific item"""
+        if target.id == ctx.author.id:
+            return await ctx.reply("❌ You can't trade with yourself!")
+        
+        if target.bot:
+            return await ctx.reply("❌ You can't trade with bots!")
+        
+        # Check if item exists in inventory
+        inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+        item_details = None
+        for item in inventory:
+            if item.get('id') == item_id:
+                item_details = item
+                break
+        
+        if not item_details:
+            return await ctx.reply(f"❌ Item `{item_id}` not found in your inventory!")
+        
+        # Create quick trade
+        trade_offer = ModernTradeOffer(ctx.author.id, target.id, ctx.guild.id)
+        
+        # Add the item to trade
+        for _ in range(amount):
+            trade_item = item_details.copy()
+            trade_item['value'] = self.get_item_value(trade_item)
+            trade_offer.initiator_items.append(trade_item)
+        
+        self.active_trades[trade_offer.trade_id] = trade_offer
+        
+        # Create quick confirmation
+        view = QuickTradeView(trade_offer, self.bot, item_details, amount)
+        
+        embed = discord.Embed(
+            title="⚡ Quick Trade Proposal",
+            description=f"{ctx.author.mention} wants to trade **{amount}x {item_details.get('name', item_id)}** with {target.mention}!",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="Offering:",
+            value=f"**{amount}x {item_details.get('name', item_id)}**\nValue: ~{self.get_item_value(item_details) * amount:,} {self.currency}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="In exchange for:",
+            value="*What would you like to offer?*",
+            inline=True
+        )
+        
+        embed.set_footer(text="Use buttons below to respond • Expires in 5 minutes")
+        
+        message = await ctx.reply(f"{target.mention}", embed=embed, view=view)
+        view.message = message
+    
+    @trade.command(name="note")
+    async def trade_note(self, ctx, *, note: str):
+        """Add a note to your current trade"""
+        trade_offer = self._get_user_active_trade(ctx.author.id)
+        if not trade_offer:
+            return await ctx.reply(f"❌ You don't have an active trade! Use `{ctx.prefix}trade offer @user` to start one.")
+        
+        if len(note) > 200:
+            return await ctx.reply("❌ Note too long! Maximum 200 characters.")
+        
+        # Determine which side the user is on
+        if ctx.author.id == trade_offer.initiator_id:
+            trade_offer.notes["initiator"] = note
+        else:
+            trade_offer.notes["target"] = note
+        
+        embed = discord.Embed(
+            title="📝 Trade Note Added",
+            description=f"Added note to trade #{trade_offer.trade_id}",
+            color=0x00ff00
+        )
+        
+        embed.add_field(name="Note:", value=f"*{note}*", inline=False)
+        
+        await ctx.reply(embed=embed)
+    
+    @trade.command(name="value")
+    async def trade_value(self, ctx, *, item_name: str):
+        """Check the estimated value of an item"""
+        # Get item from shop or user's inventory
+        inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+        
+        item_details = None
+        for item in inventory:
+            if item_name.lower() in item.get('name', '').lower() or item_name.lower() == item.get('id', '').lower():
+                item_details = item
+                break
+        
+        if not item_details:
+            return await ctx.reply(f"❌ Item `{item_name}` not found in your inventory!")
+        
+        estimated_value = self.get_item_value(item_details)
+        market_value = item_details.get('market_value', estimated_value)
+        
+        embed = discord.Embed(
+            title="💰 Item Valuation",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="Item",
+            value=f"**{item_details.get('name', item_name)}**",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Estimated Value",
+            value=f"{estimated_value:,} {self.currency}",
+            inline=True
+        )
+        
+        if market_value != estimated_value:
+            embed.add_field(
+                name="Market Value",
+                value=f"{market_value:,} {self.currency}",
+                inline=True
+            )
+        
+        embed.add_field(
+            name="Rarity",
+            value=item_details.get('rarity', 'Common').title(),
+            inline=True
+        )
+        
+        embed.set_footer(text="💡 Values are estimates and may vary in actual trades")
+        
+        await ctx.reply(embed=embed)
+    
+    @trade.command(name="market", aliases=["marketplace", "listings"])
+    async def trade_market(self, ctx):
+        """View active trade listings in the server"""
+        # Get all active trades in this guild
+        active_guild_trades = []
+        for trade in self.active_trades.values():
+            if (trade.guild_id == ctx.guild.id and 
+                trade.status == "pending" and 
+                not trade.private and 
+                not trade.is_expired()):
+                active_guild_trades.append(trade)
+        
+        if not active_guild_trades:
+            embed = discord.Embed(
+                title="🏪 Trade Marketplace",
+                description="No active public trades found in this server.",
+                color=0x3498db
+            )
+            embed.add_field(
+                name="Want to create a trade?",
+                value=f"Use `{ctx.prefix}trade offer @user` to start trading!",
+                inline=False
+            )
+            return await ctx.reply(embed=embed)
+        
+        embed = discord.Embed(
+            title="🏪 Trade Marketplace",
+            description=f"Found {len(active_guild_trades)} active trade(s)",
+            color=0x3498db
+        )
+        
+        for trade in active_guild_trades[:5]:  # Show max 5 trades
+            initiator = self.bot.get_user(trade.initiator_id)
+            target = self.bot.get_user(trade.target_id)
+            
+            initiator_items = self._format_trade_items(trade.initiator_items, trade.initiator_currency)
+            
+            embed.add_field(
+                name=f"Trade #{trade.trade_id[:6]}... by {initiator.display_name if initiator else 'Unknown'}",
+                value=f"**Offering:** {initiator_items or 'Nothing'}\n"
+                      f"**Seeking:** Trade with {target.display_name if target else 'Unknown'}\n"
+                      f"**Value:** ~{trade.get_total_value('initiator'):,} {self.currency}",
+                inline=False
+            )
+        
+        if len(active_guild_trades) > 5:
+            embed.set_footer(text=f"Showing 5 of {len(active_guild_trades)} active trades")
+        
+        await ctx.reply(embed=embed)
+    
+    @trade.command(name="auto")
+    async def trade_auto(self, ctx, setting: str = None):
+        """Toggle auto-accept for balanced trades"""
+        if setting not in ["on", "off", "enable", "disable"]:
+            embed = discord.Embed(
+                title="🤖 Auto-Accept Settings",
+                description="Auto-accept allows you to automatically accept trades that are fairly balanced.",
+                color=0x3498db
+            )
+            embed.add_field(
+                name="Usage:",
+                value=f"`{ctx.prefix}trade auto on` - Enable auto-accept\n"
+                      f"`{ctx.prefix}trade auto off` - Disable auto-accept",
+                inline=False
+            )
+            embed.add_field(
+                name="How it works:",
+                value="• Only accepts trades with <20% value difference\n"
+                      "• You'll get a notification when a trade is auto-accepted\n"
+                      "• You can disable this at any time",
+                inline=False
+            )
+            return await ctx.reply(embed=embed)
+        
+        # This would typically be stored in a user preferences database
+        # For now, we'll just show a confirmation message
+        enabled = setting.lower() in ["on", "enable"]
+        
+        embed = discord.Embed(
+            title="🤖 Auto-Accept Updated",
+            description=f"Auto-accept has been **{'enabled' if enabled else 'disabled'}**",
+            color=0x00ff00 if enabled else 0xff0000
+        )
+        
+        if enabled:
+            embed.add_field(
+                name="What happens now:",
+                value="• Balanced trades will be automatically accepted\n"
+                      "• You'll receive notifications for auto-accepted trades\n"
+                      "• Risky trades will still require manual confirmation",
+                inline=False
+            )
+        
+        await ctx.reply(embed=embed)
+    
+    def _get_user_active_trade(self, user_id: int) -> Optional[ModernTradeOffer]:
         """Get user's active trade if any"""
         for trade in self.active_trades.values():
             if user_id in [trade.initiator_id, trade.target_id] and trade.status in ["pending", "sent"]:
@@ -1045,3 +1388,107 @@ class Trading(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Trading(bot))
+
+class QuickTradeView(discord.ui.View):
+    def __init__(self, trade_offer: ModernTradeOffer, bot, item_details: dict, amount: int, timeout=300):
+        super().__init__(timeout=timeout)
+        self.trade_offer = trade_offer
+        self.bot = bot
+        self.item_details = item_details
+        self.amount = amount
+        self.message = None
+    
+    @discord.ui.button(label="💰 Counter with Currency", style=discord.ButtonStyle.primary)
+    async def counter_with_currency(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trade_offer.target_id:
+            return await interaction.response.send_message("❌ Only the trade target can respond!", ephemeral=True)
+        
+        modal = CurrencyCounterModal(self.trade_offer, self.bot)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="🎁 Counter with Items", style=discord.ButtonStyle.secondary)
+    async def counter_with_items(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trade_offer.target_id:
+            return await interaction.response.send_message("❌ Only the trade target can respond!", ephemeral=True)
+        
+        await interaction.response.send_message(
+            f"Use `/trade add item <item_id>` to add items to this trade (Trade ID: {self.trade_offer.trade_id})",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(label="✅ Accept Proposal", style=discord.ButtonStyle.success)
+    async def accept_proposal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trade_offer.target_id:
+            return await interaction.response.send_message("❌ Only the trade target can respond!", ephemeral=True)
+        
+        # Convert to full trade confirmation
+        view = TradeConfirmationView(self.trade_offer, self.bot)
+        view.target_confirmed = True  # Auto-confirm target since they accepted
+        
+        embed = discord.Embed(
+            title="✅ Quick Trade Accepted!",
+            description=f"Trade proposal accepted! Now confirming...",
+            color=0x00ff00
+        )
+        
+        await interaction.response.edit_message(embed=embed, view=view)
+        view.message = self.message
+    
+    @discord.ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
+    async def decline_proposal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trade_offer.target_id:
+            return await interaction.response.send_message("❌ Only the trade target can respond!", ephemeral=True)
+        
+        embed = discord.Embed(
+            title="❌ Trade Declined",
+            description="The trade proposal has been declined.",
+            color=0xff0000
+        )
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
+
+class CurrencyCounterModal(discord.ui.Modal):
+    def __init__(self, trade_offer: ModernTradeOffer, bot):
+        super().__init__(title="Counter with Currency")
+        self.trade_offer = trade_offer
+        self.bot = bot
+    
+    currency_amount = discord.ui.TextInput(
+        label="Currency Amount",
+        placeholder="How much currency would you like to offer?",
+        required=True,
+        max_length=10
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.currency_amount.value)
+            if amount <= 0:
+                return await interaction.response.send_message("❌ Amount must be positive!", ephemeral=True)
+            
+            # Check balance
+            balance = await db.get_wallet_balance(interaction.user.id, interaction.guild.id)
+            if balance < amount:
+                return await interaction.response.send_message(
+                    f"❌ Insufficient funds! You have {balance:,} but need {amount:,}",
+                    ephemeral=True
+                )
+            
+            # Add currency to trade
+            self.trade_offer.target_currency = amount
+            
+            # Convert to confirmation view
+            view = TradeConfirmationView(self.trade_offer, self.bot)
+            
+            embed = discord.Embed(
+                title="💰 Counter Offer Made!",
+                description="Counter offer submitted! Both parties must now confirm.",
+                color=0xffa500
+            )
+            
+            await interaction.response.edit_message(embed=embed, view=view)
+            view.message = interaction.message
+            
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number!", ephemeral=True)

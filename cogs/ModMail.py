@@ -5,6 +5,7 @@ import json
 import os
 import random
 import sys
+import datetime
 from utils.error_handler import ErrorHandler
 
 with open("data/config.json", "r") as f:
@@ -122,12 +123,12 @@ class ModMail(commands.Cog, ErrorHandler):
                 data["stats"][guild_id] = {
                     "messages": 0,
                     "name": message.guild.name,
-                    "last_message": discord.utils.utcnow().isoformat()
+                    "last_message": datetime.datetime.now().isoformat()
                 }
             
             # Update message count and last message time
             data["stats"][guild_id]["messages"] += 1
-            data["stats"][guild_id]["last_message"] = discord.utils.utcnow().isoformat()
+            data["stats"][guild_id]["last_message"] = datetime.datetime.now().isoformat()
             
             # Ensure guild is in guilds list
             if guild_id not in data["guilds"]:
@@ -364,7 +365,7 @@ class ModMail(commands.Cog, ErrorHandler):
             def __init__(self, author, content):
                 self.author = author
                 self.content = content
-                self.created_at = discord.utils.utcnow()
+                self.created_at = datetime.datetime.now()
         
         mock_message = MockMessage(ctx.author, message)
         await self.create_new_modmail(mock_message)

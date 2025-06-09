@@ -1,21 +1,41 @@
 import logging
 import sys
+import os
 from datetime import datetime
+from typing import Optional
 
 class CogLogger:
-    """Modified version for more transparent usage"""
+    """Enhanced logger with file output and better error handling"""
     def __init__(self, name: str, level: int = logging.INFO):
         self._logger = logging.getLogger(f"bronxbot.{name}")
         self._logger.setLevel(level)
         
         if not self._logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            formatter = ColoredFormatter(
+            # Console handler
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_formatter = ColoredFormatter(
                 '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
-            handler.setFormatter(formatter)
-            self._logger.addHandler(handler)
+            console_handler.setFormatter(console_formatter)
+            self._logger.addHandler(console_handler)
+            
+            # File handler for errors and critical logs
+            try:
+                os.makedirs('logs', exist_ok=True)
+                file_handler = logging.FileHandler(
+                    f'logs/bronxbot_{datetime.now().strftime("%Y%m%d")}.log',
+                    encoding='utf-8'
+                )
+                file_handler.setLevel(logging.WARNING)  # Only warnings and above to file
+                file_formatter = logging.Formatter(
+                    '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S'
+                )
+                file_handler.setFormatter(file_formatter)
+                self._logger.addHandler(file_handler)
+            except Exception:
+                pass  # File logging is optional
     
     # Delegate logging methods to make usage cleaner
     def info(self, msg, *args, **kwargs):
@@ -29,6 +49,9 @@ class CogLogger:
         
     def warning(self, msg, *args, **kwargs):
         self._logger.warning(msg, *args, **kwargs)
+    
+    def critical(self, msg, *args, **kwargs):
+        self._logger.critical(msg, *args, **kwargs)
         
     def critical(self, msg, *args, **kwargs):
         self._logger.critical(msg, *args, **kwargs)

@@ -16,7 +16,7 @@ class Utility(commands.Cog, ErrorHandler):
         ErrorHandler.__init__(self)
         self.bot = bot
         self.logger = CogLogger(self.__class__.__name__)
-        self.bot.launch_time = discord.utils.utcnow()
+        self.bot.launch_time = datetime.datetime.now()
         self.logger.info("Utility cog initialized")
 
     @commands.command(name="ping", aliases=["pong"])
@@ -87,7 +87,7 @@ class Utility(commands.Cog, ErrorHandler):
                             f"Custom Emojis: `{len(guild.emojis)}`\n"
                             f"Animated Emojis: `{len([e for e in guild.emojis if e.animated])}`"),
             color=0x2b2d31,
-            timestamp=discord.utils.utcnow()
+            timestamp=datetime.datetime.now()
         )
         embed.set_thumbnail(url=guild.icon.url if guild.icon else self.bot.user.avatar.url)
         embed.set_image(url=guild.banner.url if guild.banner else "")
@@ -161,7 +161,7 @@ class Utility(commands.Cog, ErrorHandler):
     @commands.command()
     async def uptime(self, ctx):
         """show bot uptime"""
-        delta = discord.utils.utcnow() - self.bot.launch_time
+        delta = datetime.datetime.now() - self.bot.launch_time
         hours, remainder = divmod(int(delta.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
@@ -176,7 +176,7 @@ class Utility(commands.Cog, ErrorHandler):
         if style not in valid:
             self.logger.warning(f"Invalid timestamp style: {style}")
             return await ctx.reply(f"```invalid style. choose from: {', '.join(valid)}```")
-        now = int(discord.utils.utcnow().timestamp())
+        now = int(datetime.datetime.now().timestamp())
         self.logger.debug(f"Generated timestamp style {style} for {ctx.author}")
         await ctx.reply(f"```<t:{now}:{style}> → <t:{now}:{style}>```\n`copy-paste the gray part`")
 
@@ -185,7 +185,7 @@ class Utility(commands.Cog, ErrorHandler):
         """calculate time remaining"""
         try:
             target = datetime.datetime.strptime(future_time, "%Y-%m-%d")
-            delta = target - discord.utils.utcnow()
+            delta = target - datetime.datetime.now()
             self.logger.info(f"Countdown calculated: {delta.days} days remaining")
             await ctx.reply(f"```{delta.days} days remaining```")
         except ValueError:
@@ -427,7 +427,7 @@ class Utility(commands.Cog, ErrorHandler):
             channel_id = message.channel.id
             if guild_id not in self.last_deleted:
                 self.last_deleted[guild_id] = {}
-            self.last_deleted[guild_id][channel_id] = (message, discord.utils.utcnow())
+            self.last_deleted[guild_id][channel_id] = (message, datetime.datetime.now())
 
     @commands.command()
     async def snipe(self, ctx):
@@ -438,7 +438,7 @@ class Utility(commands.Cog, ErrorHandler):
         if entry:
             msg, deleted_at = entry
             # Only show if deleted within the last hour
-            if (discord.utils.utcnow() - deleted_at).total_seconds() <= 3600:
+            if (datetime.datetime.now() - deleted_at).total_seconds() <= 3600:
                 embed = discord.Embed(description=msg.content, color=0x2b2d31)
                 embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
                 embed.timestamp = msg.created_at
@@ -449,7 +449,7 @@ class Utility(commands.Cog, ErrorHandler):
     @commands.command()
     async def botinfo(self, ctx):
         """Show bot statistics and info."""
-        delta = discord.utils.utcnow() - self.bot.launch_time
+        delta = datetime.datetime.now() - self.bot.launch_time
         total_seconds = int(delta.total_seconds())
         days, remainder = divmod(total_seconds, 86400)
         hours, remainder = divmod(remainder, 3600)

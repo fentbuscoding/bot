@@ -21,16 +21,26 @@ class VoteBans(commands.Cog):
         self.data_path = Path("data/votebans.json")
         self.vote_data = self.load_data()
         
-        # Rate limiting and caching
+        # Enhanced rate limiting and caching
         self.message_edit_queue = asyncio.Queue()
         self.last_edit_time = {}
-        self.edit_cooldown = 2.0
+        self.edit_cooldown = 5.0  # Increased from 2.0 to 5.0 seconds
         self.reaction_cache = defaultdict(dict)  # message_id: {emoji: [user_ids]}
         self.last_reaction_check = {}
         
-        # Start processors
-        self.bot.loop.create_task(self.process_message_edits())
-        self.verify_reactions.start()
+        # Background task management with scalability integration
+        self._start_background_tasks()
+    
+    def _start_background_tasks(self):
+        """Start background tasks with scalability integration"""
+        # Check if scalability manager is available
+        if hasattr(self.bot, 'scalability_manager') and self.bot.scalability_manager:
+            # Let scalability manager handle this
+            logger.info("Using scalability manager for background task management")
+        else:
+            # Fallback to traditional approach
+            self.bot.loop.create_task(self.process_message_edits())
+            self.verify_reactions.start()
     
     def cog_unload(self):
         self.verify_reactions.cancel()

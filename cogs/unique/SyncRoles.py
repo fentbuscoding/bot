@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import datetime
 from cogs.logging.logger import CogLogger
 
 ROLE_MAPPING = {
@@ -40,7 +41,7 @@ class SyncRoles(commands.Cog):
         self.bot = bot
         self.staff_channel_id = 1259717946947670099
         self.logger = CogLogger(self.__class__.__name__)
-        self.bot.launch_time = discord.utils.utcnow()
+        self.bot.launch_time = datetime.datetime.now()
         self.logger.info("SyncRoles cog initialized")
     
     async def get_target_servers(self, source_guild):

@@ -25,8 +25,8 @@ class Status(commands.Cog):
 
             if shard_id not in self.shard_stats:
                 self.shard_stats[shard_id] = {
-                    'start_time': discord.utils.utcnow(),
-                    'last_seen': discord.utils.utcnow(),
+                    'start_time': datetime.datetime.now(),
+                    'last_seen': datetime.datetime.now(),
                     'status': 'online'
                 }
 
@@ -34,7 +34,7 @@ class Status(commands.Cog):
                 'guild_count': len(guilds),
                 'user_count': users,
                 'latency': latency,
-                'last_seen': discord.utils.utcnow()
+                'last_seen': datetime.datetime.now()
             })
 
     @commands.command(name="shards", aliases=["status"])
@@ -87,7 +87,7 @@ class Status(commands.Cog):
             )
 
             for shard_id, stats in shards[i:i+5]:
-                uptime = discord.utils.utcnow() - stats['start_time']
+                uptime = datetime.datetime.now() - stats['start_time']
                 days, hours = uptime.days, uptime.seconds // 3600
                 minutes = (uptime.seconds // 60) % 60
 
@@ -124,8 +124,8 @@ class Status(commands.Cog):
         if shard_id not in self.shard_stats:
             self.shard_stats[shard_id] = {}
         self.shard_stats[shard_id].update({
-            'start_time': discord.utils.utcnow(),
-            'last_seen': discord.utils.utcnow(),
+            'start_time': datetime.datetime.now(),
+            'last_seen': datetime.datetime.now(),
             'status': 'online'
         })
         self.update_shard_stats()
@@ -143,7 +143,7 @@ class Status(commands.Cog):
         self.logger.info(f"Shard {shard_id} resumed")
         if shard_id in self.shard_stats:
             self.shard_stats[shard_id]['status'] = 'online'
-            self.shard_stats[shard_id]['last_seen'] = discord.utils.utcnow()
+            self.shard_stats[shard_id]['last_seen'] = datetime.datetime.now()
 
 async def setup(bot):
     await bot.add_cog(Status(bot))

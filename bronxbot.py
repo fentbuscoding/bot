@@ -7,13 +7,48 @@ import os
 import asyncio
 import aiohttp
 import traceback
+import signal
+import atexit
 from discord.ext import commands, tasks
 from typing import Dict, List, Tuple
 from os import system
 import logging
+from utils.command_tracker import usage_tracker
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
+from utils.scalability import initialize_scalability
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
+
+def cleanup_resources():
+    """Cleanup resources on shutdown"""
+    try:
+        if hasattr(bot, 'scalability_manager') and bot.scalability_manager:
+            asyncio.create_task(bot.scalability_manager.cleanup())
+            logging.info("Scalability manager cleanup initiated")
+    except:
+        pass
+    
+    try:
+        usage_tracker.cleanup()
+        logging.info("Command tracker cleanup completed")
+    except:
+        pass
+    
+    logging.info("Resource cleanup completed")
+
+# Register cleanup handler
+atexit.register(cleanup_resources)
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    logging.info(f"Received signal {signum}, shutting down gracefully...")
+    cleanup_resources()
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # config
 with open("data/config.json", "r") as f:
@@ -141,6 +176,37 @@ class BronxBot(commands.AutoShardedBot):
     async def before_update_guilds(self):
         await self.wait_until_ready()
 
+    async def close(self):
+        """Gracefully close bot connections"""
+        logging.info("Shutting down bot...")
+        
+        # Stop background tasks
+        if hasattr(self, 'update_stats') and self.update_stats.is_running():
+            self.update_stats.stop()
+            logging.info("Stopped stats update loop")
+        
+        if hasattr(self, 'update_guilds') and self.update_guilds.is_running():
+            self.update_guilds.stop()
+            logging.info("Stopped guild update loop")
+        
+        # Shutdown scalability manager
+        if hasattr(self, 'scalability_manager') and self.scalability_manager:
+            await self.scalability_manager.shutdown()
+            logging.info("Scalability manager shutdown complete")
+        
+        # Close database connections
+        try:
+            from utils.db import async_db
+            if hasattr(async_db, '_client') and async_db._client:
+                async_db._client.close()
+                logging.info("Closed database connections")
+        except Exception as e:
+            logging.error(f"Error closing database: {e}")
+        
+        # Close aiohttp sessions and other resources
+        await super().close()
+        logging.info("Bot shutdown complete")
+
 
 bot = BronxBot(
     command_prefix='.',
@@ -155,6 +221,7 @@ bot.remove_command('help')
 COG_DATA = {
     "cogs": {
         "cogs.admin.Admin": "warning",
+        "cogs.admin.Performance": "warning",  # Add performance monitoring
         "cogs.misc.Cypher": "cog", 
         "cogs.misc.MathRace": "cog", 
         "cogs.misc.TicTacToe": "cog",
@@ -178,6 +245,7 @@ COG_DATA = {
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
+        "cogs.Error": "success",  # Make sure Error cog is loaded
         #"cogs.Security": "success", disabled for now
         #"cogs.LastFm": "disabled",  disabled for now
     },
@@ -280,6 +348,33 @@ async def on_ready():
         bot.update_stats.start()
         logging.info("Started stats update loop")
 
+    # Start command usage tracker auto-save
+    try:
+        usage_tracker.start_auto_save()
+        logging.info("Started command usage tracker auto-save")
+    except Exception as e:
+        logging.error(f"Failed to start command usage tracker: {e}")
+
+    # Initialize scalability manager
+    try:
+        bot.scalability_manager = await initialize_scalability(bot)
+        logging.info("Scalability manager initialized successfully")
+    except Exception as e:
+        logging.warning(f"Scalability manager initialization failed: {e}")
+        bot.scalability_manager = None
+
+    # Load additional cogs manually
+    try:
+        # Load TOS handler
+        await bot.load_extension('utils.tos_handler')
+        logging.info("TOS handler loaded successfully")
+        
+        # Load Setup wizard
+        await bot.load_extension('cogs.setup.SetupWizard') 
+        logging.info("Setup wizard loaded successfully")
+    except Exception as e:
+        logging.error(f"Failed to load additional cogs: {e}")
+
     guild_cache_start = time.time()
     # Build guild cache
     for guild in bot.guilds:
@@ -362,7 +457,7 @@ async def on_guild_join(guild):
             "• Basic utility commands (.help)\n"
             "• Fun commands and games\n"
             "• Moderation tools\n\n"
-            "*The bot is still in [active development](https://github.com/bronxbot/bot), so feel free to [suggest](https://github.com/bronxbot/bot) new features!*\n\n"
+            "*The bot is still in [active development](https://github.com/bronxbot/bot) *which is open source btw*, so feel free to [suggest](https://github.com/bronxbot/bot) new features!*\n\n"
            
             "• Use .help to see available commands\n"
             "• Use .help <command> for detailed info\n"
@@ -381,56 +476,47 @@ async def on_guild_join(guild):
         print(f"Failed to send welcome message in {guild.name}: {e}")
 
 @bot.event
-async def on_command_error(ctx: commands.Context, error: Exception):
-    """Handle command errors"""
+async def on_command(ctx):
+    """Track command usage and check TOS acceptance"""
+    start_time = time.time()
+    ctx.command_start_time = start_time
+    
+    # Skip TOS check for essential commands that users need access to
+    exempt_commands = [
+        'tos', 'terms', 'termsofservice', 'tosinfo', 'tosdetails',  # TOS related
+        'help', 'h', 'commands',  # Help command and aliases
+        'support', 'invite',  # Support commands
+        'ping', 'pong'  # Basic utility
+    ]
+    
+    if ctx.command.name not in exempt_commands:
+        # Check TOS acceptance for all other commands
+        accepted = await check_tos_acceptance(ctx.author.id)
+        if not accepted:
+            await prompt_tos_acceptance(ctx)
+            raise commands.CommandError("TOS not accepted")
+
+@bot.event 
+async def on_command_completion(ctx):
+    """Track successful command completion"""
+    execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
+    usage_tracker.track_command(ctx, ctx.command.qualified_name, execution_time, error=False)
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Track command errors and let Error cog handle the rest"""
+    execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
+    usage_tracker.track_command(ctx, ctx.command.qualified_name if ctx.command else 'unknown', execution_time, error=True)
+    
+    # Let the Error cog handle most errors first
+    if hasattr(bot, 'get_cog') and bot.get_cog('Error'):
+        return  # Let the Error cog handle it
+    
+    # Fallback error handling if Error cog is not loaded
     if isinstance(error, commands.CommandNotFound):
         return
-    elif isinstance(error, commands.NotOwner):
-        embed = discord.Embed(
-            title="Error",
-            description="❌ This command can only be used by the bot owner.",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed, delete_after=10)
-    elif isinstance(error, commands.MissingPermissions):
-        perms = ', '.join(error.missing_permissions)
-        embed = discord.Embed(
-            title="Error",
-            description=f"❌ You need the following permissions: `{perms}`",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed, delete_after=10)
-    elif isinstance(error, commands.BotMissingPermissions):
-        perms = ', '.join(error.missing_permissions)
-        embed = discord.Embed(
-            title="Error",
-            description=f"❌ I need the following permissions: `{perms}`",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed, delete_after=10)
-    elif isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(
-            title="Error",
-            description=f"❌ Missing required argument: `{error.param.name}`",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed, delete_after=10)
-    elif isinstance(error, commands.CommandOnCooldown):
-        embed = discord.Embed(
-            title="Cooldown",
-            description=f"⏰ Try again in {error.retry_after:.2f}s",
-            color=discord.Color.gold()
-        )
-        await ctx.send(embed=embed, delete_after=5)
-    elif isinstance(error, commands.CheckFailure):
-        embed = discord.Embed(
-            title="Error",
-            description="❌ You do not have permission to use this command in this channel.",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed, delete_after=10)
     else:
-        print(f"Unhandled error in {ctx.command}: {error}")
+        print(f"Fallback error handler: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
 
 @bot.command()

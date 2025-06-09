@@ -59,7 +59,7 @@ class StatsLogger:
             stats["command_usage"][command_name] = 0
             
         stats["command_usage"][command_name] += 1
-        stats["last_updated"] = datetime.utcnow().isoformat()
+        stats["last_updated"] = datetime.now().isoformat()
         
         self._save_stats(stats)
     
@@ -81,7 +81,7 @@ class StatsLogger:
             "user_id": str(user_id),
             "command": command_name,
             "amount": amount,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now().isoformat()
         }
         
         key = "biggest_wins" if is_win else "biggest_losses"
@@ -94,7 +94,7 @@ class StatsLogger:
         )
         stats["economy_stats"][key] = stats["economy_stats"][key][:10]
         
-        stats["last_updated"] = datetime.utcnow().isoformat()
+        stats["last_updated"] = datetime.now().isoformat()
         self._save_stats(stats)
     
     def get_command_usage_stats(self) -> Dict[str, int]:
