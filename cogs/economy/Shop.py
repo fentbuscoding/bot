@@ -76,7 +76,7 @@ class ShopItemButton(Button):
         if modal.amount.value:
             try:
                 amount = int(modal.amount.value)
-                await self.view.cog.process_purchase(interaction.user.id, self.item['id'], amount, self.item['type'])
+                await self.view.cog.process_purchase(interaction.user.id, self.item['_id'], amount, self.item['type'])
             except Exception as e:
                 print(f"Error processing purchase: {e}")
 
@@ -196,7 +196,10 @@ class Shop(commands.Cog):
         collection = await self.get_collection(item_type)
         if not collection:
             return None
-        return await collection.find_one({"id": item_id})
+        item = await collection.find_one({"id": item_id})
+        if not item:
+            item = await collection.find_one({"_id": item_id})
+        return item
 
     async def get_shop_items(self, item_type: str) -> List[Dict]:
         """Get all items of a specific type, sorted by price (cheapest first)"""
@@ -320,49 +323,86 @@ class Shop(commands.Cog):
 
     @commands.command()
     async def buy(self, ctx, item_id: str = None, amount: int = 1):
-        """Buy an item from the shop"""
+        """Buy an item from the shop with better error handling"""
         if not item_id:
-            await ctx.send(f"Please specify an item ID! Use `{ctx.prefix}shop` to browse items.")
-            return
-        
-        if amount <= 0:
-            await ctx.send("Amount must be positive!")
-            return
-        
-        # Determine item type by checking all collections
-        item = None
-        item_type = None
-        for collection_type in self.supported_types:
-            collection = await self.get_collection(collection_type)
-            if collection is None:  # Skip if collection doesn't exist
-                continue
-            found_item = await collection.find_one({"id": item_id})
-            if found_item:
-                item = found_item
-                item_type = collection_type
-                break
-        
-        if not item:
-            await ctx.send("Item not found!")
-            return
-        
-        total_price = item['price'] * amount
-        user_balance = await self.get_wallet(ctx.author.id)
-        
-        if user_balance < total_price:
-            await ctx.send(f"You don't have enough {self.currency}! You need {total_price}{self.currency} but only have {user_balance}{self.currency}.")
-            return
-        
-        success = await self.process_purchase(ctx.author.id, item_id, amount, item_type)
-        if success:
             embed = discord.Embed(
-                title="Purchase Successful!",
-                description=f"You bought {amount}x **{item['name']}** for {total_price}{self.currency}",
-                color=discord.Color.green()
+                title="Purchase Error",
+                description=f"Please specify an item ID! Use `{ctx.prefix}shop` to browse items.",
+                color=discord.Color.red()
             )
             await ctx.send(embed=embed)
-        else:
-            await ctx.send("There was an error processing your purchase. Please try again.")
-
+            return
+        
+        try:
+            amount = int(amount)
+            if amount <= 0:
+                await ctx.send("Amount must be positive!")
+                return
+            
+            # Determine item type
+            item = None
+            item_type = None
+            for collection_type in self.supported_types:
+                found_item = await self.get_item(item_id, collection_type)
+                if found_item:
+                    item = found_item
+                    item_type = collection_type
+                    break
+            
+            if not item:
+                embed = discord.Embed(
+                    title="Item Not Found",
+                    description=f"Could not find item with ID `{item_id}`",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            total_price = item['price'] * amount
+            user_balance = await self.get_wallet(ctx.author.id)
+            
+            if user_balance < total_price:
+                embed = discord.Embed(
+                    title="Insufficient Funds",
+                    description=(
+                        f"You need {total_price}{self.currency} but only have {user_balance}{self.currency}.\n"
+                        f"Use `{ctx.prefix}daily` to get some free coins!"
+                    ),
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            success = await self.process_purchase(ctx.author.id, item_id, amount, item_type)
+            if success:
+                embed = discord.Embed(
+                    title="Purchase Successful!",
+                    description=f"You bought {amount}x **{item['name']}** for {total_price}{self.currency}",
+                    color=discord.Color.green()
+                )
+                await ctx.send(embed=embed)
+            else:
+                embed = discord.Embed(
+                    title="Purchase Failed",
+                    description="There was an error processing your purchase. Please try again.",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
+                
+        except ValueError:
+            embed = discord.Embed(
+                title="Invalid Amount",
+                description="Please enter a valid number for the amount.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+        except Exception as e:
+            print(f"Error in buy command: {e}")
+            embed = discord.Embed(
+                title="Unexpected Error",
+                description="An unexpected error occurred. Please try again later.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
 async def setup(bot):
     await bot.add_cog(Shop(bot))

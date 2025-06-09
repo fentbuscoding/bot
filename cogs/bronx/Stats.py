@@ -20,7 +20,7 @@ class Stats(commands.Cog):
     @commands.command(name="stats", aliases=["st"])
     @commands.is_owner()
     async def stats(self, ctx):
-        stats = await db.get_stats(ctx.guild.id)
+        stats = db.get_stats(ctx.guild.id)
         
         embed = discord.Embed(
             description=f"""
@@ -37,7 +37,7 @@ class Stats(commands.Cog):
     @commands.command(name="resetstats", aliases=["rst"])
     @commands.is_owner()
     async def resetstats(self, ctx):
-        if await db.reset_stats(ctx.guild.id):
+        if db.reset_stats(ctx.guild.id):
             await ctx.reply("Stats have been reset for this guild!")
         else:
             await ctx.reply("Failed to reset stats!")

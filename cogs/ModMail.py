@@ -63,8 +63,7 @@ class ModMail(commands.Cog, ErrorHandler):
         if message.author == self.bot.user:
             return
         if message.author.bot:
-            return
-        
+            return        
         # Handle DM messages
         if isinstance(message.channel, discord.DMChannel):
             if str(message.author.id) not in self.active_tickets:
@@ -75,14 +74,15 @@ class ModMail(commands.Cog, ErrorHandler):
                             description="Sorry, ModMail is only available to members of our servers.",
                             color=discord.Color.red()
                         )
+                    elif await self.can_use_modmail(message.author) and len(message.content) > 10:
+                        await self.create_new_modmail(message)
                     else:
                         embed = discord.Embed(
                             description="To create a modmail ticket, send a message containing your issue.\nExample: `I need help with...`",
                             color=discord.Color.blue()
                         )
                     await message.author.send(embed=embed)
-                else:
-                    await self.create_new_modmail(message)
+
             else:
                 await self.forward_to_thread(message)
         

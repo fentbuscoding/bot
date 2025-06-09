@@ -14,13 +14,16 @@ def load_welcome_data():
 WELCOME_DATA = load_welcome_data()
 
 def welcome_embed(member):
-    character_key = random.choice(list(WELCOME_DATA['characters'].keys()))
-    character_url = WELCOME_DATA['characters'][character_key]
+    # Get a random character key from the dictionary
+    character_name = random.choice(list(WELCOME_DATA["characters"].keys()))
+    character = WELCOME_DATA["characters"][character_name]
+    character_url = character['image']
+    
     return discord.Embed(
-        description=f"\"{random.choice(WELCOME_DATA['messages'])}\"\n\n[main](https://discord.gg/furryporn) • [backup](https://discord.gg/W563EnFwed) • [appeal](https://discord.gg/6Th9dsw6rM)",
+        description=f"\"{random.choice(character['messages'])}\"\n\n[main](https://discord.gg/furryporn) • [backup](https://discord.gg/W563EnFwed) • [appeal](https://discord.gg/6Th9dsw6rM)",
         color=discord.Color.random()
     ).set_author(
-        name=character_key.lower(),
+        name=character_name,  # Use the character name directly
         icon_url=character_url,
         url="https://discord.gg/6Th9dsw6rM"
     ).set_footer(text="click name to appeal if banned")
@@ -42,7 +45,7 @@ class Welcoming(commands.Cog):
 
         with open('data/config.json', 'r') as f:
             config = json.load(f)
-            welcome_channel = config.get('welcome_channel', 1378156495144751147)
+            welcome_channel = config.get('WELCOME_CHANNEL', 1378156495144751147)
 
         logger.info(f"[+] Member joined: {member} in guild {member.guild.id}")
 
@@ -72,7 +75,7 @@ class Welcoming(commands.Cog):
         with open('data/config.json', 'r') as f:
             config = json.load(f)
         
-        config['welcome_channel'] = channel.id
+        config['WELCOME_CHANNEL'] = channel.id
         
         with open('data/config.json', 'w') as f:
             json.dump(config, f, indent=4)

@@ -247,7 +247,7 @@ class Economy(commands.Cog):
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily(self, ctx):
         """Claim your daily reward"""
-        amount = random.randint(100, 500)
+        amount = random.randint(1000, 5000)
         await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
         await ctx.reply(f"Daily reward claimed! +**{amount}** {self.currency}")
 
@@ -266,13 +266,14 @@ class Economy(commands.Cog):
         if victim == ctx.author:
             return await ctx.reply("You can't rob yourself!")
         
+        author_bal = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
         victim_bal = await db.get_wallet_balance(victim.id, ctx.guild.id)
         if victim_bal < 100:
             return await ctx.reply("They're too poor to rob!")
         
         chance = random.random()
         if chance < 0.6:  # 60% chance to fail
-            fine = int((random.random() * 0.3 + 0.1) * victim_bal)
+            fine = int((random.random() * 0.3 + 0.1) * author_bal)
 
             await db.update_wallet(ctx.author.id, -fine, ctx.guild.id)
             await db.update_wallet(victim.id, fine, ctx.guild.id)

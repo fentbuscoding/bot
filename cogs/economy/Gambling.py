@@ -695,14 +695,15 @@ class Gambling(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def crash(self, ctx, bet: str, auto_cashout: MultiplierConverter = None):
         """Bet on a multiplier that can crash at any moment
-        `.crash all 1.2x` <- put it all on crash, and auto cashout when it hits 1.2x
+        `.crash all 1.2x` <- put it all on crash, and auto cashout when it hits 1.2x (Wont work because it must be at least 1.35x!)
         `.crash 500 1.5` <- bet 500 with auto cashout at 1.5x
         """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
-        elif auto_cashout > 0 & auto_cashout < 1.35 or auto_cashout < 0:
-            return await ctx.reply("❌ Autocashout must be greater than 1.35!")
-        
+
+        elif auto_cashout: 
+            if auto_cashout > 0 and auto_cashout < 1.35 or auto_cashout < 0:
+                return await ctx.reply("❌ Autocashout must be greater than 1.35!")
         self.active_games.add(ctx.author.id)
         
         try:
@@ -739,7 +740,7 @@ class Gambling(commands.Cog):
             self.logger.error(f"Crash error: {e}")
             if ctx.author.id in self.active_games:
                 self.active_games.remove(ctx.author.id)
-            await ctx.reply("❌ An error occurred while starting the game.")
+            await ctx.send("❌ An error occurred while starting the game.")
 
     async def _run_crash_game(self, ctx, view, bet: int, current_balance: int, auto_cashout: float = None):
         """Run the crash game sequence with exact crash points"""
