@@ -474,7 +474,7 @@ class AutoFishing(commands.Cog):
             print(f"Error buying autofisher: {e}")
             await safe_reply(ctx, "❌ Error purchasing autofisher!")
 
-    @auto.command()
+    @auto.command(aliases=['dep', 'd'])
     async def deposit(self, ctx, amount: int):
         """Deposit money into autofisher balance"""
         if amount <= 0:

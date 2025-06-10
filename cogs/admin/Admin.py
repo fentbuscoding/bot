@@ -954,6 +954,420 @@ class Admin(commands.Cog):
             self.logger.error(f"Failed to give rods and bait to user {target_user.id}: {e}")
             await ctx.reply(f"❌ Error giving rods and bait: {e}")
 
+    @commands.command(name="repair")
+    @commands.has_permissions(administrator=True)
+    async def repair_user_data(self, ctx, user: discord.Member = None):
+        """Repair broken user data in the database
+        Usage: .repair [@user]
+        If no user specified, repairs the command author's data"""
+        
+        target_user = user or ctx.author
+        
+        try:
+            # Get current user data
+            user_doc = await self.db.db.users.find_one({"_id": str(target_user.id)})
+            
+            if not user_doc:
+                embed = discord.Embed(
+                    title="🔧 User Data Repair",
+                    description=f"No data found for {target_user.mention}. Creating new user profile...",
+                    color=discord.Color.blue()
+                )
+                
+                # Create new user document with proper structure
+                await self.db.db.users.update_one(
+                    {"_id": str(target_user.id)},
+                    {
+                        "$setOnInsert": {
+                            "wallet": 0,
+                            "bank": 0,
+                            "inventory": {
+                                "rod": {},
+                                "bait": {},
+                                "potions": {},
+                                "upgrades": {},
+                                "items": {}
+                            },
+                            "fishing": {
+                                "selected_rod": None,
+                                "selected_bait": None,
+                                "fish_caught": {}
+                            },
+                            "active_effects": {},
+                            "last_daily": None,
+                            "last_work": None
+                        }
+                    },
+                    upsert=True
+                )
+                
+                embed.add_field(
+                    name="✅ Created New Profile",
+                    value="User profile created with proper structure",
+                    inline=False
+                )
+                
+                return await ctx.reply(embed=embed)
+            
+            # Track what repairs were made
+            repairs_made = []
+            updates = {}
+            
+            # Fix wallet/bank if they're missing or invalid
+            if "wallet" not in user_doc or not isinstance(user_doc.get("wallet"), (int, float)):
+                updates["wallet"] = 0
+                repairs_made.append("🔧 Reset wallet to 0")
+            
+            if "bank" not in user_doc or not isinstance(user_doc.get("bank"), (int, float)):
+                updates["bank"] = 0
+                repairs_made.append("🔧 Reset bank to 0")
+            
+            # Fix inventory structure
+            inventory = user_doc.get("inventory", [])
+            
+            # If inventory is a list (old format), convert to proper nested structure
+            if isinstance(inventory, list):
+                new_inventory = {
+                    "rod": {},
+                    "bait": {},
+                    "potions": {},
+                    "upgrades": {}
+                }
+                
+                # Migrate items from old list format
+                for item in inventory:
+                    if isinstance(item, dict) and "type" in item:
+                        item_type = item["type"]
+                        item_id = item.get("id", item.get("_id", "unknown"))
+                        quantity = item.get("quantity", item.get("amount", 1))
+                        
+                        if item_type in ["potion"]:
+                            new_inventory["potions"][item_id] = quantity
+                        elif item_type in ["upgrade"]:
+                            new_inventory["upgrades"][item_id] = quantity
+                        elif item_type in ["rod"]:
+                            new_inventory["rod"][item_id] = quantity
+                        elif item_type in ["bait"]:
+                            new_inventory["bait"][item_id] = quantity
+                
+                updates["inventory"] = new_inventory
+                repairs_made.append("🔄 Converted inventory from list to nested structure")
+            
+            # If inventory is dict but missing required sections
+            elif isinstance(inventory, dict):
+                required_sections = ["rod", "bait", "potions", "upgrades"]
+                missing_sections = []
+                
+                for section in required_sections:
+                    if section not in inventory:
+                        if "inventory" not in updates:
+                            updates["inventory"] = inventory.copy()
+                        updates["inventory"][section] = {}
+                        missing_sections.append(section)
+                
+                if missing_sections:
+                    repairs_made.append(f"➕ Added missing inventory sections: {', '.join(missing_sections)}")
+            
+            # Fix fishing data structure
+            if "fishing" not in user_doc or not isinstance(user_doc.get("fishing"), dict):
+                updates["fishing"] = {
+                    "selected_rod": None,
+                    "selected_bait": None,
+                    "fish_caught": {}
+                }
+                repairs_made.append("🎣 Fixed fishing data structure")
+            else:
+                fishing = user_doc["fishing"]
+                fishing_updates = {}
+                
+                if "selected_rod" not in fishing:
+                    fishing_updates["selected_rod"] = None
+                if "selected_bait" not in fishing:
+                    fishing_updates["selected_bait"] = None
+                if "fish_caught" not in fishing or not isinstance(fishing.get("fish_caught"), dict):
+                    fishing_updates["fish_caught"] = {}
+                
+                if fishing_updates:
+                    updates["fishing"] = {**fishing, **fishing_updates}
+                    repairs_made.append("🔧 Fixed missing fishing data fields")
+            
+            # Fix active effects structure
+            if "active_effects" not in user_doc or not isinstance(user_doc.get("active_effects"), dict):
+                updates["active_effects"] = {}
+                repairs_made.append("✨ Fixed active effects structure")
+            
+            # Ensure numeric fields are properly typed
+            numeric_fields = ["wallet", "bank"]
+            for field in numeric_fields:
+                if field in user_doc:
+                    value = user_doc[field]
+                    if not isinstance(value, (int, float)):
+                        try:
+                            updates[field] = int(float(str(value)))
+                            repairs_made.append(f"🔢 Fixed {field} data type")
+                        except (ValueError, TypeError):
+                            updates[field] = 0
+                            repairs_made.append(f"🔢 Reset corrupted {field} to 0")
+            
+            # Clean up any invalid nested inventory values
+            if "inventory" in updates or isinstance(user_doc.get("inventory"), dict):
+                current_inv = updates.get("inventory", user_doc.get("inventory", {}))
+                cleaned_inv = {}
+                
+                for section, items in current_inv.items():
+                    if isinstance(items, dict):
+                        cleaned_section = {}
+                        for item_id, quantity in items.items():
+                            # Ensure quantities are positive integers
+                            try:
+                                clean_qty = max(0, int(float(str(quantity))))
+                                if clean_qty > 0:  # Only keep items with positive quantities
+                                    cleaned_section[item_id] = clean_qty
+                            except (ValueError, TypeError):
+                                # Skip invalid quantities
+                                continue
+                        cleaned_inv[section] = cleaned_section
+                    else:
+                        cleaned_inv[section] = {}
+                
+                if cleaned_inv != current_inv:
+                    updates["inventory"] = cleaned_inv
+                    repairs_made.append("🧹 Cleaned invalid inventory quantities")
+            
+            # Apply all updates if any repairs were needed
+            if updates:
+                await self.db.db.users.update_one(
+                    {"_id": str(target_user.id)},
+                    {"$set": updates}
+                )
+            
+            # Create result embed
+            embed = discord.Embed(
+                title="🔧 User Data Repair Complete",
+                description=f"**User:** {target_user.mention}",
+                color=discord.Color.green() if repairs_made else discord.Color.blue()
+            )
+            
+            if repairs_made:
+                embed.add_field(
+                    name="✅ Repairs Made",
+                    value="\n".join(repairs_made),
+                    inline=False
+                )
+                embed.add_field(
+                    name="💡 What was fixed",
+                    value=(
+                        "• Inventory structure (list → nested dict)\n"
+                        "• Missing wallet/bank fields\n"
+                        "• Fishing data structure\n"
+                        "• Active effects structure\n"
+                        "• Invalid data types\n"
+                        "• Negative/invalid quantities"
+                    ),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="✅ No Issues Found",
+                    value="User data structure is already correct!",
+                    inline=False
+                )
+            
+            # Get final data summary
+            final_doc = await self.db.db.users.find_one({"_id": str(target_user.id)})
+            if final_doc:
+                wallet = final_doc.get("wallet", 0)
+                bank = final_doc.get("bank", 0)
+                inventory = final_doc.get("inventory", {})
+                
+                # Count inventory items
+                total_items = 0
+                for section in inventory.values():
+                    if isinstance(section, dict):
+                        total_items += sum(section.values())
+                
+                embed.add_field(
+                    name="📊 Current Status",
+                    value=(
+                        f"💰 Wallet: {wallet:,}\n"
+                        f"🏦 Bank: {bank:,}\n"
+                        f"📦 Total Items: {total_items}\n"
+                        f"🎣 Rods: {len(inventory.get('rod', {}))}\n"
+                        f"🪱 Bait Types: {len(inventory.get('bait', {}))}\n"
+                        f"🧪 Potions: {len(inventory.get('potions', {}))}\n"
+                        f"⬆️ Upgrades: {len(inventory.get('upgrades', {}))}"
+                    ),
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to repair user data for {target_user.id}: {e}")
+            embed = discord.Embed(
+                title="❌ Repair Failed",
+                description=f"An error occurred while repairing data for {target_user.mention}:\n```{str(e)}```",
+                color=discord.Color.red()
+            )
+            await ctx.reply(embed=embed)
+
+    @commands.command(name="repair_all")
+    @commands.is_owner()
+    async def repair_all_users(self, ctx, limit: int = 50):
+        """Repair all users with broken data (Bot Owner Only)
+        Usage: .repair_all [limit]
+        Default limit: 50 users"""
+        
+        if limit <= 0 or limit > 500:
+            return await ctx.reply("❌ Limit must be between 1 and 500!")
+        
+        try:
+            # Get all users
+            users_cursor = self.db.db.users.find({}).limit(limit)
+            users = await users_cursor.to_list(length=limit)
+            
+            if not users:
+                return await ctx.reply("No users found in database!")
+            
+            embed = discord.Embed(
+                title="🔧 Bulk User Data Repair",
+                description=f"Checking {len(users)} users for data issues...",
+                color=discord.Color.blue()
+            )
+            message = await ctx.reply(embed=embed)
+            
+            repaired_count = 0
+            total_repairs = []
+            failed_users = []
+            
+            for user_doc in users:
+                user_id = user_doc["_id"]
+                
+                try:
+                    repairs_made = []
+                    updates = {}
+                    
+                    # Same repair logic as single user repair
+                    # Fix wallet/bank
+                    if "wallet" not in user_doc or not isinstance(user_doc.get("wallet"), (int, float)):
+                        updates["wallet"] = 0
+                        repairs_made.append("wallet")
+                    
+                    if "bank" not in user_doc or not isinstance(user_doc.get("bank"), (int, float)):
+                        updates["bank"] = 0
+                        repairs_made.append("bank")
+                    
+                    # Fix inventory structure
+                    inventory = user_doc.get("inventory", [])
+                    
+                    if isinstance(inventory, list):
+                        new_inventory = {"rod": {}, "bait": {}, "potions": {}, "upgrades": {}}
+                        
+                        for item in inventory:
+                            if isinstance(item, dict) and "type" in item:
+                                item_type = item["type"]
+                                item_id = item.get("id", item.get("_id", "unknown"))
+                                quantity = item.get("quantity", item.get("amount", 1))
+                                
+                                if item_type == "potion":
+                                    new_inventory["potions"][item_id] = quantity
+                                elif item_type == "upgrade":
+                                    new_inventory["upgrades"][item_id] = quantity
+                                elif item_type == "rod":
+                                    new_inventory["rod"][item_id] = quantity
+                                elif item_type == "bait":
+                                    new_inventory["bait"][item_id] = quantity
+                        
+                        updates["inventory"] = new_inventory
+                        repairs_made.append("inventory_structure")
+                    
+                    elif isinstance(inventory, dict):
+                        required_sections = ["rod", "bait", "potions", "upgrades"]
+                        missing_sections = []
+                        
+                        for section in required_sections:
+                            if section not in inventory:
+                                if "inventory" not in updates:
+                                    updates["inventory"] = inventory.copy()
+                                updates["inventory"][section] = {}
+                                missing_sections.append(section)
+                        
+                        if missing_sections:
+                            repairs_made.append("inventory_sections")
+                    
+                    # Fix fishing data
+                    if "fishing" not in user_doc or not isinstance(user_doc.get("fishing"), dict):
+                        updates["fishing"] = {
+                            "selected_rod": None,
+                            "selected_bait": None,
+                            "fish_caught": {}
+                        }
+                        repairs_made.append("fishing_data")
+                    
+                    # Fix active effects
+                    if "active_effects" not in user_doc or not isinstance(user_doc.get("active_effects"), dict):
+                        updates["active_effects"] = {}
+                        repairs_made.append("active_effects")
+                    
+                    # Apply updates if needed
+                    if updates:
+                        await self.db.db.users.update_one(
+                            {"_id": user_id},
+                            {"$set": updates}
+                        )
+                        repaired_count += 1
+                        total_repairs.extend(repairs_made)
+                
+                except Exception as e:
+                    failed_users.append(f"{user_id}: {str(e)[:50]}")
+            
+            # Update embed with results
+            embed = discord.Embed(
+                title="✅ Bulk Repair Complete",
+                description=f"Processed {len(users)} users",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="📊 Results",
+                value=(
+                    f"✅ Users Repaired: {repaired_count}\n"
+                    f"⚠️ Failed Repairs: {len(failed_users)}\n"
+                    f"🔧 Total Fixes: {len(total_repairs)}"
+                ),
+                inline=False
+            )
+            
+            if total_repairs:
+                repair_counts = {}
+                for repair in total_repairs:
+                    repair_counts[repair] = repair_counts.get(repair, 0) + 1
+                
+                repair_summary = "\n".join([f"• {repair}: {count}" for repair, count in repair_counts.items()])
+                embed.add_field(
+                    name="🔧 Repairs Made",
+                    value=repair_summary,
+                    inline=False
+                )
+            
+            if failed_users:
+                embed.add_field(
+                    name="❌ Failed Users",
+                    value="\n".join(failed_users[:5]) + ("..." if len(failed_users) > 5 else ""),
+                    inline=False
+                )
+            
+            await message.edit(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to repair all users: {e}")
+            embed = discord.Embed(
+                title="❌ Bulk Repair Failed",
+                description=f"An error occurred during bulk repair:\n```{str(e)}```",
+                color=discord.Color.red()
+            )
+            await ctx.reply(embed=embed)
+
     @commands.command()
     @commands.is_owner()
     async def test(self, ctx):
