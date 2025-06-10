@@ -20,6 +20,119 @@ class AutoFishing(commands.Cog):
         self.autofishing_task = None
         self.last_autofish_time = datetime.datetime.now()
         
+        # Load available rods and baits from JSON files
+        self.available_rods = self._load_available_rods()
+        self.available_baits = self._load_available_baits()
+        
+        # Rod and bait aliases for easier user input
+        self.rod_aliases = {
+            # Basic rods
+            "basic": "basic_rod",
+            "bamboo": "basic_rod",
+            "starter": "basic_rod",
+            
+            # Advanced rods
+            "advanced": "advanced_rod",
+            "fiber": "advanced_rod",
+            "fiberglass": "advanced_rod",
+            
+            # Pro rods
+            "pro": "pro_rod",
+            "carbon": "pro_rod",
+            "professional": "pro_rod",
+            
+            # Master rods
+            "master": "master_rod",
+            "titanium": "master_rod",
+            
+            # Legendary rods
+            "legendary": "legendary_rod",
+            "legend": "legendary_rod",
+            "leg": "legendary_rod",
+            
+            # Mythical rods
+            "mythical": "mythical_rod",
+            "myth": "mythical_rod",
+            "godly": "mythical_rod",
+            
+            # Cosmic rods
+            "cosmic": "cosmic_rod",
+            "star": "cosmic_rod",
+            "space": "cosmic_rod",
+            
+            # High-end rods (from JSON)
+            "quantum": "quantum_rod",
+            "q": "quantum_rod",
+            "void": "void_rod",
+            "shadow": "void_rod",
+            "celestial": "celestial_rod",
+            "heaven": "celestial_rod",
+            "divine": "divine_rod",
+            "god": "divine_rod",
+            "reality": "reality_rod",
+            "real": "reality_rod",
+            "multiverse": "multiverse_rod",
+            "multi": "multiverse_rod",
+            "infinite": "infinite_rod",
+            "inf": "infinite_rod",
+            "transcendent": "transcendent_rod",
+            "trans": "transcendent_rod"
+        }
+        
+        self.bait_aliases = {
+            # Basic baits
+            "beginner": "beginner_bait",
+            "basic": "beginner_bait",
+            "worm": "beginner_bait",
+            "worms": "beginner_bait",
+            
+            # Pro baits
+            "pro": "pro_bait",
+            "professional": "pro_bait",
+            
+            # Premium baits
+            "premium": "premium_bait",
+            "prem": "premium_bait",
+            
+            # Legendary baits
+            "legendary": "legendary_bait",
+            "legend": "legendary_bait",
+            "leg": "legendary_bait",
+            
+            # Mythical baits
+            "mythical": "mythical_bait",
+            "myth": "mythical_bait",
+            
+            # Divine baits
+            "divine": "divine_bait",
+            "god": "divine_bait",
+            "holy": "divine_bait",
+            
+            # Cosmic baits
+            "cosmic": "cosmic_bait",
+            "star": "cosmic_bait",
+            "space": "cosmic_bait",
+            
+            # Quantum baits
+            "quantum": "quantum_bait",
+            "q": "quantum_bait",
+            
+            # Void baits
+            "void": "void_bait",
+            "shadow": "void_bait",
+            "dark": "void_bait",
+            
+            # Crystalline baits
+            "crystalline": "crystalline_bait",
+            "crystal": "crystalline_bait",
+            "gem": "crystalline_bait",
+            
+            # Celestial baits
+            "celestial": "celestial_bait",
+            "heaven": "celestial_bait",
+            "angel": "celestial_bait"
+        }
+        
         # Bag limit system - based on total deposited amount
         self.BAG_LIMITS = {
             0: 10,        # Default: 10 fish
@@ -104,7 +217,7 @@ class AutoFishing(commands.Cog):
         return False
 
     async def remove_any_bait(self, user_id: int):
-        """Remove one bait of any type from user's inventory"""
+        """Remove one bait of any type from user's inventory - Fixed version"""
         try:
             inventory = await self.get_user_inventory(user_id)
             if not inventory:
@@ -113,11 +226,26 @@ class AutoFishing(commands.Cog):
             bait_inventory = inventory.get("bait", {})
             for bait_id, quantity in bait_inventory.items():
                 if quantity > 0:
+                    # Use the new inventory structure
                     result = await db.db.users.update_one(
                         {"_id": str(user_id), f"inventory.bait.{bait_id}": {"$gt": 0}},
                         {"$inc": {f"inventory.bait.{bait_id}": -1}}
                     )
+                    if result.modified_count > 0:
+                        return True
+                    
+            # Try old structure as fallback
+            user_data = await db.db.users.find_one({"_id": str(user_id)})
+            if user_data and "bait" in user_data:
+                old_bait = user_data.get("bait", [])
+                if old_bait:
+                    # Remove first available bait
+                    result = await db.db.users.update_one(
+                        {"_id": str(user_id)},
+                        {"$pop": {"bait": -1}}  # Remove first element
+                    )
                     return result.modified_count > 0
+                    
             return False
         except Exception as e:
             print(f"Error removing bait: {e}")
@@ -405,28 +533,63 @@ class AutoFishing(commands.Cog):
             return await safe_reply(ctx, "Amount must be positive!")
             
         try:
+            # Check if user has autofisher
             user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
             if not user_data or not user_data.get("autofisher", {}).get("count", 0):
-                return await safe_reply(ctx, "Buy an autofisher first!")
+                return await safe_reply(ctx, "❌ Buy an autofisher first!")
                 
+            # Check user balance
             balance = await db.get_balance(ctx.author.id)
             if balance < amount:
-                return await safe_reply(ctx, f"You only have {balance} {self.currency}")
+                return await safe_reply(ctx, f"❌ You only have {balance:,} {self.currency}")
                 
-            if await db.update_balance(ctx.author.id, -amount):
-                await db.db.users.update_one(
-                    {"_id": str(ctx.author.id)},
-                    {"$inc": {
-                        "autofisher.balance": amount,
-                        "autofisher.total_deposited": amount
-                    }}
+            # Attempt to update balance
+            balance_updated = await db.update_balance(ctx.author.id, -amount)
+            if not balance_updated:
+                return await safe_reply(ctx, "❌ Failed to deduct money from your wallet!")
+            
+            # Update autofisher data
+            result = await db.db.users.update_one(
+                {"_id": str(ctx.author.id)},
+                {"$inc": {
+                    "autofisher.balance": amount,
+                    "autofisher.total_deposited": amount
+                }},
+                upsert=True
+            )
+            
+            if result.modified_count > 0 or result.upserted_id:
+                # Verify the deposit worked
+                updated_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
+                new_balance = updated_data.get("autofisher", {}).get("balance", 0)
+                total_deposited = updated_data.get("autofisher", {}).get("total_deposited", 0)
+                
+                embed = discord.Embed(
+                    title="✅ Deposit Successful!",
+                    description=f"Deposited **{amount:,}** {self.currency} into autofisher",
+                    color=discord.Color.green()
                 )
-                await safe_reply(ctx, f"✅ Deposited {amount} {self.currency}!")
+                embed.add_field(name="New Balance", value=f"{new_balance:,} {self.currency}", inline=True)
+                embed.add_field(name="Total Deposited", value=f"{total_deposited:,} {self.currency}", inline=True)
+                
+                # Show bag limit upgrade if applicable
+                bag_limit = self.get_bag_limit(total_deposited)
+                embed.add_field(name="Fish Bag Limit", value=f"{bag_limit} fish", inline=True)
+                
+                await safe_reply(ctx, embed=embed)
             else:
-                await safe_reply(ctx, "❌ Failed to deposit money!")
+                # Refund if autofisher update failed
+                await db.update_balance(ctx.author.id, amount)
+                await safe_reply(ctx, "❌ Failed to update autofisher balance! Money refunded.")
+                
         except Exception as e:
             print(f"Error depositing to autofisher: {e}")
-            await safe_reply(ctx, "❌ Error depositing money!")
+            # Try to refund on error
+            try:
+                await db.update_balance(ctx.author.id, amount)
+            except:
+                pass
+            await safe_reply(ctx, "❌ Error depositing money! Please try again.")
 
     @auto.command()
     async def collect(self, ctx):
@@ -517,11 +680,113 @@ class AutoFishing(commands.Cog):
             print(f"Error checking autofisher status: {e}")
             await safe_reply(ctx, "❌ Error checking autofisher status!")
 
-    @auto.command()
+    def _load_available_rods(self):
+        """Load available rod types from JSON file"""
+        try:
+            import json
+            import os
+            
+            # Start with hardcoded rods
+            available = ["basic_rod", "advanced_rod", "pro_rod", "master_rod", "legendary_rod", "mythical_rod", "cosmic_rod"]
+            
+            # Try to load from JSON
+            json_path = "data/shop/rods.json"
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    rods_data = json.load(f)
+                
+                # Add JSON rods
+                for rod_id in rods_data.keys():
+                    if rod_id not in available:
+                        available.append(rod_id)
+                        
+                print(f"Loaded {len(rods_data)} rod types from JSON")
+            else:
+                print(f"Rod JSON file not found at {json_path}")
+                    
+            return available
+        except Exception as e:
+            print(f"Could not load rods from JSON: {e}")
+            return ["basic_rod", "advanced_rod", "pro_rod", "master_rod", "legendary_rod", "mythical_rod", "cosmic_rod"]
+
+    def _load_available_baits(self):
+        """Load available bait types from JSON file"""
+        try:
+            import json
+            import os
+            
+            # Start with hardcoded baits
+            available = ["beginner_bait", "pro_bait", "premium_bait", "legendary_bait", "mythical_bait", "divine_bait", "cosmic_bait"]
+            
+            # Try to load from JSON
+            json_path = "data/shop/bait.json"
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    baits_data = json.load(f)
+                
+                # Add JSON baits
+                for bait_id in baits_data.keys():
+                    if bait_id not in available:
+                        available.append(bait_id)
+                        
+                print(f"Loaded {len(baits_data)} bait types from JSON")
+            else:
+                print(f"Bait JSON file not found at {json_path}")
+                    
+            return available
+        except Exception as e:
+            print(f"Could not load baits from JSON: {e}")
+            return ["beginner_bait", "pro_bait", "premium_bait", "legendary_bait", "mythical_bait", "divine_bait", "cosmic_bait"]
+
+    def _resolve_rod_alias(self, rod_input: str) -> str:
+        """Resolve rod alias to full rod ID"""
+        if not rod_input:
+            return None
+        
+        rod_input = rod_input.lower().strip()
+        
+        # Check if it's already a valid rod ID
+        if rod_input in self.available_rods:
+            return rod_input
+        
+        # Check aliases
+        if rod_input in self.rod_aliases:
+            return self.rod_aliases[rod_input]
+        
+        # Check partial matches (e.g., "quantum_r" -> "quantum_rod")
+        for rod_id in self.available_rods:
+            if rod_id.startswith(rod_input):
+                return rod_id
+        
+        return None
+
+    def _resolve_bait_alias(self, bait_input: str) -> str:
+        """Resolve bait alias to full bait ID"""
+        if not bait_input:
+            return None
+        
+        bait_input = bait_input.lower().strip()
+        
+        # Check if it's already a valid bait ID
+        if bait_input in self.available_baits:
+            return bait_input
+        
+        # Check aliases
+        if bait_input in self.bait_aliases:
+            return self.bait_aliases[bait_input]
+        
+        # Check partial matches (e.g., "quantum_b" -> "quantum_bait")
+        for bait_id in self.available_baits:
+            if bait_id.startswith(bait_input):
+                return bait_id
+        
+        return None
+
+    @auto.command(aliases=['config', 'cfg'])
     async def configure(self, ctx, rod_type: str = None, bait_type: str = None):
         """Configure active rod and bait for autofishing"""
         if not rod_type and not bait_type:
-            # Show current configuration
+            # Show current configuration and available options
             user_data = await db.db.users.find_one({"_id": str(ctx.author.id)})
             autofisher_data = user_data.get("autofisher", {}) if user_data else {}
             
@@ -531,22 +796,84 @@ class AutoFishing(commands.Cog):
             embed = discord.Embed(title="🎣 Autofisher Configuration", color=0x2b2d31)
             embed.add_field(name="Active Rod", value=current_rod.replace('_', ' ').title(), inline=True)
             embed.add_field(name="Active Bait", value=current_bait.replace('_', ' ').title(), inline=True)
+            
+            # Show available rods with aliases
+            rods_text = ", ".join(self.available_rods[:10])  # Show first 10
+            if len(self.available_rods) > 10:
+                rods_text += f"... (+{len(self.available_rods) - 10} more)"
+            embed.add_field(name="Available Rods", value=rods_text, inline=False)
+            
+            # Show available baits with aliases
+            baits_text = ", ".join(self.available_baits[:10])  # Show first 10
+            if len(self.available_baits) > 10:
+                baits_text += f"... (+{len(self.available_baits) - 10} more)"
+            embed.add_field(name="Available Baits", value=baits_text, inline=False)
+            
+            # Show some common aliases
+            embed.add_field(
+                name="Common Aliases", 
+                value="**Rods:** quantum, cosmic, void, divine, etc.\n**Baits:** quantum, void, crystal, divine, etc.", 
+                inline=False
+            )
+            
             embed.add_field(
                 name="Usage", 
-                value="`.auto configure <rod_type> <bait_type>`\nExample: `.auto configure advanced_rod pro_bait`", 
+                value="`.auto configure <rod_type> <bait_type>`\nExample: `.auto config quantum void`", 
                 inline=False
             )
             return await safe_reply(ctx, embed=embed)
         
-        # Valid rod and bait types
-        valid_rods = ["beginner_rod", "advanced_rod", "pro_rod", "master_rod"]
-        valid_baits = ["beginner_bait", "pro_bait", "master_bait", "legendary_bait"]
+        # Resolve rod alias
+        if rod_type:
+            resolved_rod = self._resolve_rod_alias(rod_type)
+            if not resolved_rod:
+                embed = discord.Embed(title="❌ Invalid Rod Type", color=0xff0000)
+                embed.add_field(
+                    name="Available Rods", 
+                    value=", ".join(self.available_rods), 
+                    inline=False
+                )
+                embed.add_field(
+                    name="Common Aliases",
+                    value="quantum, cosmic, void, divine, basic, pro, etc.",
+                    inline=False
+                )
+                return await safe_reply(ctx, embed=embed)
+            rod_type = resolved_rod
         
-        if rod_type and rod_type not in valid_rods:
-            return await safe_reply(ctx, f"❌ Invalid rod type! Valid options: {', '.join(valid_rods)}")
+        # Resolve bait alias
+        if bait_type:
+            resolved_bait = self._resolve_bait_alias(bait_type)
+            if not resolved_bait:
+                embed = discord.Embed(title="❌ Invalid Bait Type", color=0xff0000)
+                embed.add_field(
+                    name="Available Baits", 
+                    value=", ".join(self.available_baits), 
+                    inline=False
+                )
+                embed.add_field(
+                    name="Common Aliases",
+                    value="quantum, void, crystal, divine, basic, pro, etc.",
+                    inline=False
+                )
+                return await safe_reply(ctx, embed=embed)
+            bait_type = resolved_bait
         
-        if bait_type and bait_type not in valid_baits:
-            return await safe_reply(ctx, f"❌ Invalid bait type! Valid options: {', '.join(valid_baits)}")
+        # Check if user has the specified rod and bait in their inventory
+        user_inventory = await self.get_user_inventory(ctx.author.id)
+        if not user_inventory:
+            return await safe_reply(ctx, "❌ You don't have any fishing gear!")
+        
+        rod_inventory = user_inventory.get("rod", {})
+        bait_inventory = user_inventory.get("bait", {})
+        
+        # Verify rod ownership
+        if rod_type and rod_inventory.get(rod_type, 0) <= 0:
+            return await safe_reply(ctx, f"❌ You don't have a {rod_type.replace('_', ' ').title()} in your inventory!")
+        
+        # Verify bait ownership
+        if bait_type and bait_inventory.get(bait_type, 0) <= 0:
+            return await safe_reply(ctx, f"❌ You don't have {bait_type.replace('_', ' ').title()} in your inventory!")
         
         # Update configuration
         update_data = {}
@@ -567,6 +894,8 @@ class AutoFishing(commands.Cog):
                 embed.add_field(name="Active Rod", value=rod_type.replace('_', ' ').title(), inline=True)
             if bait_type:
                 embed.add_field(name="Active Bait", value=bait_type.replace('_', ' ').title(), inline=True)
+            
+            embed.set_footer(text="Your autofishers will now use this gear for future catches!")
             await safe_reply(ctx, embed=embed)
         else:
             await safe_reply(ctx, "❌ Failed to update configuration!")

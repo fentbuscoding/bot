@@ -25,6 +25,115 @@ class Fishing(commands.Cog):
         # Load bait data from both sources
         self.bait_data = self._load_all_bait_data()
         
+        # Rod and bait aliases for easier user input
+        self.rod_aliases = {
+            # Basic rods
+            "basic": "basic_rod",
+            "bamboo": "basic_rod",
+            "starter": "basic_rod",
+            
+            # Advanced rods
+            "advanced": "advanced_rod",
+            "fiber": "advanced_rod",
+            "fiberglass": "advanced_rod",
+            
+            # Pro rods
+            "pro": "pro_rod",
+            "carbon": "pro_rod",
+            "professional": "pro_rod",
+            
+            # Master rods
+            "master": "master_rod",
+            "titanium": "master_rod",
+            
+            # Legendary rods
+            "legendary": "legendary_rod",
+            "legend": "legendary_rod",
+            "leg": "legendary_rod",
+            
+            # Mythical rods
+            "mythical": "mythical_rod",
+            "myth": "mythical_rod",
+            "godly": "mythical_rod",
+            
+            # Cosmic rods
+            "cosmic": "cosmic_rod",
+            "star": "cosmic_rod",
+            "space": "cosmic_rod",
+            
+            # High-end rods (from JSON)
+            "quantum": "quantum_rod",
+            "q": "quantum_rod",
+            "void": "void_rod",
+            "shadow": "void_rod",
+            "celestial": "celestial_rod",
+            "heaven": "celestial_rod",
+            "divine": "divine_rod",
+            "god": "divine_rod",
+            "reality": "reality_rod",
+            "real": "reality_rod",
+            "multiverse": "multiverse_rod",
+            "multi": "multiverse_rod",
+            "infinite": "infinite_rod",
+            "inf": "infinite_rod",
+            "transcendent": "transcendent_rod",
+            "trans": "transcendent_rod"
+        }
+        
+        self.bait_aliases = {
+            # Basic baits
+            "beginner": "beginner_bait",
+            "basic": "beginner_bait",
+            "worm": "beginner_bait",
+            "worms": "beginner_bait",
+            
+            # Pro baits
+            "pro": "pro_bait",
+            "professional": "pro_bait",
+            
+            # Premium baits
+            "premium": "premium_bait",
+            "prem": "premium_bait",
+            
+            # Legendary baits
+            "legendary": "legendary_bait",
+            "legend": "legendary_bait",
+            "leg": "legendary_bait",
+            
+            # Mythical baits
+            "mythical": "mythical_bait",
+            "myth": "mythical_bait",
+            
+            # Divine baits
+            "divine": "divine_bait",
+            "god": "divine_bait",
+            "holy": "divine_bait",
+            
+            # Cosmic baits
+            "cosmic": "cosmic_bait",
+            "star": "cosmic_bait",
+            "space": "cosmic_bait",
+            
+            # Quantum baits
+            "quantum": "quantum_bait",
+            "q": "quantum_bait",
+            
+            # Void baits
+            "void": "void_bait",
+            "shadow": "void_bait",
+            "dark": "void_bait",
+            
+            # Crystalline baits
+            "crystalline": "crystalline_bait",
+            "crystal": "crystalline_bait",
+            "gem": "crystalline_bait",
+            
+            # Celestial baits
+            "celestial": "celestial_bait",
+            "heaven": "celestial_bait",
+            "angel": "celestial_bait"
+        }
+        
         # REBALANCED FISH DATABASE - More reasonable values and better progression
         self.fish_database = {
             "junk": [
@@ -332,7 +441,7 @@ class Fishing(commands.Cog):
 
     def _load_all_bait_data(self):
         """Load and combine bait data from both in-code and JSON sources"""
-        # Start with UPDATED and more balanced bait data
+        # Start with UPDATED and more balanced bait data - EXPANDED to include all bait types
         combined_data = {
             "beginner_bait": {
                 "name": "Beginner Bait", 
@@ -353,27 +462,197 @@ class Fishing(commands.Cog):
                     "ancient": 0.0, "divine": 0.0, "cosmic": 0.0, "transcendent": 0.0,
                     "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
                 }
+            },
+            "premium_bait": {
+                "name": "Premium Bait",
+                "description": "High-quality bait for rare fish",
+                "catch_rates": {
+                    "junk": 0.02, "tiny": 0.10, "small": 0.20, "common": 0.30, "uncommon": 0.25,
+                    "rare": 0.10, "epic": 0.02, "legendary": 0.01, "mythical": 0.0, 
+                    "ancient": 0.0, "divine": 0.0, "cosmic": 0.0, "transcendent": 0.0,
+                    "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "legendary_bait": {
+                "name": "Legendary Bait",
+                "description": "Legendary bait that attracts rare fish",
+                "catch_rates": {
+                    "junk": 0.01, "tiny": 0.05, "small": 0.10, "common": 0.20, "uncommon": 0.25,
+                    "rare": 0.20, "epic": 0.10, "legendary": 0.05, "mythical": 0.03, 
+                    "ancient": 0.01, "divine": 0.0, "cosmic": 0.0, "transcendent": 0.0,
+                    "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "mythical_bait": {
+                "name": "Mythical Bait",
+                "description": "Mythical bait that can attract ancient creatures",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.02, "small": 0.05, "common": 0.10, "uncommon": 0.15,
+                    "rare": 0.25, "epic": 0.20, "legendary": 0.15, "mythical": 0.05, 
+                    "ancient": 0.02, "divine": 0.01, "cosmic": 0.0, "transcendent": 0.0,
+                    "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "divine_bait": {
+                "name": "Divine Bait",
+                "description": "Divine bait blessed by sea gods",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.02, "common": 0.05, "uncommon": 0.08,
+                    "rare": 0.15, "epic": 0.25, "legendary": 0.20, "mythical": 0.15, 
+                    "ancient": 0.05, "divine": 0.03, "cosmic": 0.01, "transcendent": 0.01,
+                    "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "cosmic_bait": {
+                "name": "Cosmic Bait",
+                "description": "Bait infused with cosmic energy",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.0, "common": 0.02, "uncommon": 0.03,
+                    "rare": 0.10, "epic": 0.15, "legendary": 0.25, "mythical": 0.20, 
+                    "ancient": 0.10, "divine": 0.08, "cosmic": 0.05, "transcendent": 0.02,
+                    "mutated": 0.0, "crystalline": 0.0, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "quantum_bait": {
+                "name": "Quantum Bait",
+                "description": "Bait that exists in multiple dimensions simultaneously",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.0, "common": 0.0, "uncommon": 0.01,
+                    "rare": 0.05, "epic": 0.10, "legendary": 0.15, "mythical": 0.25, 
+                    "ancient": 0.15, "divine": 0.12, "cosmic": 0.10, "transcendent": 0.05,
+                    "mutated": 0.01, "crystalline": 0.01, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "void_bait": {
+                "name": "Void Bait",
+                "description": "Dark bait that attracts creatures from the abyss",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.0, "common": 0.0, "uncommon": 0.0,
+                    "rare": 0.02, "epic": 0.05, "legendary": 0.10, "mythical": 0.15, 
+                    "ancient": 0.20, "divine": 0.15, "cosmic": 0.12, "transcendent": 0.08,
+                    "mutated": 0.03, "crystalline": 0.0, "void": 0.10, "celestial": 0.0
+                }
+            },
+            "crystalline_bait": {
+                "name": "Crystalline Bait",
+                "description": "Crystalline bait that attracts gem-fish",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.05, "common": 0.10, "uncommon": 0.15,
+                    "rare": 0.20, "epic": 0.15, "legendary": 0.10, "mythical": 0.05, 
+                    "ancient": 0.02, "divine": 0.01, "cosmic": 0.0, "transcendent": 0.0,
+                    "mutated": 0.02, "crystalline": 0.15, "void": 0.0, "celestial": 0.0
+                }
+            },
+            "celestial_bait": {
+                "name": "Celestial Bait",
+                "description": "Starlight-infused bait from the heavens",
+                "catch_rates": {
+                    "junk": 0.0, "tiny": 0.0, "small": 0.0, "common": 0.0, "uncommon": 0.0,
+                    "rare": 0.01, "epic": 0.02, "legendary": 0.05, "mythical": 0.10, 
+                    "ancient": 0.15, "divine": 0.20, "cosmic": 0.25, "transcendent": 0.15,
+                    "mutated": 0.0, "crystalline": 0.02, "void": 0.0, "celestial": 0.05
+                }
             }
         }
         
-        # Load JSON bait data and merge/override
+        # Load JSON bait data and merge/override - IMPROVED error handling
         try:
             import json
-            with open("data/shop/bait.json", "r") as f:
-                json_baits = json.load(f)
-                
-            for bait_id, bait_data in json_baits.items():
-                # Use JSON data to override or add new baits
-                combined_data[bait_id] = {
-                    "name": bait_data.get("name", bait_id.replace("_", " ").title()),
-                    "description": bait_data.get("description", ""),
-                    "catch_rates": bait_data.get("catch_rates", {})
-                }
+            import os
+            
+            json_path = "data/shop/bait.json"
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    json_baits = json.load(f)
+                    
+                for bait_id, bait_data in json_baits.items():
+                    # Ensure catch_rates exist and are valid
+                    catch_rates = bait_data.get("catch_rates", {})
+                    if not catch_rates:
+                        # If no catch_rates, use default based on bait name/id
+                        if "quantum" in bait_id.lower():
+                            catch_rates = combined_data["quantum_bait"]["catch_rates"]
+                        elif "void" in bait_id.lower():
+                            catch_rates = combined_data["void_bait"]["catch_rates"]
+                        elif "celestial" in bait_id.lower():
+                            catch_rates = combined_data["celestial_bait"]["catch_rates"]
+                        elif "crystalline" in bait_id.lower():
+                            catch_rates = combined_data["crystalline_bait"]["catch_rates"]
+                        elif "cosmic" in bait_id.lower():
+                            catch_rates = combined_data["cosmic_bait"]["catch_rates"]
+                        elif "divine" in bait_id.lower():
+                            catch_rates = combined_data["divine_bait"]["catch_rates"]
+                        elif "mythical" in bait_id.lower():
+                            catch_rates = combined_data["mythical_bait"]["catch_rates"]
+                        elif "legendary" in bait_id.lower():
+                            catch_rates = combined_data["legendary_bait"]["catch_rates"]
+                        elif "premium" in bait_id.lower():
+                            catch_rates = combined_data["premium_bait"]["catch_rates"]
+                        elif "pro" in bait_id.lower():
+                            catch_rates = combined_data["pro_bait"]["catch_rates"]
+                        else:
+                            catch_rates = combined_data["beginner_bait"]["catch_rates"]
+                    
+                    # Use JSON data to override or add new baits
+                    combined_data[bait_id] = {
+                        "name": bait_data.get("name", bait_id.replace("_", " ").title()),
+                        "description": bait_data.get("description", "Fishing bait"),
+                        "catch_rates": catch_rates
+                    }
+                    
+                self.logger.info(f"Loaded {len(json_baits)} bait types from JSON")
+            else:
+                self.logger.warning(f"Bait JSON file not found at {json_path}")
                 
         except Exception as e:
             self.logger.warning(f"Could not load JSON bait data: {e}")
             
+        self.logger.info(f"Total bait types loaded: {len(combined_data)}")
         return combined_data
+
+    def _resolve_rod_alias(self, rod_input: str) -> str:
+        """Resolve rod alias to full rod ID"""
+        if not rod_input:
+            return None
+        
+        rod_input = rod_input.lower().strip()
+        
+        # Check if it's already a valid rod ID
+        if rod_input in self.rod_data:
+            return rod_input
+        
+        # Check aliases
+        if rod_input in self.rod_aliases:
+            return self.rod_aliases[rod_input]
+        
+        # Check partial matches (e.g., "quantum_r" -> "quantum_rod")
+        for rod_id in self.rod_data.keys():
+            if rod_id.startswith(rod_input):
+                return rod_id
+        
+        return None
+
+    def _resolve_bait_alias(self, bait_input: str) -> str:
+        """Resolve bait alias to full bait ID"""
+        if not bait_input:
+            return None
+        
+        bait_input = bait_input.lower().strip()
+        
+        # Check if it's already a valid bait ID
+        if bait_input in self.bait_data:
+            return bait_input
+        
+        # Check aliases
+        if bait_input in self.bait_aliases:
+            return self.bait_aliases[bait_input]
+        
+        # Check partial matches (e.g., "quantum_b" -> "quantum_bait")
+        for bait_id in self.bait_data.keys():
+            if bait_id.startswith(bait_input):
+                return bait_id
+        
+        return None
 
     def _apply_rod_multiplier_properly(self, bait_rates, rod_multiplier):
         """Properly apply rod multiplier to favor higher rarities - More generous for expensive rods"""
@@ -483,7 +762,7 @@ class Fishing(commands.Cog):
         return rods
 
     async def get_user_bait(self, user_id: int):
-        """Get user's bait with full data"""
+        """Get user's bait with full data - IMPROVED to handle missing bait data"""
         inventory = await self.get_user_inventory(user_id)
         if not inventory:
             return []
@@ -492,22 +771,61 @@ class Fishing(commands.Cog):
         bait = []
         
         for bait_id, quantity in bait_inventory.items():
-            if quantity > 0 and bait_id in self.bait_data:
-                bait_info = self.bait_data[bait_id].copy()
-                bait_info["_id"] = bait_id
-                bait_info["amount"] = quantity
-                bait.append(bait_info)
+            if quantity > 0:
+                if bait_id in self.bait_data:
+                    bait_info = self.bait_data[bait_id].copy()
+                    bait_info["_id"] = bait_id
+                    bait_info["amount"] = quantity
+                    bait.append(bait_info)
+                else:
+                    # Handle missing bait data by creating default entry
+                    self.logger.warning(f"Missing bait data for {bait_id}, creating default")
+                    default_bait = {
+                        "name": bait_id.replace("_", " ").title(),
+                        "description": "Unknown bait type",
+                        "catch_rates": self.bait_data["beginner_bait"]["catch_rates"],
+                        "_id": bait_id,
+                        "amount": quantity
+                    }
+                    bait.append(default_bait)
         
         return bait
 
     async def remove_bait(self, user_id: int, bait_id: str) -> bool:
-        """Remove one bait from user's inventory"""
+        """Remove one bait from user's inventory - Fixed to work with new structure"""
         try:
+            # First check if user has this bait in the new inventory structure
             result = await db.db.users.update_one(
                 {"_id": str(user_id), f"inventory.bait.{bait_id}": {"$gt": 0}},
                 {"$inc": {f"inventory.bait.{bait_id}": -1}}
             )
-            return result.modified_count > 0
+            
+            if result.modified_count > 0:
+                return True
+                
+            # If that didn't work, try the old structure for backwards compatibility
+            user = await db.db.users.find_one({"_id": str(user_id)})
+            if not user:
+                return False
+                
+            # Check old bait structure
+            old_bait = user.get("bait", [])
+            for i, bait in enumerate(old_bait):
+                if bait.get("_id") == bait_id or bait.get("id") == bait_id:
+                    # Remove this bait item
+                    result = await db.db.users.update_one(
+                        {"_id": str(user_id)},
+                        {"$unset": {f"bait.{i}": ""}}
+                    )
+                    # Clean up the array
+                    await db.db.users.update_one(
+                        {"_id": str(user_id)},
+                        {"$pull": {"bait": None}}
+                    )
+                    return result.modified_count > 0
+                    
+            return False
+            
         except Exception as e:
             self.logger.error(f"Error removing bait: {e}")
             return False
@@ -541,28 +859,44 @@ class Fishing(commands.Cog):
         return random.choice(fish_list)
 
     async def check_fish_escape(self, fish_template, rod_power: int):
-        """Check if fish escapes - Much more generous for expensive rods"""
+        """Check if fish escapes - Much more generous for expensive rods and reduced overall escape rates"""
         # Generate fish weight
         fish_weight = random.uniform(fish_template["min_weight"], fish_template["max_weight"])
         
-        # Fish under 10kg cannot escape
-        if fish_weight < 10.0:
+        # Fish under 50kg cannot escape (increased from 10kg)
+        if fish_weight < 50.0:
             return False, fish_weight
         
-        # For fish 10kg and above, check escape chance with more generous rod power scaling
+        # For fish 50kg and above, check escape chance with much more generous rod power scaling
         base_escape_chance = fish_template.get("escape_chance", 0.0)
         
-        # Much better rod power scaling - expensive rods (power 4+) get major bonuses
-        if rod_power >= 6:  # Mythical+ rods (75k+ cost)
-            power_reduction = min(rod_power * 0.08, 0.60)  # Up to 60% reduction
-        elif rod_power >= 4:  # Master+ rods (25k+ cost) 
-            power_reduction = min(rod_power * 0.06, 0.45)  # Up to 45% reduction
-        elif rod_power >= 3:  # Pro+ rods (7.5k+ cost)
-            power_reduction = min(rod_power * 0.04, 0.30)  # Up to 30% reduction
-        else:  # Basic rods
-            power_reduction = min(rod_power * 0.02, 0.15)  # Max 15% reduction
+        # DRAMATICALLY reduced escape chances - expensive rods should almost never lose fish
+        if rod_power >= 8:  # Cosmic+ rods (200k+ cost) - practically no escapes
+            power_reduction = min(rod_power * 0.12, 0.95)  # Up to 95% reduction
+        elif rod_power >= 6:  # Mythical+ rods (75k+ cost) - very rare escapes
+            power_reduction = min(rod_power * 0.10, 0.85)  # Up to 85% reduction
+        elif rod_power >= 4:  # Master+ rods (25k+ cost) - rare escapes
+            power_reduction = min(rod_power * 0.08, 0.70)  # Up to 70% reduction
+        elif rod_power >= 3:  # Pro+ rods (7.5k+ cost) - occasional escapes
+            power_reduction = min(rod_power * 0.06, 0.50)  # Up to 50% reduction
+        elif rod_power >= 2:  # Advanced rods - moderate escapes
+            power_reduction = min(rod_power * 0.04, 0.35)  # Up to 35% reduction
+        else:  # Basic rods - still significant escapes
+            power_reduction = min(rod_power * 0.02, 0.20)  # Max 20% reduction
         
-        final_escape_chance = max(0, base_escape_chance - power_reduction)
+        # Apply additional weight-based reduction for very heavy fish
+        if fish_weight >= 10000.0:  # 10+ ton fish get additional protection
+            weight_reduction = min(fish_weight / 50000.0, 0.40)  # Up to 40% more reduction
+        elif fish_weight >= 1000.0:  # 1+ ton fish get some protection
+            weight_reduction = min(fish_weight / 10000.0, 0.20)  # Up to 20% more reduction
+        else:
+            weight_reduction = 0
+        
+        total_reduction = power_reduction + weight_reduction
+        final_escape_chance = max(0.001, base_escape_chance - total_reduction)  # Minimum 0.1% escape chance
+        
+        # Cap maximum escape chance at 15% even for basic rods on huge fish
+        final_escape_chance = min(final_escape_chance, 0.15)
         
         escaped = random.random() < final_escape_chance
         return escaped, fish_weight
@@ -624,9 +958,10 @@ class Fishing(commands.Cog):
             # Calculate catch percentages for debugging (hidden from users)
             percentages = await self.display_catch_percentages_fixed(bait_rates, rod_multiplier)
             if percentages:
-                # Debug logging - print odds to console for debugging
+                # Debug logging - print ALL odds to console for debugging
+                sorted_percentages = sorted(percentages.items(), key=lambda x: x[1], reverse=True)
                 debug_text = f"[FISHING DEBUG] {ctx.author.name} ({ctx.author.id}) - Rod: {rod['name']} (x{rod_multiplier}) - Bait: {current_bait['name']}\n"
-                for rarity, chance in sorted(percentages.items(), key=lambda x: x[1], reverse=True)[:8]:
+                for rarity, chance in sorted_percentages:
                     if chance >= 0.001:
                         debug_text += f"  {rarity.title()}: {chance:.3f}%\n"
                 print(debug_text)
@@ -803,7 +1138,7 @@ class Fishing(commands.Cog):
     async def sell_fish(self, ctx, fish_id: str = None):
         """Sell a specific fish or all fish"""
         try:
-            user_fish = await db.get_user_fish(ctx.author.id)
+            user_fish = await db.get_fish(ctx.author.id)
             if not user_fish:
                 return await ctx.reply("❌ You haven't caught any fish yet!")
             
@@ -828,7 +1163,7 @@ class Fishing(commands.Cog):
                 total_value = sum(fish.get("value", 0) for fish in user_fish)
                 fish_count = len(user_fish)
                 
-                if await db.clear_user_fish(ctx.author.id):
+                if await db.clear_fish(ctx.author.id):
                     await db.add_currency(ctx.author.id, total_value)
                     embed = discord.Embed(
                         title="🐟 All Fish Sold!",
@@ -845,49 +1180,163 @@ class Fishing(commands.Cog):
 
     @commands.command(name="fishinv", aliases=["fi", "fishbag"])
     async def fish_inventory(self, ctx, page: int = 1):
-        """View your fish inventory with pagination"""
+        """View your fish inventory with pagination - first page shows gear, rest show fish"""
         try:
-            user_fish = await db.get_user_fish(ctx.author.id)
+            user_fish = await db.get_fish(ctx.author.id)
+            
+            # Page 1: Show active gear and summary
+            if page == 1:
+                # Get active gear
+                active_gear = await db.get_active_fishing_gear(ctx.author.id)
+                
+                # Get total fish stats
+                total_fish = len(user_fish)
+                total_value = sum(fish.get("value", 0) for fish in user_fish) if user_fish else 0
+                
+                embed = discord.Embed(
+                    title="🎣 Fishing Overview",
+                    description=f"**Total Fish:** {total_fish} | **Total Value:** {total_value:,} {self.currency}",
+                    color=discord.Color.blue()
+                )
+                
+                # Show equipped rod
+                if active_gear.get("rod"):
+                    rod_id = active_gear["rod"]
+                    if rod_id in self.rod_data:
+                        rod = self.rod_data[rod_id]
+                        embed.add_field(
+                            name="🎣 Equipped Rod",
+                            value=f"**{rod['name']}**\n"
+                                  f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
+                                  f"Power: {rod.get('power', 1)}\n"
+                                  f"Durability: {(rod.get('durability', 0.95)*100):.1f}%",
+                            inline=True
+                        )
+                    else:
+                        embed.add_field(
+                            name="🎣 Equipped Rod",
+                            value="❌ Rod data not found",
+                            inline=True
+                        )
+                else:
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value="❌ No rod equipped\nUse `.rod` to equip one",
+                        inline=True
+                    )
+                
+                # Show equipped bait
+                if active_gear.get("bait"):
+                    bait_id = active_gear["bait"]
+                    user_bait = await self.get_user_bait(ctx.author.id)
+                    equipped_bait = next((b for b in user_bait if b.get("_id") == bait_id), None)
+                    
+                    if equipped_bait:
+                        embed.add_field(
+                            name="🪱 Equipped Bait",
+                            value=f"**{equipped_bait['name']}**\n"
+                                  f"Amount: {equipped_bait.get('amount', 1)}\n"
+                                  f"Type: {equipped_bait.get('rarity', 'Common').title()}",
+                            inline=True
+                        )
+                    else:
+                        embed.add_field(
+                            name="🪱 Equipped Bait",
+                            value="❌ Bait data not found",
+                            inline=True
+                        )
+                else:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value="❌ No bait equipped\nUse `.bait` to equip some",
+                        inline=True
+                    )
+                
+                # Add quick stats if user has fish
+                if user_fish:
+                    # Sort by value and get top catches
+                    sorted_fish = sorted(user_fish, key=lambda x: x.get("value", 0), reverse=True)
+                    top_fish = sorted_fish[:3]
+                    
+                    top_catches = []
+                    for i, fish in enumerate(top_fish, 1):
+                        top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
+                    
+                    embed.add_field(
+                        name="🏆 Top Catches",
+                        value="\n".join(top_catches),
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="🐟 Fish Collection",
+                        value="No fish caught yet! Use `.fish` to start fishing.",
+                        inline=False
+                    )
+                
+                # Calculate total pages (gear page + fish pages)
+                fish_pages = math.ceil(len(user_fish) / 5) if user_fish else 0
+                total_pages = 1 + fish_pages
+                
+                embed.set_footer(text=f"Page 1/{total_pages} • Use buttons to view your fish collection")
+                
+                # Create pagination view
+                view = FishInventoryPaginator(ctx.author.id, user_fish, 1, total_pages, self.currency, self.rod_data, self.bait_data, self.get_user_bait)
+                message = await ctx.reply(embed=embed, view=view)
+                view.message = message
+                return
+            
+            # Pages 2+: Show fish
             if not user_fish:
                 return await ctx.reply("❌ You haven't caught any fish yet!")
             
             # Sort by value (highest first)
             user_fish.sort(key=lambda x: x.get("value", 0), reverse=True)
             
-            items_per_page = 10
-            total_pages = math.ceil(len(user_fish) / items_per_page)
-            page = max(1, min(page, total_pages))
+            items_per_page = 5
+            fish_pages = math.ceil(len(user_fish) / items_per_page)
+            total_pages = 1 + fish_pages
             
-            start_idx = (page - 1) * items_per_page
+            # Adjust page number for fish display (page 2 becomes fish page 1)
+            fish_page = page - 1
+            
+            if fish_page > fish_pages:
+                fish_page = fish_pages
+                page = total_pages
+            
+            start_idx = (fish_page - 1) * items_per_page
             end_idx = start_idx + items_per_page
             page_fish = user_fish[start_idx:end_idx]
             
+            # Create fish display embed
+            total_value = sum(fish.get("value", 0) for fish in user_fish)
             embed = discord.Embed(
-                title="🎣 Your Fish Inventory",
+                title="🐟 Your Fish Collection",
+                description=f"**Total Fish:** {len(user_fish)} | **Total Value:** {total_value:,} {self.currency}",
                 color=discord.Color.blue()
             )
             
-            total_value = sum(fish.get("value", 0) for fish in user_fish)
-            embed.add_field(
-                name="💰 Total Value",
-                value=f"**{total_value}** {self.currency}",
-                inline=False
-            )
-            
-            for fish in page_fish:
-                fish_info = f"**Value:** {fish.get('value', 0)} {self.currency}\n"
-                fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
-                fish_info += f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
-                fish_info += f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
+            # Add fish to embed
+            for i, fish in enumerate(page_fish, start=start_idx + 1):
+                fish_info = (
+                    f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
+                    f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+                    f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
+                    f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
+                )
                 
                 embed.add_field(
                     name=f"🐟 {fish.get('name', 'Unknown Fish')}",
                     value=fish_info,
-                    inline=True
+                    inline=False
                 )
             
-            embed.set_footer(text=f"Page {page}/{total_pages} • {len(user_fish)} total fish")
-            await ctx.reply(embed=embed)
+            embed.set_footer(text=f"Page {page}/{total_pages} • Use buttons to navigate")
+            
+            # Create pagination view
+            view = FishInventoryPaginator(ctx.author.id, user_fish, page, total_pages, self.currency, self.rod_data, self.bait_data, self.get_user_bait)
+            message = await ctx.reply(embed=embed, view=view)
+            view.message = message
             
         except Exception as e:
             self.logger.error(f"Fish inventory error: {e}")
@@ -960,7 +1409,7 @@ class Fishing(commands.Cog):
         """View fishing statistics for yourself or another user"""
         try:
             target_user = user or ctx.author
-            user_fish = await db.get_user_fish(target_user.id)
+            user_fish = await db.get_fish(target_user.id)
             
             if not user_fish:
                 pronoun = "You haven't" if target_user == ctx.author else f"{target_user.display_name} hasn't"
@@ -1041,5 +1490,573 @@ class Fishing(commands.Cog):
             self.logger.error(f"Fish stats error: {e}")
             await ctx.reply("❌ An error occurred while loading fishing stats!")
 
+    @commands.command(name="rod", aliases=["erod", 'equiprod', "equip_rod"])
+    async def rod(self, ctx, *, rod_name: str = None):
+        """Equip a fishing rod from your inventory"""
+        try:
+            if not rod_name:
+                # Show available rods
+                user_rods = await self.get_user_rods(ctx.author.id)
+                if not user_rods:
+                    return await ctx.reply("❌ You don't have any fishing rods! Buy one from `.shop rod`")
+                
+                embed = discord.Embed(
+                    title="🎣 Your Fishing Rods",
+                    description="Use `.rod <rod_name>` to equip a rod\n💡 **Aliases:** quantum, cosmic, void, divine, basic, pro, etc.",
+                    color=discord.Color.blue()
+                )
+                
+                for rod in user_rods[:10]:  # Show first 10 rods
+                    embed.add_field(
+                        name=f"🎣 {rod['name']}",
+                        value=f"**Multiplier:** {rod.get('multiplier', 1.0)}x\n**Quantity:** {rod.get('quantity', 1)}",
+                        inline=True
+                    )
+                
+                return await ctx.reply(embed=embed)
+            
+            # Find rod by name, ID, or alias
+            user_rods = await self.get_user_rods(ctx.author.id)
+            target_rod = None
+            
+            # First try to resolve alias
+            resolved_rod_id = self._resolve_rod_alias(rod_name)
+            
+            for rod in user_rods:
+                rod_id = rod.get('_id', '').lower()
+                rod_full_name = rod['name'].lower()
+                
+                # Match by exact ID, resolved alias, or name contains
+                if (rod_name.lower() == rod_id or 
+                    (resolved_rod_id and resolved_rod_id == rod_id) or
+                    rod_name.lower() in rod_full_name):
+                    target_rod = rod
+                    break
+            
+            if not target_rod:
+                embed = discord.Embed(
+                    title="❌ Rod Not Found",
+                    description=f"Rod '{rod_name}' not found in your inventory!",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="💡 Try using aliases",
+                    value="quantum, cosmic, void, divine, basic, pro, etc.",
+                    inline=False
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Equip the rod
+            if await self.set_active_rod_manual(ctx.author.id, target_rod['_id']):
+                embed = discord.Embed(
+                    title="🎣 Rod Equipped!",
+                    description=f"You equipped **{target_rod['name']}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="💪 Multiplier",
+                    value=f"{target_rod.get('multiplier', 1.0)}x",
+                    inline=True
+                )
+                embed.add_field(
+                    name="🛡️ Durability",
+                    value=f"{((target_rod.get('durability', 0.95))*100):.1f}%",
+                    inline=True
+                )
+                embed.add_field(
+                    name="⚡ Power Level",
+                    value=f"{target_rod.get('power', 1)}",
+                    inline=True
+                )
+                await ctx.reply(embed=embed)
+            else:
+                await ctx.reply("❌ Failed to equip rod!")
+                
+        except Exception as e:
+            self.logger.error(f"Equip rod error: {e}")
+            await ctx.reply("❌ An error occurred while equipping the rod!")
+
+    @commands.command(name="bait", aliases=["ebait", 'equipbait', "equip_bait"])
+    async def bait(self, ctx, *, bait_name: str = None):
+        """Equip bait from your inventory"""
+        try:
+            if not bait_name:
+                # Show available bait
+                user_bait = await self.get_user_bait(ctx.author.id)
+                if not user_bait:
+                    return await ctx.reply("❌ You don't have any bait! Buy some from `.shop bait`")
+                
+                embed = discord.Embed(
+                    title="🪱 Your Bait Collection",
+                    description="Use `.bait <bait_name>` to equip bait\n💡 **Aliases:** quantum, void, crystal, divine, basic, pro, etc.",
+                    color=discord.Color.green()
+                )
+                
+                for bait in user_bait[:10]:  # Show first 10 bait types
+                    embed.add_field(
+                        name=f"🪱 {bait['name']}",
+                        value=f"**Amount:** {bait.get('amount', 1)}\n**ID:** `{bait.get('_id', 'unknown')}`\n**Description:** {bait.get('description', 'N/A')[:30]}...",
+                        inline=True
+                    )
+                
+                return await ctx.reply(embed=embed)
+            
+            # Find bait by name, ID, or alias - IMPROVED matching with aliases
+            user_bait = await self.get_user_bait(ctx.author.id)
+            target_bait = None
+            
+            # First try to resolve alias
+            resolved_bait_id = self._resolve_bait_alias(bait_name)
+            
+            for bait in user_bait:
+                bait_id = bait.get('_id', '').lower()
+                bait_full_name = bait['name'].lower()
+                
+                # Match by exact ID, resolved alias, or name contains
+                if (bait_name.lower() == bait_id or 
+                    (resolved_bait_id and resolved_bait_id == bait_id) or
+                    bait_name.lower() in bait_full_name):
+                    target_bait = bait
+                    break
+            
+            if not target_bait:
+                available_bait = [f"`{b.get('_id', 'unknown')}`" for b in user_bait[:5]]
+                embed = discord.Embed(
+                    title="❌ Bait Not Found",
+                    description=f"Bait '{bait_name}' not found in your inventory!",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="💡 Try using aliases",
+                    value="quantum, void, crystal, divine, basic, pro, etc.",
+                    inline=False
+                )
+                if available_bait:
+                    embed.add_field(
+                        name="Available bait",
+                        value=", ".join(available_bait),
+                        inline=False
+                    )
+                return await ctx.reply(embed=embed)
+            
+            # Equip the bait - IMPROVED error handling
+            bait_id = target_bait.get('_id')
+            if not bait_id:
+                return await ctx.reply("❌ Invalid bait ID!")
+                
+            if await db.set_active_bait(ctx.author.id, bait_id):
+                embed = discord.Embed(
+                    title="🪱 Bait Equipped!",
+                    description=f"You equipped **{target_bait['name']}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="📦 Amount Available",
+                    value=f"{target_bait.get('amount', 1)}",
+                    inline=True
+                )
+                embed.add_field(
+                    name="🆔 Bait ID",
+                    value=f"`{bait_id}`",
+                    inline=True
+                )
+                embed.add_field(
+                    name="📝 Description",
+                    value=target_bait.get('description', 'No description available'),
+                    inline=False
+                )
+                
+                # Show some catch rate info
+                catch_rates = target_bait.get('catch_rates', {})
+                if catch_rates:
+                    high_rate_rarities = []
+                    for rarity, rate in catch_rates.items():
+                        if rate > 0.05:  # 5% or higher
+                            high_rate_rarities.append(f"{rarity.title()}: {rate*100:.1f}%")
+                    
+                    if high_rate_rarities:
+                        embed.add_field(
+                            name="🎯 Best For",
+                            value="\n".join(high_rate_rarities[:5]),
+                            inline=False
+                        )
+                
+                await ctx.reply(embed=embed)
+            else:
+                await ctx.reply("❌ Failed to equip bait! Please try again.")
+                
+        except Exception as e:
+            self.logger.error(f"Equip bait error: {e}")
+            await ctx.reply("❌ An error occurred while equipping the bait!")
+
+    @commands.command(name="fishgear", aliases=["gear", "equipped"])
+    async def fish_gear(self, ctx):
+        """View your currently equipped fishing gear"""
+        try:
+            active_gear = await db.get_active_fishing_gear(ctx.author.id)
+            
+            embed = discord.Embed(
+                title="🎣 Your Fishing Gear",
+                color=discord.Color.blue()
+            )
+            
+            # Show equipped rod
+            if active_gear.get("rod"):
+                rod_id = active_gear["rod"]
+                if rod_id in self.rod_data:
+                    rod = self.rod_data[rod_id]
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value=f"**{rod['name']}**\n"
+                              f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
+                              f"Power: {rod.get('power', 1)}\n"
+                              f"Durability: {(rod.get('durability', 0.95)*100):.1f}%",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value="❌ Rod data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🎣 Equipped Rod",
+                    value="❌ No rod equipped",
+                    inline=True
+                )
+            
+            # Show equipped bait
+            if active_gear.get("bait"):
+                bait_id = active_gear["bait"]
+                user_bait = await self.get_user_bait(ctx.author.id)
+                equipped_bait = next((b for b in user_bait if b.get("_id") == bait_id), None)
+                
+                if equipped_bait:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value=f"**{equipped_bait['name']}**\n"
+                              f"Amount: {equipped_bait.get('amount', 1)}\n"
+                              f"Description: {equipped_bait.get('description', 'N/A')[:50]}...",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value="❌ Bait data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🪱 Equipped Bait",
+                    value="❌ No bait equipped",
+                    inline=True
+                )
+            
+            embed.set_footer(text="Use .equiprod and .equipbait to change your gear")
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Fish gear error: {e}")
+            await ctx.reply("❌ An error occurred while viewing your gear!")
+
+    @commands.command(name="fishrates", aliases=["rates", "catchrates"])
+    async def fish_rates(self, ctx):
+        """Show all fishing catch rates with your current gear"""
+        try:
+            # Get user's active gear
+            active_gear = await db.get_active_fishing_gear(ctx.author.id)
+            if not active_gear:
+                return await ctx.reply("❌ You need fishing gear first! Use `.shop rod` and `.shop bait`")
+            
+            active_rod_id = active_gear.get("rod")
+            active_bait_id = active_gear.get("bait")
+            
+            if not active_rod_id or not active_bait_id:
+                return await ctx.reply("❌ You need both a rod and bait equipped!")
+            
+            # Get rod data
+            user_rods = await self.get_user_rods(ctx.author.id)
+            rod = next((r for r in user_rods if r.get("_id") == active_rod_id), None)
+            
+            if not rod:
+                return await ctx.reply("❌ Your equipped rod is no longer available!")
+            
+            # Get bait data
+            user_bait = await self.get_user_bait(ctx.author.id)
+            current_bait = next((b for b in user_bait if b.get("_id") == active_bait_id), None)
+            
+            if not current_bait:
+                return await ctx.reply("❌ Your equipped bait is no longer available!")
+            
+            # Calculate catch rates
+            rod_multiplier = rod.get("multiplier", 1.0)
+            bait_rates = current_bait.get("catch_rates", {})
+            
+            percentages = await self.display_catch_percentages_fixed(bait_rates, rod_multiplier)
+            
+            if not percentages:
+                return await ctx.reply("❌ Unable to calculate catch rates!")
+            
+            # Create embed with all catch rates
+            embed = discord.Embed(
+                title="🎯 Fishing Catch Rates",
+                description=f"**Rod:** {rod['name']} (x{rod_multiplier} multiplier)\n**Bait:** {current_bait['name']}",
+                color=discord.Color.blue()
+            )
+            
+            # Sort by catch rate (highest first)
+            sorted_percentages = sorted(percentages.items(), key=lambda x: x[1], reverse=True)
+            
+            # Split into two columns for better display
+            left_column = []
+            right_column = []
+            
+            for i, (rarity, chance) in enumerate(sorted_percentages):
+                if chance >= 0.001:  # Only show if at least 0.001%
+                    rate_text = f"**{rarity.title()}:** {chance:.3f}%"
+                    if i % 2 == 0:
+                        left_column.append(rate_text)
+                    else:
+                        right_column.append(rate_text)
+            
+            if left_column:
+                embed.add_field(
+                    name="📊 Catch Rates (Part 1)",
+                    value="\n".join(left_column),
+                    inline=True
+                )
+            
+            if right_column:
+                embed.add_field(
+                    name="📊 Catch Rates (Part 2)",
+                    value="\n".join(right_column),
+                    inline=True
+                )
+            
+            # Add summary stats
+            total_rate = sum(percentages.values())
+            embed.add_field(
+                name="📈 Summary",
+                value=f"**Total Rate:** {total_rate:.2f}%\n"
+                      f"**Rarities:** {len([r for r, c in percentages.items() if c >= 0.001])}\n"
+                      f"**Best Chance:** {sorted_percentages[0][0].title()} ({sorted_percentages[0][1]:.3f}%)",
+                inline=False
+            )
+            
+            embed.set_footer(text="Rates are calculated with your current rod multiplier and bait")
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Fish rates error: {e}")
+            await ctx.reply("❌ An error occurred while calculating catch rates!")
+
 async def setup(bot):
     await bot.add_cog(Fishing(bot))
+
+class FishInventoryPaginator(discord.ui.View):
+    def __init__(self, user_id: int, fish_list: list, current_page: int, total_pages: int, currency: str, rod_data: dict, bait_data: dict, get_user_bait_func):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.user_id = user_id
+        self.fish_list = fish_list
+        self.current_page = current_page
+        self.total_pages = total_pages
+        self.currency = currency
+        self.rod_data = rod_data
+        self.bait_data = bait_data
+        self.get_user_bait = get_user_bait_func
+        self.message = None
+        self.items_per_page = 5
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states based on current page"""
+        # First page button
+        self.children[0].disabled = self.current_page <= 1
+        # Previous page button  
+        self.children[1].disabled = self.current_page <= 1
+        # Next page button
+        self.children[2].disabled = self.current_page >= self.total_pages
+        # Last page button
+        self.children[3].disabled = self.current_page >= self.total_pages
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        if self.current_page == 1:
+            # Page 1: Show gear overview
+            from utils.db import async_db as db
+            
+            active_gear = await db.get_active_fishing_gear(self.user_id)
+            total_fish = len(self.fish_list)
+            total_value = sum(fish.get("value", 0) for fish in self.fish_list)
+            
+            embed = discord.Embed(
+                title="🎣 Fishing Overview",
+                description=f"**Total Fish:** {total_fish} | **Total Value:** {total_value:,} {self.currency}",
+                color=discord.Color.blue()
+            )
+            
+            # Show equipped rod
+            if active_gear.get("rod"):
+                rod_id = active_gear["rod"]
+                if rod_id in self.rod_data:
+                    rod = self.rod_data[rod_id]
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value=f"**{rod['name']}**\n"
+                              f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
+                              f"Power: {rod.get('power', 1)}\n"
+                              f"Durability: {(rod.get('durability', 0.95)*100):.1f}%",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value="❌ Rod data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🎣 Equipped Rod",
+                    value="❌ No rod equipped\nUse `.rod` to equip one",
+                    inline=True
+                )
+            
+            # Show equipped bait
+            if active_gear.get("bait"):
+                bait_id = active_gear["bait"]
+                user_bait = await self.get_user_bait(self.user_id)
+                equipped_bait = next((b for b in user_bait if b.get("_id") == bait_id), None)
+                
+                if equipped_bait:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value=f"**{equipped_bait['name']}**\n"
+                              f"Amount: {equipped_bait.get('amount', 1)}\n"
+                              f"Type: {equipped_bait.get('rarity', 'Common').title()}",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value="❌ Bait data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🪱 Equipped Bait",
+                    value="❌ No bait equipped\nUse `.bait` to equip some",
+                    inline=True
+                )
+            
+            # Add top catches if user has fish
+            if self.fish_list:
+                sorted_fish = sorted(self.fish_list, key=lambda x: x.get("value", 0), reverse=True)
+                top_fish = sorted_fish[:3]
+                
+                top_catches = []
+                for i, fish in enumerate(top_fish, 1):
+                    top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
+                
+                embed.add_field(
+                    name="🏆 Top Catches",
+                    value="\n".join(top_catches),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🐟 Fish Collection",
+                    value="No fish caught yet! Use `.fish` to start fishing.",
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Page 1/{self.total_pages} • Use buttons to view your fish collection")
+            return embed
+        
+        else:
+            # Pages 2+: Show fish
+            fish_page = self.current_page - 1
+            start_idx = (fish_page - 1) * self.items_per_page
+            end_idx = start_idx + self.items_per_page
+            page_fish = self.fish_list[start_idx:end_idx]
+            
+            total_value = sum(fish.get("value", 0) for fish in self.fish_list)
+            embed = discord.Embed(
+                title="🐟 Your Fish Collection",
+                description=f"**Total Fish:** {len(self.fish_list)} | **Total Value:** {total_value:,} {self.currency}",
+                color=discord.Color.blue()
+            )
+            
+            for i, fish in enumerate(page_fish, start=start_idx + 1):
+                fish_info = (
+                    f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
+                    f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+                    f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
+                    f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
+                )
+                
+                embed.add_field(
+                    name=f"🐟 {fish.get('name', 'Unknown Fish')}",
+                    value=fish_info,
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • Use buttons to navigate")
+            return embed
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only allow the command author to use the buttons"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can't use these buttons!", ephemeral=True)
+            return False
+        return True
+    
+    @discord.ui.button(label="⏪", style=discord.ButtonStyle.gray)
+    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to first page"""
+        self.current_page = 1
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.primary)
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to previous page"""
+        self.current_page = max(1, self.current_page - 1)
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to next page"""
+        self.current_page = min(self.total_pages, self.current_page + 1)
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="⏩", style=discord.ButtonStyle.gray)
+    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to last page"""
+        self.current_page = self.total_pages
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🗑️", style=discord.ButtonStyle.red)
+    async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Delete the paginator message"""
+        await interaction.response.edit_message(content="Fish inventory closed.", embed=None, view=None)
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if self.message:
+            try:
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
+                await self.message.edit(view=self)
+            except:
+                pass  # Message might be deleted

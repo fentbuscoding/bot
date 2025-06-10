@@ -450,37 +450,44 @@ class Economy(commands.Cog):
 
     async def calculate_daily_interest(self, user_id: int, guild_id: int = None) -> float:
         """Calculate and apply daily interest"""
-        wallet = await db.get_wallet_balance(user_id, guild_id)
-        interest_level = await db.get_interest_level(user_id)
+        try:
+            wallet = await db.get_wallet_balance(user_id, guild_id)
+            bank = await db.get_bank_balance(user_id, guild_id)
+            interest_level = await db.get_interest_level(user_id)
 
-        base_rate = 0.0003  # Base rate of 0.03%
-        level_bonus = interest_level * 0.0005  # Each level adds 0.05% (0.0005)
-        random_bonus = random.randint(0, 100) / 100000  # 0-0.1% random bonus
-        total_rate = base_rate + level_bonus + random_bonus
-        
-        # Calculate interest based on wallet + bank balance
-        bank = await db.get_bank_balance(user_id, guild_id)
-        total_balance = wallet + bank
-        interest = total_balance * total_rate
-        
-        # Apply minimum (1 coin) and maximum (1% of total balance) bounds
-        interest = max(1, min(interest, total_balance * 0.01))
-        
-        # Apply the interest to wallet
-        if await db.update_wallet(user_id, int(interest), guild_id):
-            return interest
-        return 0
-
+            base_rate = 0.0003  # Base rate of 0.03%
+            level_bonus = interest_level * 0.0005  # Each level adds 0.05% (0.0005)
+            random_bonus = random.randint(0, 100) / 100000  # 0-0.1% random bonus
+            total_rate = base_rate + level_bonus + random_bonus
+            
+            # Calculate interest based on wallet + bank balance
+            total_balance = wallet + bank
+            interest = total_balance * total_rate
+            
+            # Apply minimum (1 coin) and maximum (1% of total balance) bounds
+            interest = max(1, min(interest, total_balance * 0.01))
+            
+            # Apply the interest to wallet
+            if await db.update_wallet(user_id, int(interest), guild_id):
+                return interest
+            return 0
+        except Exception as e:
+            self.logger.error(f"Calculate daily interest error: {e}")
+            return 0
 
     @commands.command(aliases=['interest', 'i'])
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def claim_interest(self, ctx):
         """Claim your daily interest"""
-        interest = await self.calculate_daily_interest(ctx.author.id, ctx.guild.id)
-        if interest > 0:
-            await ctx.reply(f"💰 You earned **{interest:,}** {self.currency} in daily interest!")
-        else:
-            await ctx.reply("❌ Failed to claim interest. Try again later.")
+        try:
+            interest = await self.calculate_daily_interest(ctx.author.id, ctx.guild.id)
+            if interest > 0:
+                await safe_reply(ctx, f"💰 You earned **{int(interest):,}** {self.currency} in daily interest!")
+            else:
+                await safe_reply(ctx, "❌ Failed to claim interest. Try again later.")
+        except Exception as e:
+            self.logger.error(f"Claim interest error: {e}")
+            await safe_reply(ctx, "❌ An error occurred while claiming interest.")
 
     
     @commands.command(aliases=['interest_info', 'ii'])
