@@ -271,6 +271,9 @@ class AsyncDatabase:
             return False
         
         try:
+            # Debug logging
+            print(f"set_active_bait called: user={user_id}, bait_id='{bait_id}'")
+            
             # Verify user has this bait in inventory
             inventory = await self.get_user_inventory_by_type(user_id, "bait")
             print(f"User {user_id} bait inventory: {inventory}")

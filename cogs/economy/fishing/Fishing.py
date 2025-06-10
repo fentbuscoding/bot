@@ -641,17 +641,22 @@ class Fishing(commands.Cog):
         
         # Check if it's already a valid bait ID
         if bait_input in self.bait_data:
+            self.logger.info(f"Bait alias '{bait_input}' resolved to existing bait ID: {bait_input}")
             return bait_input
         
         # Check aliases
         if bait_input in self.bait_aliases:
-            return self.bait_aliases[bait_input]
+            resolved = self.bait_aliases[bait_input]
+            self.logger.info(f"Bait alias '{bait_input}' resolved to: {resolved}")
+            return resolved
         
         # Check partial matches (e.g., "quantum_b" -> "quantum_bait")
         for bait_id in self.bait_data.keys():
             if bait_id.startswith(bait_input):
+                self.logger.info(f"Bait alias '{bait_input}' partially matched to: {bait_id}")
                 return bait_id
         
+        self.logger.info(f"Bait alias '{bait_input}' could not be resolved")
         return None
 
     def _apply_rod_multiplier_properly(self, bait_rates, rod_multiplier):
@@ -1586,6 +1591,11 @@ class Fishing(commands.Cog):
                 if not user_bait:
                     return await ctx.reply("❌ You don't have any bait! Buy some from `.shop bait`")
                 
+                # Debug logging
+                self.logger.info(f"User {ctx.author.id} bait inventory for listing:")
+                for bait in user_bait:
+                    self.logger.info(f"  - ID: '{bait.get('_id', 'unknown')}', Name: '{bait.get('name', 'unknown')}', Amount: {bait.get('amount', 0)}")
+                
                 embed = discord.Embed(
                     title="🪱 Your Bait Collection",
                     description="Use `.bait <bait_name>` to equip bait\n💡 **Aliases:** quantum, void, crystal, divine, basic, pro, etc.",
@@ -1608,18 +1618,39 @@ class Fishing(commands.Cog):
             # First try to resolve alias
             resolved_bait_id = self._resolve_bait_alias(bait_name)
             
+            # Try exact matches first (highest priority)
             for bait in user_bait:
                 bait_id = bait.get('_id', '').lower()
                 bait_full_name = bait['name'].lower()
                 
-                # Match by exact ID, resolved alias, or name contains
-                if (bait_name.lower() == bait_id or 
-                    (resolved_bait_id and resolved_bait_id == bait_id) or
-                    bait_name.lower() in bait_full_name):
+                # Exact ID match
+                if bait_name.lower() == bait_id:
+                    target_bait = bait
+                    break
+                    
+                # Exact resolved alias match
+                if resolved_bait_id and resolved_bait_id == bait_id:
                     target_bait = bait
                     break
             
+            # If no exact match found, try partial name matches (lower priority)
             if not target_bait:
+                for bait in user_bait:
+                    bait_full_name = bait['name'].lower()
+                    
+                    # Only match if the input is a significant part of the name (not just a substring)
+                    if (len(bait_name) >= 3 and 
+                        bait_name.lower() in bait_full_name and
+                        len(bait_name) / len(bait_full_name) > 0.3):  # At least 30% of the name
+                        target_bait = bait
+                        break
+            
+            if not target_bait:
+                # Debug logging
+                self.logger.info(f"User {ctx.author.id} failed to find bait '{bait_name}'. Available baits:")
+                for bait in user_bait:
+                    self.logger.info(f"  - ID: '{bait.get('_id', 'unknown')}', Name: '{bait.get('name', 'unknown')}'")
+                
                 available_bait = [f"`{b.get('_id', 'unknown')}`" for b in user_bait[:5]]
                 embed = discord.Embed(
                     title="❌ Bait Not Found",
@@ -1633,16 +1664,29 @@ class Fishing(commands.Cog):
                 )
                 if available_bait:
                     embed.add_field(
-                        name="Available bait",
+                        name="Available bait IDs",
                         value=", ".join(available_bait),
                         inline=False
                     )
+                
+                # Also show names for easier identification
+                if user_bait:
+                    available_names = [f"`{b.get('name', 'unknown')}`" for b in user_bait[:5]]
+                    embed.add_field(
+                        name="Available bait names",
+                        value=", ".join(available_names),
+                        inline=False
+                    )
+                
                 return await ctx.reply(embed=embed)
             
             # Equip the bait - IMPROVED error handling
             bait_id = target_bait.get('_id')
             if not bait_id:
                 return await ctx.reply("❌ Invalid bait ID!")
+            
+            # Debug logging
+            self.logger.info(f"User {ctx.author.id} attempting to equip bait: '{bait_name}' -> resolved to ID: '{bait_id}' (name: '{target_bait['name']}')")
                 
             if await db.set_active_bait(ctx.author.id, bait_id):
                 embed = discord.Embed(
