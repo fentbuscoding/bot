@@ -3,6 +3,7 @@ from cogs.logging.logger import CogLogger
 from cogs.logging.stats_logger import StatsLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 import discord
 import random
 import asyncio
@@ -20,6 +21,17 @@ class MultiplierConverter(commands.Converter):
             return float(argument)
         except ValueError:
             raise commands.BadArgument("Multiplier must be a number (like 1.1 or 1.5x)")
+
+def requires_tos():
+    """Decorator to ensure user has accepted ToS before using gambling commands"""
+    def decorator(func):
+        async def wrapper(self, ctx, *args, **kwargs):
+            if not await check_tos_acceptance(ctx.author.id):
+                await prompt_tos_acceptance(ctx)
+                return
+            return await func(self, ctx, *args, **kwargs)
+        return wrapper
+    return decorator
 
 class Gambling(commands.Cog):
     def __init__(self, bot):
@@ -70,6 +82,7 @@ class Gambling(commands.Cog):
     # piece de resistance: cog_check
     async def cog_check(self, ctx):
         """Global check for all commands in this cog"""
+        # Check if gambling is disabled in this channel
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
             await ctx.reply(
                 random.choice([f"❌ Gambling commands are disabled in this channel. "
@@ -77,6 +90,13 @@ class Gambling(commands.Cog):
                 "<#1314685928614264852> is a good place for that."])
             )
             return False
+        
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+            
+        return True
         return True
 
     @commands.command(aliases=['bj'])
@@ -1550,25 +1570,33 @@ class Gambling(commands.Cog):
         await channel.send(embed=result_embed)
 
     async def _parse_bet(self, bet_str: str, wallet: int) -> int:
-        """Parse bet amount from string (supports all, half, %, k, m suffixes)"""
+        """Parse bet amount from string (supports all, half, %, k, m suffixes) with 250M cap"""
         try:
             bet_str = bet_str.lower().strip()
+            MAX_BET = 250_000_000  # 250 million cap
             
             if bet_str in ['all', 'max']:
-                return wallet
+                # Cap 'all' bets at 250M if wallet is over 250M
+                return min(wallet, MAX_BET)
             elif bet_str in ['half', '1/2']:
-                return wallet // 2
+                # Half of wallet, but capped at 250M
+                half_bet = wallet // 2
+                return min(half_bet, MAX_BET)
             elif bet_str.endswith('%'):
                 percent = float(bet_str[:-1])
                 if percent <= 0 or percent > 100:
                     return None
-                return int(wallet * (percent / 100))
+                calculated_bet = int(wallet * (percent / 100))
+                return min(calculated_bet, MAX_BET)
             elif bet_str.endswith('k'):
-                return int(float(bet_str[:-1]) * 1000)
+                calculated_bet = int(float(bet_str[:-1]) * 1000)
+                return min(calculated_bet, MAX_BET)
             elif bet_str.endswith('m'):
-                return int(float(bet_str[:-1]) * 1000000)
+                calculated_bet = int(float(bet_str[:-1]) * 1000000)
+                return min(calculated_bet, MAX_BET)
             else:
-                return int(bet_str)
+                calculated_bet = int(bet_str)
+                return min(calculated_bet, MAX_BET)
         except (ValueError, AttributeError):
             return None
 

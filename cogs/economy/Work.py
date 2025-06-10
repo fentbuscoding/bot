@@ -2,6 +2,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 import discord
 import random
 import asyncio
@@ -89,7 +90,15 @@ class Work(commands.Cog):
             }
         }
 
-    async def get_user_job(self, user_id):
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+        return True
+
+    async def get_user_job(self, user_id: int):
         """Retrieve user's job data from the database."""
         user_data = await db.db.users.find_one({"_id": str(user_id)})
         return user_data.get("work", None)
@@ -850,7 +859,7 @@ class BossRelationsView(discord.ui.View):
         except:
             shop_items = {}
         
-        inventory = await self.work_cog.work_cog.db.get_inventory(interaction.user.id)
+        inventory = await self.work_cog.db.get_inventory(interaction.user.id)
         giftable_items = []
         
         # Check inventory for giftable items
@@ -1661,4 +1670,3 @@ class RestartButton(discord.ui.Button):
 
 async def setup(bot):
     await bot.add_cog(Work(bot))
-           

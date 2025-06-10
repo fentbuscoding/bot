@@ -517,7 +517,7 @@ class AsyncDatabase:
             return []
         
         user = await self.db.users.find_one({"_id": str(user_id)})
-        if not user or "inventory" not in user:
+        if not user:
             return []
         
         # Group items by id and sum quantities
@@ -525,7 +525,9 @@ class AsyncDatabase:
         item_counts = defaultdict(int)
         item_data = {}
         
-        for item in user.get("inventory", []):
+        # Process main inventory array
+        inventory = user.get("inventory", [])
+        for item in inventory:
             # Skip invalid items (strings or non-dict objects)
             if not isinstance(item, dict):
                 self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
@@ -535,6 +537,39 @@ class AsyncDatabase:
             item_counts[item_key] += item.get("quantity", 1)  # Add quantity if exists, default to 1
             if item_key not in item_data:
                 item_data[item_key] = item.copy()
+        
+        # Process legacy potions array for backward compatibility
+        potions = user.get("potions", [])
+        for potion in potions:
+            if not isinstance(potion, dict):
+                continue
+            
+            potion_id = potion.get("_id", potion.get("id", "unknown"))
+            amount = potion.get("amount", 1)
+            
+            # Try to get potion data from shop files
+            try:
+                import os
+                import json
+                potion_file = os.path.join(os.getcwd(), "data", "shop", "potions.json")
+                with open(potion_file, 'r') as f:
+                    potion_data = json.load(f)
+                    
+                if potion_id in potion_data:
+                    shop_potion = potion_data[potion_id]
+                    potion_item = {
+                        "id": potion_id,
+                        "name": shop_potion.get("name", potion_id),
+                        "description": shop_potion.get("description", ""),
+                        "type": "potion",
+                        "price": shop_potion.get("price", 0),
+                        "value": shop_potion.get("price", 0)
+                    }
+                    item_counts[potion_id] += amount
+                    if potion_id not in item_data:
+                        item_data[potion_id] = potion_item
+            except Exception as e:
+                self.logger.error(f"Error loading potion data for inventory: {e}")
         
         # Convert to list with quantities
         result = []
@@ -734,14 +769,15 @@ class AsyncDatabase:
             return False
         
         user = await self.db.users.find_one({"_id": str(user_id)})
-        if not user or "inventory" not in user:
+        if not user:
             return False
         
-        inventory = user["inventory"]
+        # First, try to remove from main inventory array
+        inventory = user.get("inventory", [])
         items_to_keep = []
         remaining_to_remove = quantity
         
-        # Filter items to keep/remove
+        # Filter items to keep/remove from main inventory
         for item in inventory:
             # Skip invalid items (strings or non-dict objects)
             if not isinstance(item, dict):
@@ -762,16 +798,49 @@ class AsyncDatabase:
             else:
                 items_to_keep.append(item.copy())
         
+        # If we still need to remove items, check legacy potions array
         if remaining_to_remove > 0:
-            return False  # Not enough items to remove
+            potions = user.get("potions", [])
+            potions_to_keep = []
+            
+            for potion in potions:
+                if not isinstance(potion, dict):
+                    potions_to_keep.append(potion)
+                    continue
+                    
+                potion_id = potion.get("_id", potion.get("id"))
+                if potion_id == item_id and remaining_to_remove > 0:
+                    potion_amount = potion.get("amount", 1)
+                    if potion_amount > remaining_to_remove:
+                        # Keep the potion but reduce its amount
+                        new_potion = potion.copy()
+                        new_potion["amount"] = potion_amount - remaining_to_remove
+                        potions_to_keep.append(new_potion)
+                        remaining_to_remove = 0
+                    else:
+                        # Remove the entire potion
+                        remaining_to_remove -= potion_amount
+                else:
+                    potions_to_keep.append(potion)
+            
+            # Update potions array if we removed any
+            if len(potions_to_keep) != len(potions):
+                await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$set": {"potions": potions_to_keep}}
+                )
         
-        # Update the user's inventory
-        result = await self.db.users.update_one(
-            {"_id": str(user_id)},
-            {"$set": {"inventory": items_to_keep}}
-        )
+        # Update the main inventory if we modified it
+        if len(items_to_keep) != len(inventory):
+            result = await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$set": {"inventory": items_to_keep}}
+            )
+        else:
+            result = type('Result', (), {'modified_count': 1})()  # Fake successful result
         
-        return result.modified_count > 0
+        # Return True if we successfully removed the requested quantity
+        return remaining_to_remove == 0 and (result.modified_count > 0 or len(items_to_keep) != len(inventory))
 
     async def add_fishing_item(self, user_id: int, item: dict, item_type: str) -> bool:
         """Add a fishing item (rod or bait) to user's inventory"""

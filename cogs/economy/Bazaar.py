@@ -7,6 +7,7 @@ import asyncio
 import math
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from datetime import datetime, timedelta
 import hashlib
 
@@ -943,6 +944,14 @@ class Bazaar(commands.Cog):
                 await interaction.followup.send(embed=embed)
             else:
                 await respond(embed=embed)
+
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+        return True
 
 async def setup(bot):
     await bot.add_cog(Bazaar(bot))

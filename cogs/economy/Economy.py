@@ -4,6 +4,7 @@ from utils.db import async_db as db
 from utils.betting import parse_bet
 from utils.amount_parser import parse_amount, get_amount_help_text
 from utils.safe_reply import safe_reply
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 import discord
 import random
 import json
@@ -159,6 +160,7 @@ class Economy(commands.Cog):
     # piece de resistance: cog_check
     async def cog_check(self, ctx):
         """Global check for all commands in this cog"""
+        # Check if economy commands are disabled in this channel
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
             await safe_reply(ctx,
                 random.choice([f"❌ Economy commands are disabled in this channel. "
@@ -166,6 +168,12 @@ class Economy(commands.Cog):
                 "<#1314685928614264852> is a good place for that."])
             )
             return False
+        
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+            
         return True
     
     @commands.command(aliases=['bal', 'cash', 'bb'])
@@ -1078,10 +1086,17 @@ class Economy(commands.Cog):
             if not inventory:
                 return await ctx.reply("❌ Your inventory is empty! Buy items from `.shop`")
             
-            # Search for the item
-            target_item = await self._find_item_in_inventory(inventory, item_name)
+            # Filter inventory to only show usable items (potions and upgrades)
+            usable_items = [item for item in inventory if isinstance(item, dict) and 
+                          item.get('type') in ['potion', 'upgrade']]
+            
+            if not usable_items:
+                return await ctx.reply("❌ You don't have any usable items! Potions and upgrades can be used with this command.")
+            
+            # Search for the item in usable items only
+            target_item = await self._find_item_in_inventory(usable_items, item_name)
             if not target_item:
-                return await self._show_item_not_found(ctx, item_name, inventory)
+                return await self._show_item_not_found(ctx, item_name, usable_items)
             
             # Determine item type and handle usage
             item_type = target_item.get('type', 'item')
@@ -1091,7 +1106,8 @@ class Economy(commands.Cog):
             elif item_type == 'upgrade':
                 await self._use_upgrade(ctx, target_item)
             else:
-                await self._use_general_item(ctx, target_item)
+                # This shouldn't happen now since we filter the inventory
+                await ctx.reply("❌ This item cannot be used!")
                 
         except Exception as e:
             self.logger.error(f"Use item error: {e}")
@@ -1103,20 +1119,19 @@ class Economy(commands.Cog):
         
         embed = discord.Embed(
             title="📦 Item Usage Guide",
-            description="Use `.use <item_name>` to consume items from your inventory",
+            description="Use `.use <item_name>` to consume usable items from your inventory\n\n**Note:** Only potions and upgrades can be used with this command.",
             color=discord.Color.blue()
         )
         
         if inventory:
-            # Group items by type
+            # Only show usable items (potions and upgrades)
             potions = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'potion']
             upgrades = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'upgrade']
-            general = [item for item in inventory if isinstance(item, dict) and item.get('type') not in ['potion', 'upgrade']]
             
             if potions:
                 potion_list = [f"🧪 {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in potions[:5]]
                 embed.add_field(
-                    name="🧪 Potions",
+                    name="🧪 Usable Potions",
                     value="\n".join(potion_list) + ("..." if len(potions) > 5 else ""),
                     inline=True
                 )
@@ -1124,17 +1139,16 @@ class Economy(commands.Cog):
             if upgrades:
                 upgrade_list = [f"⬆️ {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in upgrades[:5]]
                 embed.add_field(
-                    name="⬆️ Upgrades",
+                    name="⬆️ Usable Upgrades",
                     value="\n".join(upgrade_list) + ("..." if len(upgrades) > 5 else ""),
                     inline=True
                 )
             
-            if general:
-                general_list = [f"📦 {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in general[:5]]
+            if not potions and not upgrades:
                 embed.add_field(
-                    name="📦 General Items",
-                    value="\n".join(general_list) + ("..." if len(general) > 5 else ""),
-                    inline=True
+                    name="No Usable Items",
+                    value="You don't have any potions or upgrades to use!\nVisit `.shop` to buy some usable items.",
+                    inline=False
                 )
         else:
             embed.add_field(
@@ -1346,45 +1360,7 @@ class Economy(commands.Cog):
         except Exception as e:
             self.logger.error(f"Upgrade usage error: {e}")
             await ctx.reply(f"❌ Failed to use {upgrade_name}!")
-    
-    async def _use_general_item(self, ctx, item):
-        """Handle general item usage"""
-        item_id = item.get('id') or item.get('_id')
-        item_name = item.get('name', 'Unknown Item')
-        item_value = item.get('value', 0)
-        
-        # For general items, convert to money or provide description
-        description = item.get('description', '')
-        
-        if 'sell' in description.lower() or item_value > 0:
-            # Sellable item
-            await db.update_wallet(ctx.author.id, item_value, ctx.guild.id)
-            await db.remove_from_inventory(ctx.author.id, ctx.guild.id, item_id, 1)
-            
-            embed = discord.Embed(
-                title="💰 Item Sold!",
-                description=f"Sold **{item_name}** for **{item_value:,}** {self.currency}",
-                color=discord.Color.green()
-            )
-        else:
-            # Just remove the item (consumable)
-            await db.remove_from_inventory(ctx.author.id, ctx.guild.id, item_id, 1)
-            
-            embed = discord.Embed(
-                title="📦 Item Used!",
-                description=f"Used **{item_name}**",
-                color=discord.Color.green()
-            )
-            
-            if description:
-                embed.add_field(
-                    name="📝 Effect",
-                    value=description,
-                    inline=False
-                )
-        
-        await ctx.reply(embed=embed)
-    
+
     @commands.command(aliases=['pot', 'potions', 'effects'])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def activeeffects(self, ctx):

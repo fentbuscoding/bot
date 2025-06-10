@@ -1,6 +1,7 @@
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from typing import Dict, List, Optional, Tuple, Union
 from collections import Counter, defaultdict
 import discord
@@ -524,6 +525,14 @@ class Trading(commands.Cog):
             "bank_upgrade": 2500
         }
     
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+        return True
+
     def get_item_value(self, item: dict) -> int:
         """Get estimated value of an item"""
         return self.ITEM_VALUES.get(item.get('id', ''), item.get('price', 0))

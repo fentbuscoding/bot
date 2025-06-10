@@ -25,20 +25,6 @@ class Admin(commands.Cog):
         # Set up data file path
         self.data_file = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'shop.json')
 
-        # Shop types configuration 
-        self.SHOP_TYPES = {
-            # General shops
-            "items": {"name": "Item Shop", "description": "General items", "icon": "🛍️"},
-            "potions": {"name": "Potion Shop", "description": "Buff and boost potions", "icon": "🧪"},
-            "upgrades": {"name": "Upgrades Shop", "description": "Permanent upgrades", "icon": "⚡"},
-            "fishing": {"name": "Fishing Shop", "description": "Fishing gear and items", "icon": "🎣"},
-            
-            # Fishing-specific shops
-            "bait": {"name": "Bait Shop", "description": "Buy fishing bait", "icon": "🪱"},
-            "rod": {"name": "Rod Shop", "description": "Buy fishing rods", "icon": "🎣"},
-            "fish": {"name": "Fish Shop", "description": "Buy and sell fish", "icon": "🐟"}
-        }
-
         # Fishing configuration
         self.FISH_TYPES = {
             "normal": {
@@ -182,9 +168,12 @@ class Admin(commands.Cog):
                 "`.shop_admin remove <shop> <item_id>` - Remove item\n"
                 "`.shop_admin list <shop>` - List items\n"
                 "`.shop_admin edit <shop> <item_id> <field> <value>` - Edit item\n\n"
-                "**Available Shops:**\n" +
-                "\n".join(f"{data['icon']} `{shop}` - {data['description']}" 
-                         for shop, data in self.SHOP_TYPES.items())
+                "**Available Shops:**\n"
+                "🛍️ `item` - General items\n"
+                "🧪 `potion` - Buff and boost potions\n"
+                "⬆️ `upgrade` - Permanent upgrades\n"
+                "🎣 `rod` - Fishing rods\n"
+                "🪱 `bait` - Fishing bait"
             ),
             color=0x2b2d31
         )
@@ -196,13 +185,31 @@ class Admin(commands.Cog):
         """Add an item to a shop. Format varies by shop type.
         
         Examples:
-        Items: .shop_admin add items {"id": "vip", "name": "VIP Role", "price": 10000, "description": "Get VIP status"}
-        Potions: .shop_admin add potions {"id": "luck_potion", "name": "Lucky Potion", "price": 1000, "type": "luck", "multiplier": 2.0, "duration": 60}
-        Upgrades: .shop_admin add upgrades {"id": "bank_boost", "name": "Bank Boost", "price": 5000, "type": "bank", "amount": 10000}
-        Fishing: .shop_admin add fishing {"id": "pro_rod", "name": "Pro Rod", "price": 5000, "type": "rod", "multiplier": 1.5}"""
+        Items: .shop_admin add item {"id": "vip", "name": "VIP Role", "price": 10000, "description": "Get VIP status"}
+        Potions: .shop_admin add potion {"id": "luck_potion", "name": "Lucky Potion", "price": 1000, "type": "luck", "multiplier": 2.0, "duration": 60}
+        Upgrades: .shop_admin add upgrade {"id": "bank_boost", "name": "Bank Boost", "price": 5000, "type": "bank", "amount": 10000}
+        Rods: .shop_admin add rod {"id": "pro_rod", "name": "Pro Rod", "price": 5000, "description": "Professional fishing rod", "multiplier": 1.5}
+        Bait: .shop_admin add bait {"id": "pro_bait", "name": "Pro Bait", "price": 50, "amount": 10, "description": "Better bait", "catch_rates": {"normal": 1.2, "rare": 0.3}}"""
         
-        if shop_type not in self.SHOP_TYPES:
-            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(self.SHOP_TYPES.keys())}")
+        # Map old shop types to new JSON file types
+        shop_type_mapping = {
+            "items": "item",
+            "potions": "potion", 
+            "upgrades": "upgrade",
+            "fishing": "rod",  # Legacy support
+            "rods": "rod",
+            "bait": "bait"
+        }
+        
+        # Convert legacy shop type names
+        if shop_type in shop_type_mapping:
+            shop_type = shop_type_mapping[shop_type]
+            
+        # Valid shop types for JSON files
+        valid_shop_types = ["item", "potion", "upgrade", "rod", "bait"]
+        
+        if shop_type not in valid_shop_types:
+            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(valid_shop_types)}")
             
         try:
             # Parse item data
@@ -210,27 +217,47 @@ class Admin(commands.Cog):
             
             # Validate required fields
             required_fields = {
-                "items": ["id", "name", "price", "description"],
-                "potions": ["id", "name", "price", "type", "multiplier", "duration"],
-                "upgrades": ["id", "name", "price", "type"],
-                "fishing": ["id", "name", "price", "type"],
-                "bait": ["id", "name", "price", "amount", "description", "catch_rates"],
+                "item": ["id", "name", "price", "description"],
+                "potion": ["id", "name", "price", "type", "multiplier", "duration"],
+                "upgrade": ["id", "name", "price", "type"],
                 "rod": ["id", "name", "price", "description", "multiplier"],
-                "fish": ["id", "name", "price", "description"]
+                "bait": ["id", "name", "price", "amount", "description", "catch_rates"]
             }
             
             if not all(field in item for field in required_fields[shop_type]):
                 return await ctx.reply(f"Missing required fields: {required_fields[shop_type]}")
                 
-            # Add the item to database
-            if await db.add_shop_item(item, shop_type, ctx.guild.id if ctx.guild else None):
-                embed = discord.Embed(
-                    description=f"✨ Added **{item['name']}** to {self.SHOP_TYPES[shop_type]['icon']} {shop_type} shop!",
-                    color=0x2b2d31
-                )
-                await ctx.reply(embed=embed)
-            else:
-                await ctx.reply("❌ Failed to add item to shop")
+            # Load existing shop data
+            shop_file_path = f"data/shop/{shop_type}s.json"
+            try:
+                with open(shop_file_path, 'r') as f:
+                    shop_data = json.load(f)
+            except FileNotFoundError:
+                shop_data = {}
+            
+            # Check if item already exists
+            if item["id"] in shop_data:
+                return await ctx.reply(f"❌ Item with ID `{item['id']}` already exists!")
+            
+            # Add the item
+            shop_data[item["id"]] = item
+            
+            # Save back to file
+            os.makedirs(os.path.dirname(shop_file_path), exist_ok=True)
+            with open(shop_file_path, 'w') as f:
+                json.dump(shop_data, f, indent=2)
+                
+            # Reload shop data in Shop cog if it exists
+            shop_cog = self.bot.get_cog("Shop")
+            if shop_cog:
+                from cogs.economy.Shop import load_shop_data
+                shop_cog.shop_data = load_shop_data()
+                
+            embed = discord.Embed(
+                description=f"✨ Added **{item['name']}** to {shop_type} shop!",
+                color=0x2b2d31
+            )
+            await ctx.reply(embed=embed)
                 
         except json.JSONDecodeError:
             await ctx.reply("❌ Invalid JSON format! Make sure to use proper JSON syntax.")
@@ -241,122 +268,221 @@ class Admin(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def shop_remove(self, ctx, shop_type: str, item_id: str):
         """Remove an item from a shop"""
-        if shop_type not in self.SHOP_TYPES:
-            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(self.SHOP_TYPES.keys())}")
-            
-        collection = getattr(self.db.db, f"shop_{shop_type}", None)
-        if not collection:
-            return await ctx.reply("❌ Invalid shop collection!")
-            
-        result = await collection.delete_one({
-            "id": item_id,
-            "guild_id": str(ctx.guild.id) if ctx.guild else None
-        })
+        # Map old shop types to new JSON file types
+        shop_type_mapping = {
+            "items": "item",
+            "potions": "potion", 
+            "upgrades": "upgrade",
+            "fishing": "rod",  # Legacy support
+            "rods": "rod",
+            "bait": "bait"
+        }
         
-        if result.deleted_count > 0:
+        # Convert legacy shop type names
+        if shop_type in shop_type_mapping:
+            shop_type = shop_type_mapping[shop_type]
+            
+        # Valid shop types for JSON files
+        valid_shop_types = ["item", "potion", "upgrade", "rod", "bait"]
+        
+        if shop_type not in valid_shop_types:
+            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(valid_shop_types)}")
+            
+        try:
+            # Load existing shop data
+            shop_file_path = f"data/shop/{shop_type}s.json"
+            try:
+                with open(shop_file_path, 'r') as f:
+                    shop_data = json.load(f)
+            except FileNotFoundError:
+                return await ctx.reply(f"❌ No {shop_type} shop file found!")
+            
+            # Check if item exists
+            if item_id not in shop_data:
+                return await ctx.reply(f"❌ Item `{item_id}` not found in {shop_type} shop!")
+            
+            # Remove the item
+            item_name = shop_data[item_id].get("name", item_id)
+            del shop_data[item_id]
+            
+            # Save back to file
+            with open(shop_file_path, 'w') as f:
+                json.dump(shop_data, f, indent=2)
+                
+            # Reload shop data in Shop cog if it exists
+            shop_cog = self.bot.get_cog("Shop")
+            if shop_cog:
+                from cogs.economy.Shop import load_shop_data
+                shop_cog.shop_data = load_shop_data()
+                
             embed = discord.Embed(
-                description=f"✨ Removed item `{item_id}` from {self.SHOP_TYPES[shop_type]['icon']} {shop_type} shop!",
+                description=f"✨ Removed **{item_name}** from {shop_type} shop!",
                 color=0x2b2d31
             )
             await ctx.reply(embed=embed)
-        else:
-            await ctx.reply("❌ Item not found in shop")
+            
+        except Exception as e:
+            await ctx.reply(f"❌ Error: {str(e)}")
             
     @shop_admin.command(name="list")
     @commands.has_permissions(administrator=True)
     async def shop_list(self, ctx, shop_type: str):
         """List all items in a shop"""
-        if shop_type not in self.SHOP_TYPES:
-            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(self.SHOP_TYPES.keys())}")
-            
-        items = await db.get_shop_items(shop_type, ctx.guild.id if ctx.guild else None)
+        # Map old shop types to new JSON file types
+        shop_type_mapping = {
+            "items": "item",
+            "potions": "potion", 
+            "upgrades": "upgrade",
+            "fishing": "rod",  # Legacy support
+            "rods": "rod",
+            "bait": "bait"
+        }
         
-        if not items:
-            return await ctx.reply(f"No items found in {shop_type} shop!")
+        # Convert legacy shop type names
+        if shop_type in shop_type_mapping:
+            shop_type = shop_type_mapping[shop_type]
             
-        pages = []
-        chunks = [items[i:i+5] for i in range(0, len(items), 5)]
+        # Valid shop types for JSON files
+        valid_shop_types = ["item", "potion", "upgrade", "rod", "bait"]
         
-        for chunk in chunks:
-            embed = discord.Embed(
-                title=f"{self.SHOP_TYPES[shop_type]['icon']} {self.SHOP_TYPES[shop_type]['name']}",
-                color=0x2b2d31
-            )
+        if shop_type not in valid_shop_types:
+            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(valid_shop_types)}")
             
-            for item in chunk:
-                name = f"{item['name']} ({item['price']} {self.currency})"
-                value = []
+        try:
+            # Load shop data
+            shop_file_path = f"data/shop/{shop_type}s.json"
+            try:
+                with open(shop_file_path, 'r') as f:
+                    shop_data = json.load(f)
+            except FileNotFoundError:
+                return await ctx.reply(f"❌ No {shop_type} shop file found!")
+            
+            if not shop_data:
+                return await ctx.reply(f"No items found in {shop_type} shop!")
                 
-                value.append(f"ID: `{item['id']}`")
-                if "description" in item:
-                    value.append(item["description"])
-                if "type" in item:
-                    value.append(f"Type: {item['type']}")
-                if "multiplier" in item:
-                    value.append(f"Multiplier: {item['multiplier']}x")
-                if "duration" in item:
-                    value.append(f"Duration: {item['duration']}min")
-                if "amount" in item:
-                    value.append(f"Amount: {item['amount']}")
-                    
-                embed.add_field(
-                    name=name,
-                    value="\n".join(value),
-                    inline=False
+            # Convert dict to list format for pagination
+            items = []
+            for item_id, item_data in shop_data.items():
+                item_data['id'] = item_id  # Ensure ID is present
+                items.append(item_data)
+                
+            pages = []
+            chunks = [items[i:i+5] for i in range(0, len(items), 5)]
+            
+            for chunk in chunks:
+                embed = discord.Embed(
+                    title=f"🛍️ {shop_type.title()} Shop",
+                    color=0x2b2d31
                 )
                 
-            pages.append(embed)
-            
-        if len(pages) > 1:
-            view = HelpPaginator(pages, ctx.author)
-            view.update_buttons()
-            message = await ctx.reply(embed=pages[0], view=view)
-            view.message = message
-        else:
-            await ctx.reply(embed=pages[0])
+                for item in chunk:
+                    name = f"{item['name']} ({item['price']} {self.currency})"
+                    value = []
+                    
+                    value.append(f"ID: `{item['id']}`")
+                    if "description" in item:
+                        value.append(item["description"])
+                    if "type" in item:
+                        value.append(f"Type: {item['type']}")
+                    if "multiplier" in item:
+                        value.append(f"Multiplier: {item['multiplier']}x")
+                    if "duration" in item:
+                        value.append(f"Duration: {item['duration']}min")
+                    if "amount" in item:
+                        value.append(f"Amount: {item['amount']}")
+                        
+                    embed.add_field(
+                        name=name,
+                        value="\n".join(value),
+                        inline=False
+                    )
+                    
+                pages.append(embed)
+                
+            if len(pages) > 1:
+                view = HelpPaginator(pages, ctx.author)
+                view.update_buttons()
+                message = await ctx.reply(embed=pages[0], view=view)
+                view.message = message
+            else:
+                await ctx.reply(embed=pages[0])
+                
+        except Exception as e:
+            await ctx.reply(f"❌ Error: {str(e)}")
             
     @shop_admin.command(name="edit")
     @commands.has_permissions(administrator=True)
     async def shop_edit(self, ctx, shop_type: str, item_id: str, field: str, *, value: str):
         """Edit a field of an existing shop item
         
-        Example: .shop_admin edit potions luck_potion price 2000"""
-        if shop_type not in self.SHOP_TYPES:
-            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(self.SHOP_TYPES.keys())}")
+        Example: .shop_admin edit potion luck_potion price 2000"""
+        # Map old shop types to new JSON file types
+        shop_type_mapping = {
+            "items": "item",
+            "potions": "potion", 
+            "upgrades": "upgrade",
+            "fishing": "rod",  # Legacy support
+            "rods": "rod",
+            "bait": "bait"
+        }
+        
+        # Convert legacy shop type names
+        if shop_type in shop_type_mapping:
+            shop_type = shop_type_mapping[shop_type]
             
-        collection = getattr(self.db.db, f"shop_{shop_type}", None)
-        if not collection:
-            return await ctx.reply("❌ Invalid shop collection!")
+        # Valid shop types for JSON files
+        valid_shop_types = ["item", "potion", "upgrade", "rod", "bait"]
+        
+        if shop_type not in valid_shop_types:
+            return await ctx.reply(f"Invalid shop type! Use one of: {', '.join(valid_shop_types)}")
             
-        # Convert value to appropriate type
         try:
+            # Load existing shop data
+            shop_file_path = f"data/shop/{shop_type}s.json"
+            try:
+                with open(shop_file_path, 'r') as f:
+                    shop_data = json.load(f)
+            except FileNotFoundError:
+                return await ctx.reply(f"❌ No {shop_type} shop file found!")
+            
+            # Check if item exists
+            if item_id not in shop_data:
+                return await ctx.reply(f"❌ Item `{item_id}` not found in {shop_type} shop!")
+            
+            # Convert value to appropriate type
             if field in ["price", "duration", "amount"]:
                 value = int(value)
             elif field in ["multiplier"]:
                 value = float(value)
             elif value.lower() == "null":
                 value = None
+            elif field == "catch_rates":
+                # Handle catch_rates as JSON
+                value = json.loads(value)
                 
             # Update the item
-            result = await collection.update_one(
-                {
-                    "id": item_id,
-                    "guild_id": str(ctx.guild.id) if ctx.guild else None
-                },
-                {"$set": {field: value}}
-            )
+            shop_data[item_id][field] = value
             
-            if result.modified_count > 0:
-                embed = discord.Embed(
-                    description=f"✨ Updated `{field}` to `{value}` for item `{item_id}`!",
-                    color=0x2b2d31
-                )
-                await ctx.reply(embed=embed)
-            else:
-                await ctx.reply("❌ Item not found or no changes made")
+            # Save back to file
+            with open(shop_file_path, 'w') as f:
+                json.dump(shop_data, f, indent=2)
+                
+            # Reload shop data in Shop cog if it exists
+            shop_cog = self.bot.get_cog("Shop")
+            if shop_cog:
+                from cogs.economy.Shop import load_shop_data
+                shop_cog.shop_data = load_shop_data()
+                
+            embed = discord.Embed(
+                description=f"✨ Updated `{field}` to `{value}` for item `{item_id}`!",
+                color=0x2b2d31
+            )
+            await ctx.reply(embed=embed)
                 
         except ValueError:
             await ctx.reply("❌ Invalid value type for this field!")
+        except json.JSONDecodeError:
+            await ctx.reply("❌ Invalid JSON format for catch_rates field!")
         except Exception as e:
             await ctx.reply(f"❌ Error: {str(e)}")
 

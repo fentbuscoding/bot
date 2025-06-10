@@ -5,6 +5,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 import discord
 import random
 import uuid
@@ -195,6 +196,7 @@ class Fishing(commands.Cog):
             ]
         }
     async def cog_check(self, ctx):
+        # Check if fishing is disabled in this channel
         if ctx.channel.id in self.blocked_channels and not ctx.author.guild_permissions.administrator:
             await ctx.reply(
                 random.choice([f"❌ Economy commands are disabled in this channel. "
@@ -202,6 +204,12 @@ class Fishing(commands.Cog):
                 "<#1314685928614264852> is a good place for that."])
             )
             return False
+        
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+            
         return True
 
     def _load_all_rod_data(self):
@@ -1021,9 +1029,9 @@ class Fishing(commands.Cog):
             
             if not rods:
                 embed = discord.Embed(
-                    title="🎣 First Time Fishing",
+                    title="First Time Fishing",
                     description="You need a fishing rod to start! Buy one from `.shop rod`",
-                    color=discord.Color.blue()
+                    color=0x2b2d31
                 )
                 return await ctx.reply(embed=embed)
             
@@ -1081,9 +1089,9 @@ class Fishing(commands.Cog):
             
             # Display suspense message
             suspense_embed = discord.Embed(
-                title="🎣 Casting your line...",
+                title="Casting your line...",
                 description=f"Using **{rod['name']}** with **{current_bait['name']}**",
-                color=discord.Color.blue()
+                color=0x2b2d31
             )
             
             # Calculate catch percentages for debugging (hidden from users)
@@ -1098,7 +1106,7 @@ class Fishing(commands.Cog):
                 print(debug_text)
                 self.logger.debug(debug_text)
             
-            suspense_embed.set_footer(text="🌊 Waiting for a bite...")
+            suspense_embed.set_footer(text="Waiting for a bite...")
             message = await ctx.reply(embed=suspense_embed)
             
             # Suspense delay
@@ -1108,17 +1116,17 @@ class Fishing(commands.Cog):
             if not await self.check_rod_durability(rod_durability):
                 # Rod breaks!
                 break_embed = discord.Embed(
-                    title="💥 Rod Broke!",
+                    title="Rod Broke!",
                     description=f"Your **{rod['name']}** snapped under pressure!",
-                    color=discord.Color.red()
+                    color=0x2b2d31
                 )
                 break_embed.add_field(
-                    name="⚠️ Rod Removed",
+                    name="Rod Removed",
                     value="The broken rod has been removed from your inventory.",
                     inline=False
                 )
                 break_embed.add_field(
-                    name="🛡️ Durability Info",
+                    name="Durability Info",
                     value=f"This rod had a {((1-rod_durability)*100):.2f}% break chance per use.",
                     inline=False
                 )
@@ -1139,9 +1147,9 @@ class Fishing(commands.Cog):
             total_weight = sum(adjusted_rates.values())
             if total_weight == 0:
                 await message.edit(embed=discord.Embed(
-                    title="🎣 No Bite",
+                    title="No Bite",
                     description="Nothing seems interested in your bait...",
-                    color=discord.Color.gray()
+                    color=0x2b2d31
                 ))
                 return
             
@@ -1168,17 +1176,17 @@ class Fishing(commands.Cog):
             if escaped:
                 # Fish escaped!
                 escape_embed = discord.Embed(
-                    title="🐟 The one that got away...",
+                    title="The one that got away...",
                     description=f"A **{fish_template['name']}** ({fish_weight:.2f}kg) broke free!",
-                    color=discord.Color.orange()
+                    color=0x2b2d31
                 )
                 escape_embed.add_field(
-                    name="💰 Potential Value",
+                    name="Potential Value",
                     value=f"You could have earned **{fish_template['base_value']:,}** {self.currency}",
                     inline=True
                 )
                 escape_embed.add_field(
-                    name="🎣 Tip",
+                    name="Tip",
                     value="Try using a stronger rod for big fish!",
                     inline=True
                 )
@@ -1204,68 +1212,47 @@ class Fishing(commands.Cog):
             }
             
             if await db.add_fish(ctx.author.id, fish):
-                # Success embed with rarity-based colors
-                rarity_colors = {
-                    "junk": discord.Color.light_gray(),
-                    "tiny": discord.Color.light_gray(),
-                    "small": discord.Color.blue(),
-                    "common": discord.Color.green(),
-                    "uncommon": discord.Color.dark_green(),
-                    "rare": discord.Color.blue(),
-                    "epic": discord.Color.purple(),
-                    "legendary": discord.Color.orange(),
-                    "mythical": discord.Color.red(),
-                    "ancient": discord.Color.red(),
-                    "divine": discord.Color.red(),
-                    "cosmic": discord.Color.red(),
-                    "transcendent": discord.Color.red(),
-                    "void": discord.Color.red(),
-                    "celestial": discord.Color.red(),
-                    "subatomic": discord.Color.magenta(),
-                    "super": discord.Color.from_rgb(0, 100, 255),  # Superhero blue
-                    "dev": discord.Color.gold()
-                }
-                
+                # Success embed with consistent styling
                 success_embed = discord.Embed(
-                    title="🎣 Fish Caught!",
+                    title="Fish Caught!",
                     description=f"You caught a **{fish['name']}**!",
-                    color=rarity_colors.get(caught_rarity, discord.Color.blue())
+                    color=0x2b2d31
                 )
                 
                 success_embed.add_field(
-                    name="💰 Value",
+                    name="Value",
                     value=f"**{final_value:,}** {self.currency}",
                     inline=True
                 )
                 
                 success_embed.add_field(
-                    name="⚖️ Weight",
+                    name="Weight",
                     value=f"{fish_weight:.2f} kg",
                     inline=True
                 )
                 
                 success_embed.add_field(
-                    name="🏷️ Rarity",
+                    name="Rarity",
                     value=caught_rarity.title(),
                     inline=True
                 )
                 
                 # Add special message for rare fish
                 if caught_rarity == "subatomic":
-                    success_embed.set_footer(text="⚛️ LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
+                    success_embed.set_footer(text="LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
                 elif caught_rarity == "super":
-                    success_embed.set_footer(text="🦸 SUPER HERO CATCH! You've reeled in a legendary superhero fish!")
+                    success_embed.set_footer(text="SUPER HERO CATCH! You've reeled in a legendary superhero fish!")
                 elif caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent", "void", "celestial"]:
-                    success_embed.set_footer(text="🌟 Incredible catch! This is extremely rare!")
+                    success_embed.set_footer(text="Incredible catch! This is extremely rare!")
                 elif caught_rarity in ["epic", "rare"]:
-                    success_embed.set_footer(text="✨ Nice catch! This is quite rare!")
+                    success_embed.set_footer(text="Nice catch! This is quite rare!")
                 
                 await message.edit(embed=success_embed)
             else:
                 await message.edit(embed=discord.Embed(
-                    title="❌ Storage Error",
+                    title="Storage Error",
                     description="Failed to store your catch!",
-                    color=discord.Color.red()
+                    color=0x2b2d31
                 ))
                 
         except Exception as e:
@@ -1289,9 +1276,9 @@ class Fishing(commands.Cog):
                 if await db.remove_fish(ctx.author.id, fish_id):
                     await db.add_currency(ctx.author.id, fish["value"])
                     embed = discord.Embed(
-                        title="🐟 Fish Sold!",
+                        title="Fish Sold!",
                         description=f"Sold **{fish['name']}** for **{fish['value']:,}** {self.currency}",
-                        color=discord.Color.green()
+                        color=0x2b2d31
                     )
                     await ctx.reply(embed=embed)
                 else:
@@ -1304,9 +1291,9 @@ class Fishing(commands.Cog):
                 if await db.clear_fish(ctx.author.id):
                     await db.add_currency(ctx.author.id, total_value)
                     embed = discord.Embed(
-                        title="🐟 All Fish Sold!",
+                        title="All Fish Sold!",
                         description=f"Sold **{fish_count:,}** fish for **{total_value:,}** {self.currency}",
-                        color=discord.Color.green()
+                        color=0x2b2d31
                     )
                     await ctx.reply(embed=embed)
                 else:
@@ -1332,9 +1319,9 @@ class Fishing(commands.Cog):
                 total_value = sum(fish.get("value", 0) for fish in user_fish) if user_fish else 0
                 
                 embed = discord.Embed(
-                    title="🎣 Fishing Overview",
+                    title="Fishing Overview",
                     description=f"**Total Fish:** {total_fish:,} | **Total Value:** {total_value:,} {self.currency}",
-                    color=discord.Color.blue()
+                    color=0x2b2d31
                 )
                 
                 # Show equipped rod
@@ -1343,7 +1330,7 @@ class Fishing(commands.Cog):
                     if rod_id in self.rod_data:
                         rod = self.rod_data[rod_id]
                         embed.add_field(
-                            name="🎣 Equipped Rod",
+                            name="Equipped Rod",
                             value=f"**{rod['name']}**\n"
                                   f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
                                   f"Power: {rod.get('power', 1)}\n"
@@ -1352,14 +1339,14 @@ class Fishing(commands.Cog):
                         )
                     else:
                         embed.add_field(
-                            name="🎣 Equipped Rod",
-                            value="❌ Rod data not found",
+                            name="Equipped Rod",
+                            value="Rod data not found",
                             inline=True
                         )
                 else:
                     embed.add_field(
-                        name="🎣 Equipped Rod",
-                        value="❌ No rod equipped\nUse `.rod` to equip one",
+                        name="Equipped Rod",
+                        value="No rod equipped\nUse `.rod` to equip one",
                         inline=True
                     )
                 
@@ -1401,13 +1388,13 @@ class Fishing(commands.Cog):
                         top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
                     
                     embed.add_field(
-                        name="🏆 Top Catches",
+                        name="Top Catches",
                         value="\n".join(top_catches),
                         inline=False
                     )
                 else:
                     embed.add_field(
-                        name="🐟 Fish Collection",
+                        name="Fish Collection",
                         value="No fish caught yet! Use `.fish` to start fishing.",
                         inline=False
                     )
@@ -1449,9 +1436,9 @@ class Fishing(commands.Cog):
             # Create fish display embed
             total_value = sum(fish.get("value", 0) for fish in user_fish)
             embed = discord.Embed(
-                title="🐟 Your Fish Collection",
+                title="Your Fish Collection",
                 description=f"**Total Fish:** {len(user_fish):,} | **Total Value:** {total_value:,} {self.currency}",
-                color=discord.Color.blue()
+                color=0x2b2d31
             )
             
             # Add fish to embed
@@ -1469,6 +1456,7 @@ class Fishing(commands.Cog):
                     inline=False
                 )
             
+            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
             embed.set_footer(text=f"Page {page}/{total_pages} • Use buttons to navigate")
             
             # Create pagination view
@@ -1500,9 +1488,9 @@ class Fishing(commands.Cog):
             page_fish = all_fish[start_idx:end_idx]
             
             embed = discord.Embed(
-                title="🌍 Global Fish Leaderboard",
+                title="Global Fish Leaderboard",
                 description="Top catches from all players",
-                color=discord.Color.gold()
+                color=0x2b2d31
             )
             
             for i, fish in enumerate(page_fish, start=start_idx + 1):
@@ -1581,37 +1569,37 @@ class Fishing(commands.Cog):
                 rarity_counts[rarity] = rarity_counts.get(rarity, 0) + 1
             
             embed = discord.Embed(
-                title=f"📊 {target_user.display_name}'s Fishing Stats",
-                color=discord.Color.blue()
+                title="Fishing Statistics",
+                color=0x2b2d31
             )
             
             embed.add_field(
-                name="🎣 Total Catches",
+                name="Total Catches",
                 value=f"**{total_fish}** fish",
                 inline=True
             )
             
             embed.add_field(
-                name="💰 Total Value",
+                name="Total Value",
                 value=f"**{total_value:,}** {self.currency}",
                 inline=True
             )
             
             embed.add_field(
-                name="⚖️ Total Weight",
+                name="Total Weight",
                 value=f"**{total_weight:.2f}** kg",
                 inline=True
             )
             
             embed.add_field(
-                name="📈 Average Value",
+                name="Average Value",
                 value=f"**{avg_value:.0f}** {self.currency}",
                 inline=True
             )
             
             if rarest_fish:
                 embed.add_field(
-                    name="✨ Rarest Catch",
+                    name="Rarest Catch",
                     value=f"**{rarest_fish['name']}** ({rarest_fish['type'].title()})",
                     inline=True
                 )
@@ -1621,10 +1609,12 @@ class Fishing(commands.Cog):
                 top_rarities = sorted(rarity_counts.items(), key=lambda x: x[1], reverse=True)[:5]
                 rarity_text = "\n".join([f"**{rarity.title()}:** {count}" for rarity, count in top_rarities])
                 embed.add_field(
-                    name="🏷️ Catches by Rarity",
+                    name="Catches by Rarity",
                     value=rarity_text,
                     inline=False
                 )
+            
+            embed.set_author(name=target_user.display_name, icon_url=target_user.display_avatar.url)
             
             await ctx.reply(embed=embed)
             
@@ -1643,14 +1633,14 @@ class Fishing(commands.Cog):
                     return await ctx.reply("❌ You don't have any fishing rods! Buy one from `.shop rod`")
                 
                 embed = discord.Embed(
-                    title="🎣 Your Fishing Rods",
-                    description="Use `.rod <rod_name>` to equip a rod\n💡 **Aliases:** quantum, cosmic, void, divine, basic, pro, etc.",
-                    color=discord.Color.blue()
+                    title="Your Fishing Rods",
+                    description="Use `.rod <rod_name>` to equip a rod",
+                    color=0x2b2d31
                 )
                 
                 for rod in user_rods[:10]:  # Show first 10 rods
                     embed.add_field(
-                        name=f"🎣 {rod['name']}",
+                        name=f"{rod['name']}",
                         value=f"**Multiplier:** {rod.get('multiplier', 1.0)}x\n**Quantity:** {rod.get('quantity', 1)}",
                         inline=True
                     )
@@ -1677,12 +1667,12 @@ class Fishing(commands.Cog):
             
             if not target_rod:
                 embed = discord.Embed(
-                    title="❌ Rod Not Found",
+                    title="Rod Not Found",
                     description=f"Rod '{rod_name}' not found in your inventory!",
-                    color=discord.Color.red()
+                    color=0x2b2d31
                 )
                 embed.add_field(
-                    name="💡 Try using aliases",
+                    name="Available Aliases",
                     value="quantum, cosmic, void, divine, basic, pro, etc.",
                     inline=False
                 )
@@ -1691,22 +1681,22 @@ class Fishing(commands.Cog):
             # Equip the rod
             if await self.set_active_rod_manual(ctx.author.id, target_rod['_id']):
                 embed = discord.Embed(
-                    title="🎣 Rod Equipped!",
+                    title="Rod Equipped",
                     description=f"You equipped **{target_rod['name']}**",
-                    color=discord.Color.green()
+                    color=0x2b2d31
                 )
                 embed.add_field(
-                    name="💪 Multiplier",
+                    name="Multiplier",
                     value=f"{target_rod.get('multiplier', 1.0)}x",
                     inline=True
                 )
                 embed.add_field(
-                    name="🛡️ Durability",
+                    name="Durability",
                     value=f"{((target_rod.get('durability', 0.95))*100):.1f}%",
                     inline=True
                 )
                 embed.add_field(
-                    name="⚡ Power Level",
+                    name="Power Level",
                     value=f"{target_rod.get('power', 1)}",
                     inline=True
                 )
@@ -1734,9 +1724,9 @@ class Fishing(commands.Cog):
                     self.logger.info(f"  - ID: '{bait.get('_id', 'unknown')}', Name: '{bait.get('name', 'unknown')}', Amount: {bait.get('amount', 0)}")
                 
                 embed = discord.Embed(
-                    title="🪱 Your Bait Collection",
-                    description="Use `.bait <bait_name>` to equip bait\n💡 **Aliases:** quantum, void, crystal, divine, basic, pro, etc.",
-                    color=discord.Color.green()
+                    title="Your Bait Collection",
+                    description="Use `.bait <bait_name>` to equip bait",
+                    color=0x2b2d31
                 )
                 
                 for bait in user_bait[:10]:  # Show first 10 bait types
@@ -1790,12 +1780,12 @@ class Fishing(commands.Cog):
                 
                 available_bait = [f"`{b.get('_id', 'unknown')}`" for b in user_bait[:5]]
                 embed = discord.Embed(
-                    title="❌ Bait Not Found",
+                    title="Bait Not Found",
                     description=f"Bait '{bait_name}' not found in your inventory!",
-                    color=discord.Color.red()
+                    color=0x2b2d31
                 )
                 embed.add_field(
-                    name="💡 Try using aliases",
+                    name="Available Aliases",
                     value="quantum, void, crystal, divine, basic, pro, etc.",
                     inline=False
                 )
@@ -1827,22 +1817,22 @@ class Fishing(commands.Cog):
                 
             if await db.set_active_bait(ctx.author.id, bait_id):
                 embed = discord.Embed(
-                    title="🪱 Bait Equipped!",
+                    title="Bait Equipped",
                     description=f"You equipped **{target_bait['name']}**",
-                    color=discord.Color.green()
+                    color=0x2b2d31
                 )
                 embed.add_field(
-                    name="📦 Amount Available",
+                    name="Amount Available",
                     value=f"{target_bait.get('amount', 1)}",
                     inline=True
                 )
                 embed.add_field(
-                    name="🆔 Bait ID",
+                    name="Bait ID",
                     value=f"`{bait_id}`",
                     inline=True
                 )
                 embed.add_field(
-                    name="📝 Description",
+                    name="Description",
                     value=target_bait.get('description', 'No description available'),
                     inline=False
                 )
@@ -1857,7 +1847,7 @@ class Fishing(commands.Cog):
                     
                     if high_rate_rarities:
                         embed.add_field(
-                            name="🎯 Best For",
+                            name="Best For",
                             value="\n".join(high_rate_rarities[:5]),
                             inline=False
                         )
@@ -1878,8 +1868,8 @@ class Fishing(commands.Cog):
             active_gear = await db.get_active_fishing_gear(ctx.author.id)
             
             embed = discord.Embed(
-                title="🎣 Your Fishing Gear",
-                color=discord.Color.blue()
+                title="Your Fishing Gear",
+                color=0x2b2d31
             )
             
             # Show equipped rod
@@ -1888,7 +1878,7 @@ class Fishing(commands.Cog):
                 if rod_id in self.rod_data:
                     rod = self.rod_data[rod_id]
                     embed.add_field(
-                        name="🎣 Equipped Rod",
+                        name="Equipped Rod",
                         value=f"**{rod['name']}**\n"
                               f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
                               f"Power: {rod.get('power', 1)}\n"
@@ -1897,14 +1887,14 @@ class Fishing(commands.Cog):
                     )
                 else:
                     embed.add_field(
-                        name="🎣 Equipped Rod",
-                        value="❌ Rod data not found",
+                        name="Equipped Rod",
+                        value="Rod data not found",
                         inline=True
                     )
             else:
                 embed.add_field(
-                    name="🎣 Equipped Rod",
-                    value="❌ No rod equipped",
+                    name="Equipped Rod",
+                    value="No rod equipped",
                     inline=True
                 )
             
@@ -1916,26 +1906,27 @@ class Fishing(commands.Cog):
                 
                 if equipped_bait:
                     embed.add_field(
-                        name="🪱 Equipped Bait",
+                        name="Equipped Bait",
                         value=f"**{equipped_bait['name']}**\n"
                               f"Amount: {equipped_bait.get('amount', 1)}\n"
-                              f"Description: {equipped_bait.get('description', 'N/A')[:50]}...",
+                              f"Type: {equipped_bait.get('rarity', 'Common').title()}",
                         inline=True
                     )
                 else:
                     embed.add_field(
-                        name="🪱 Equipped Bait",
-                        value="❌ Bait data not found",
+                        name="Equipped Bait",
+                        value="Bait data not found",
                         inline=True
                     )
             else:
                 embed.add_field(
-                    name="🪱 Equipped Bait",
-                    value="❌ No bait equipped",
+                    name="Equipped Bait",
+                    value="No bait equipped",
                     inline=True
                 )
             
-            embed.set_footer(text="Use .equiprod and .equipbait to change your gear")
+            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+            embed.set_footer(text="Use .rod and .bait to change your gear")
             await ctx.reply(embed=embed)
             
         except Exception as e:
@@ -1982,9 +1973,9 @@ class Fishing(commands.Cog):
             
             # Create embed with all catch rates
             embed = discord.Embed(
-                title="🎯 Fishing Catch Rates",
+                title="Fishing Catch Rates",
                 description=f"**Rod:** {rod['name']} (x{rod_multiplier} multiplier)\n**Bait:** {current_bait['name']}",
-                color=discord.Color.blue()
+                color=0x2b2d31
             )
             
             # Sort by catch rate (highest first)
@@ -2004,14 +1995,14 @@ class Fishing(commands.Cog):
             
             if left_column:
                 embed.add_field(
-                    name="📊 Catch Rates (Part 1)",
+                    name="Catch Rates (Part 1)",
                     value="\n".join(left_column),
                     inline=True
                 )
             
             if right_column:
                 embed.add_field(
-                    name="📊 Catch Rates (Part 2)",
+                    name="Catch Rates (Part 2)",
                     value="\n".join(right_column),
                     inline=True
                 )
@@ -2019,14 +2010,14 @@ class Fishing(commands.Cog):
             # Add summary stats
             total_rate = sum(percentages.values())
             embed.add_field(
-                name="📈 Summary",
+                name="Summary",
                 value=f"**Total Rate:** {total_rate:.2f}%\n"
                       f"**Rarities:** {len([r for r, c in percentages.items() if c >= 0.001])}\n"
                       f"**Best Chance:** {sorted_percentages[0][0].title()} ({sorted_percentages[0][1]:.3f}%)",
                 inline=False
             )
             
-            embed.set_footer(text="Rates are calculated with your current rod multiplier and bait")
+            embed.set_footer(text="Rates calculated with your current rod multiplier and bait")
             await ctx.reply(embed=embed)
             
         except Exception as e:
@@ -2075,26 +2066,26 @@ class Fishing(commands.Cog):
             
             # Create response embed
             embed = discord.Embed(
-                title="🛠️ Dev Rod Distribution",
-                color=discord.Color.gold()
+                title="Dev Rod Distribution",
+                color=0x2b2d31
             )
             
             if successful_gives:
                 embed.add_field(
-                    name="✅ Successfully Given",
+                    name="Successfully Given",
                     value="\n".join([f"• {name}" for name in successful_gives]),
                     inline=False
                 )
             
             if failed_gives:
                 embed.add_field(
-                    name="❌ Failed",
+                    name="Failed",
                     value="\n".join([f"• {name}" for name in failed_gives]),
                     inline=False
                 )
             
             embed.add_field(
-                name="📊 Summary",
+                name="Summary",
                 value=f"**Success:** {len(successful_gives)}\n**Failed:** {len(failed_gives)}",
                 inline=False
             )
@@ -2150,9 +2141,9 @@ class FishInventoryPaginator(discord.ui.View):
             total_value = sum(fish.get("value", 0) for fish in self.fish_list)
             
             embed = discord.Embed(
-                title="🎣 Fishing Overview",
+                title="Fishing Overview",
                 description=f"**Total Fish:** {total_fish:,} | **Total Value:** {total_value:,} {self.currency}",
-                color=discord.Color.blue()
+                color=0x2b2d31
             )
             
             # Show equipped rod
@@ -2161,7 +2152,7 @@ class FishInventoryPaginator(discord.ui.View):
                 if rod_id in self.rod_data:
                     rod = self.rod_data[rod_id]
                     embed.add_field(
-                        name="🎣 Equipped Rod",
+                        name="Equipped Rod",
                         value=f"**{rod['name']}**\n"
                               f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
                               f"Power: {rod.get('power', 1)}\n"
@@ -2170,14 +2161,14 @@ class FishInventoryPaginator(discord.ui.View):
                     )
                 else:
                     embed.add_field(
-                        name="🎣 Equipped Rod",
-                        value="❌ Rod data not found",
+                        name="Equipped Rod",
+                        value="Rod data not found",
                         inline=True
                     )
             else:
                 embed.add_field(
-                    name="🎣 Equipped Rod",
-                    value="❌ No rod equipped\nUse `.rod` to equip one",
+                    name="Equipped Rod",
+                    value="No rod equipped\nUse `.rod` to equip one",
                     inline=True
                 )
             
@@ -2189,7 +2180,7 @@ class FishInventoryPaginator(discord.ui.View):
                 
                 if equipped_bait:
                     embed.add_field(
-                        name="🪱 Equipped Bait",
+                        name="Equipped Bait",
                         value=f"**{equipped_bait['name']}**\n"
                               f"Amount: {equipped_bait.get('amount', 1)}\n"
                               f"Type: {equipped_bait.get('rarity', 'Common').title()}",
@@ -2197,14 +2188,14 @@ class FishInventoryPaginator(discord.ui.View):
                     )
                 else:
                     embed.add_field(
-                        name="🪱 Equipped Bait",
-                        value="❌ Bait data not found",
+                        name="Equipped Bait",
+                        value="Bait data not found",
                         inline=True
                     )
             else:
                 embed.add_field(
-                    name="🪱 Equipped Bait",
-                    value="❌ No bait equipped\nUse `.bait` to equip some",
+                    name="Equipped Bait",
+                    value="No bait equipped\nUse `.bait` to equip some",
                     inline=True
                 )
             
@@ -2218,13 +2209,13 @@ class FishInventoryPaginator(discord.ui.View):
                     top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
                 
                 embed.add_field(
-                    name="🏆 Top Catches",
+                    name="Top Catches",
                     value="\n".join(top_catches),
                     inline=False
                 )
             else:
                 embed.add_field(
-                    name="🐟 Fish Collection",
+                    name="Fish Collection",
                     value="No fish caught yet! Use `.fish` to start fishing.",
                     inline=False
                 )
@@ -2241,9 +2232,9 @@ class FishInventoryPaginator(discord.ui.View):
             
             total_value = sum(fish.get("value", 0) for fish in self.fish_list)
             embed = discord.Embed(
-                title="🐟 Your Fish Collection",
+                title="Your Fish Collection",
                 description=f"**Total Fish:** {len(self.fish_list):,} | **Total Value:** {total_value:,} {self.currency}",
-                color=discord.Color.blue()
+                color=0x2b2d31
             )
             
             # Add fish to embed
@@ -2271,7 +2262,7 @@ class FishInventoryPaginator(discord.ui.View):
             return False
         return True
     
-    @discord.ui.button(label="⏪", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="First", style=discord.ButtonStyle.gray)
     async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to first page"""
         self.current_page = 1
@@ -2279,7 +2270,7 @@ class FishInventoryPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.primary)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to previous page"""
         self.current_page = max(1, self.current_page - 1)
@@ -2287,7 +2278,7 @@ class FishInventoryPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to next page"""
         self.current_page = min(self.total_pages, self.current_page + 1)
@@ -2295,7 +2286,7 @@ class FishInventoryPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="⏩", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="Last", style=discord.ButtonStyle.gray)
     async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to last page"""
         self.current_page = self.total_pages
@@ -2303,7 +2294,7 @@ class FishInventoryPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="🗑️", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
     async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Delete the paginator message"""
         await interaction.response.edit_message(content="Fish inventory closed.", embed=None, view=None)
@@ -2351,9 +2342,9 @@ class GlobalFishPaginator(discord.ui.View):
         page_fish = self.fish_list[start_idx:end_idx]
         
         embed = discord.Embed(
-            title="🌍 Global Fish Leaderboard",
+            title="Global Fish Leaderboard",
             description="Top catches from all players",
-            color=discord.Color.gold()
+            color=0x2b2d31
         )
         
         for i, fish in enumerate(page_fish, start=start_idx + 1):
@@ -2389,7 +2380,7 @@ class GlobalFishPaginator(discord.ui.View):
         embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • {len(self.fish_list)} total catches")
         return embed
     
-    @discord.ui.button(label="⏪", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="First", style=discord.ButtonStyle.gray)
     async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to first page"""
         self.current_page = 1
@@ -2397,7 +2388,7 @@ class GlobalFishPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.primary)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to previous page"""
         self.current_page = max(1, self.current_page - 1)
@@ -2405,7 +2396,7 @@ class GlobalFishPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to next page"""
         self.current_page = min(self.total_pages, self.current_page + 1)
@@ -2413,7 +2404,7 @@ class GlobalFishPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="⏩", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="Last", style=discord.ButtonStyle.gray)
     async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Go to last page"""
         self.current_page = self.total_pages
@@ -2421,7 +2412,7 @@ class GlobalFishPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="🗑️", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
     async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Delete the paginator message"""
         await interaction.response.edit_message(content="Global fish leaderboard closed.", embed=None, view=None)

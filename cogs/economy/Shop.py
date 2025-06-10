@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from utils.db import async_db as db
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from typing import Optional, Dict, List, Union
 import os
 import json
@@ -203,6 +204,14 @@ class Shop(commands.Cog):
         # Load shop data from JSON files
         self.shop_data = SHOP_DATA
 
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+        return True
+
     def get_shop_items(self, item_type: str) -> List[Dict]:
         """Get all items of a specific type, sorted by price (cheapest first)"""
         if item_type not in self.shop_data:
@@ -254,26 +263,16 @@ class Shop(commands.Cog):
                 {"$inc": {inventory_field: amount}},
                 upsert=True
             )
-        elif item_type == "potion":
-            # For potions, add to potions array
-            potion_data = {
-                "_id": item_id,
-                "amount": amount,
-                "expires_at": None  # Set when consumed
-            }
-            result = await db.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$push": {"potions": potion_data}},
-                upsert=True
-            )
         else:
-            # For other items, use general inventory
-            inventory_field = f"inventory.{item_type}.{item_id}"
-            result = await db.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$inc": {inventory_field: amount}},
-                upsert=True
-            )
+            # For all other items (potions, upgrades, general items), use the add_to_inventory method
+            # This ensures compatibility with the Economy system's get_inventory method
+            item_data = self.get_item(item_id, item_type)
+            if not item_data:
+                return False
+            
+            # Use the database's add_to_inventory method for consistency
+            result = await db.add_to_inventory(user_id, None, item_data, amount)
+            return result
         
         return result.modified_count > 0 or result.upserted_id is not None
 

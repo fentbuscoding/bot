@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from discord.utils import utcnow
 from cogs.logging.logger import CogLogger
 from utils.db import async_db
+from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 
 class Giveaway(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -17,6 +18,14 @@ class Giveaway(commands.Cog):
         self.active_giveaways: dict[str, dict] = {}
         self.check_giveaways.start()
         self.logger.info("Giveaway cog initialized")
+
+    async def cog_check(self, ctx):
+        """Global check for all commands in this cog"""
+        # Check if user has accepted ToS
+        if not await check_tos_acceptance(ctx.author.id):
+            await prompt_tos_acceptance(ctx)
+            return False
+        return True
 
     def cog_unload(self):
         """Clean up when cog is unloaded"""
