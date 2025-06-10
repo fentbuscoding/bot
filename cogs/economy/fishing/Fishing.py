@@ -13,6 +13,310 @@ import datetime
 import asyncio
 import math
 
+class FishInventoryPaginator(discord.ui.View):
+    """Paginator for fish inventory with gear info on first page"""
+    
+    def __init__(self, user_id, user_fish, current_page, total_pages, currency, rod_data, bait_data, get_user_bait_func, timeout=300):
+        super().__init__(timeout=timeout)
+        self.user_id = user_id
+        self.user_fish = user_fish
+        self.current_page = current_page
+        self.total_pages = total_pages
+        self.currency = currency
+        self.rod_data = rod_data
+        self.bait_data = bait_data
+        self.get_user_bait = get_user_bait_func
+        self.message = None
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states"""
+        self.prev_button.disabled = self.current_page <= 1
+        self.next_button.disabled = self.current_page >= self.total_pages
+    
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
+        
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
+        
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        if self.current_page == 1:
+            # Gear page
+            embed = discord.Embed(
+                title="🎣 Fishing Inventory",
+                description="Your fishing gear and statistics",
+                color=0x2b2d31
+            )
+            
+            # Get active gear
+            active_gear = await db.get_active_fishing_gear(self.user_id)
+            
+            # Show equipped rod
+            if active_gear and active_gear.get("rod"):
+                rod_id = active_gear["rod"]
+                if rod_id in self.rod_data:
+                    rod = self.rod_data[rod_id]
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value=f"**{rod['name']}**\n"
+                              f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
+                              f"Power: {rod.get('power', 1)}\n"
+                              f"Durability: {(rod.get('durability', 0.95)*100):.1f}%",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🎣 Equipped Rod",
+                        value="Rod data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🎣 Equipped Rod",
+                    value="No rod equipped\nUse `.rod` to equip one",
+                    inline=True
+                )
+            
+            # Show equipped bait
+            if active_gear and active_gear.get("bait"):
+                bait_id = active_gear["bait"]
+                user_bait = await self.get_user_bait(self.user_id)
+                equipped_bait = next((b for b in user_bait if b.get("_id") == bait_id), None)
+                
+                if equipped_bait:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value=f"**{equipped_bait['name']}**\n"
+                              f"Amount: {equipped_bait.get('amount', 1)}\n"
+                              f"Type: {equipped_bait.get('rarity', 'Common').title()}",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="🪱 Equipped Bait",
+                        value="❌ Bait data not found",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🪱 Equipped Bait",
+                    value="❌ No bait equipped\nUse `.bait` to equip some",
+                    inline=True
+                )
+            
+            # Add quick stats if user has fish
+            if self.user_fish:
+                sorted_fish = sorted(self.user_fish, key=lambda x: x.get("value", 0), reverse=True)
+                top_fish = sorted_fish[:3]
+                
+                top_catches = []
+                for i, fish in enumerate(top_fish, 1):
+                    top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
+                
+                embed.add_field(
+                    name="🏆 Top Catches",
+                    value="\n".join(top_catches),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🐟 Fish Collection",
+                    value="No fish caught yet! Use `.fish` to start fishing.",
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • Use buttons to view your fish collection")
+            return embed
+        
+        else:
+            # Fish pages
+            if not self.user_fish:
+                embed = discord.Embed(
+                    title="❌ No Fish",
+                    description="You haven't caught any fish yet!",
+                    color=0xff0000
+                )
+                return embed
+            
+            # Sort by value (highest first)
+            self.user_fish.sort(key=lambda x: x.get("value", 0), reverse=True)
+            
+            items_per_page = 5
+            fish_page = self.current_page - 1
+            start_idx = (fish_page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            page_fish = self.user_fish[start_idx:end_idx]
+            
+            total_value = sum(fish.get("value", 0) for fish in self.user_fish)
+            embed = discord.Embed(
+                title="🐟 Your Fish Collection",
+                description=f"**Total Fish:** {len(self.user_fish):,} | **Total Value:** {total_value:,} {self.currency}",
+                color=0x2b2d31
+            )
+            
+            # Add fish to embed
+            for i, fish in enumerate(page_fish, start=start_idx + 1):
+                fish_info = (
+                    f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
+                    f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+                    f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
+                    f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
+                )
+                
+                embed.add_field(
+                    name=f"🐟 {fish.get('name', 'Unknown Fish')}",
+                    value=fish_info,
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • Use buttons to navigate")
+            return embed
+    
+    async def on_timeout(self):
+        """Disable buttons when view times out"""
+        for item in self.children:
+            item.disabled = True
+        
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.NotFound:
+                pass
+
+
+class GlobalFishPaginator(discord.ui.View):
+    """Paginator for global fish leaderboard"""
+    
+    def __init__(self, all_fish: list, current_page: int, total_pages: int, currency: str, bot):
+        super().__init__(timeout=180)
+        self.all_fish = all_fish
+        self.current_page = current_page - 1  # Convert to 0-based
+        self.total_pages = total_pages
+        self.currency = currency
+        self.bot = bot
+        self.items_per_page = 2
+        self.message = None
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states based on current page"""
+        self.previous_button.disabled = self.current_page <= 0
+        self.next_button.disabled = self.current_page >= self.total_pages - 1
+        
+        # Update page info
+        self.page_info.label = f"Page {self.current_page + 1}/{self.total_pages}"
+    
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="Page 1/1", style=discord.ButtonStyle.primary, disabled=True)
+    async def page_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass  # This button is just for display
+    
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🗑️ Close", style=discord.ButtonStyle.danger)
+    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        if self.message:
+            await self.message.delete()
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        start_idx = self.current_page * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        page_fish = self.all_fish[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="Global Fish Leaderboard",
+            description="Top catches from all players",
+            color=0x2b2d31
+        )
+        
+        for i, fish in enumerate(page_fish, start=start_idx + 1):
+            # Get user info
+            user_id = fish.get("user_id")
+            username = "Unknown User"
+            if user_id:
+                try:
+                    user = self.bot.get_user(int(user_id))
+                    if user:
+                        username = user.display_name
+                    else:
+                        # Try to fetch user if not in cache
+                        user = await self.bot.fetch_user(int(user_id))
+                        username = user.display_name if user else f"User {user_id}"
+                except:
+                    username = f"User {user_id}"
+            
+            # Format caught time
+            try:
+                if fish.get("caught_at"):
+                    caught_time = datetime.datetime.fromisoformat(fish["caught_at"]).strftime("%Y-%m-%d")
+                else:
+                    caught_time = "Unknown"
+            except:
+                caught_time = "Unknown"
+            
+            fish_info = f"**#{i} • Caught by:** {username}\n"
+            fish_info += f"**Value:** {fish.get('value', 0):,} {self.currency}\n"
+            fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+            fish_info += f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
+            fish_info += f"**Rod Used:** {fish.get('rod_used', 'Unknown')}\n"
+            fish_info += f"**Bait Used:** {fish.get('bait_used', 'Unknown')}\n"
+            fish_info += f"**Caught:** {caught_time}"
+            
+            embed.add_field(
+                name=f"🐟 {fish.get('name', 'Unknown Fish')}",
+                value=fish_info,
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages} • {len(self.all_fish)} total catches")
+        return embed
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if self.message:
+            try:
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
+                await self.message.edit(view=self)
+            except:
+                pass  # Message might be deleted
+
 class Fishing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -1029,9 +1333,14 @@ class Fishing(commands.Cog):
             
             if not rods:
                 embed = discord.Embed(
-                    title="First Time Fishing",
+                    title="🎣 First Time Fishing",
                     description="You need a fishing rod to start! Buy one from `.shop rod`",
-                    color=0x2b2d31
+                    color=0x4a90e2
+                )
+                embed.add_field(
+                    name="🛒 Getting Started",
+                    value="• Use `.shop rod` to browse fishing rods\n• Use `.shop bait` to get bait\n• Then use `.fish` to start fishing!",
+                    inline=False
                 )
                 return await ctx.reply(embed=embed)
             
@@ -1087,11 +1396,25 @@ class Fishing(commands.Cog):
             rod_power = rod.get("power", 1)
             bait_rates = current_bait.get("catch_rates", {})
             
-            # Display suspense message
+            # Display suspense message with enhanced styling
             suspense_embed = discord.Embed(
-                title="Casting your line...",
-                description=f"Using **{rod['name']}** with **{current_bait['name']}**",
-                color=0x2b2d31
+                title="🎣 Casting your line...",
+                description=f"🎣 Using **{rod['name']}** with **{current_bait['name']}**",
+                color=0x4a90e2
+            )
+            
+            # Add fishing animation flavor text
+            flavor_texts = [
+                "🌊 The water ripples gently...",
+                "🐟 Something stirs beneath the surface...",
+                "⭐ Your line dances in the current...",
+                "🌀 The depths hold mysterious treasures...",
+                "💫 Fortune favors the patient angler..."
+            ]
+            suspense_embed.add_field(
+                name="🎯 Status", 
+                value=random.choice(flavor_texts), 
+                inline=False
             )
             
             # Calculate catch percentages for debugging (hidden from users)
@@ -1114,22 +1437,28 @@ class Fishing(commands.Cog):
             
             # Check rod durability first
             if not await self.check_rod_durability(rod_durability):
-                # Rod breaks!
+                # Rod breaks! - Enhanced styling
                 break_embed = discord.Embed(
-                    title="Rod Broke!",
+                    title="💥 Rod Broke!",
                     description=f"Your **{rod['name']}** snapped under pressure!",
-                    color=0x2b2d31
+                    color=0xff4444
                 )
                 break_embed.add_field(
-                    name="Rod Removed",
+                    name="🗑️ Rod Removed",
                     value="The broken rod has been removed from your inventory.",
                     inline=False
                 )
                 break_embed.add_field(
-                    name="Durability Info",
+                    name="📊 Durability Info",
                     value=f"This rod had a {((1-rod_durability)*100):.2f}% break chance per use.",
                     inline=False
                 )
+                break_embed.add_field(
+                    name="💡 Tip",
+                    value="Higher quality rods are more durable!",
+                    inline=False
+                )
+                break_embed.set_footer(text="⚡ Time to buy a new rod from the shop!")
                 
                 # Remove rod from inventory
                 await db.db.users.update_one(
@@ -1147,9 +1476,9 @@ class Fishing(commands.Cog):
             total_weight = sum(adjusted_rates.values())
             if total_weight == 0:
                 await message.edit(embed=discord.Embed(
-                    title="No Bite",
+                    title="🌊 No Bite",
                     description="Nothing seems interested in your bait...",
-                    color=0x2b2d31
+                    color=0x6495ed
                 ))
                 return
             
@@ -1174,22 +1503,60 @@ class Fishing(commands.Cog):
             escaped, fish_weight = await self.check_fish_escape(fish_template, rod_power)
             
             if escaped:
-                # Fish escaped!
+                # Fish escaped! - Enhanced with rarity colors
+                rarity_config = {
+                    "junk": {"color": 0x8b4513, "emoji": "🗑️"},
+                    "tiny": {"color": 0x808080, "emoji": "🐟"},
+                    "small": {"color": 0x90EE90, "emoji": "🐠"},
+                    "common": {"color": 0x00ff00, "emoji": "🐟"},
+                    "uncommon": {"color": 0x1e90ff, "emoji": "🐠"},
+                    "rare": {"color": 0x9932cc, "emoji": "🐟"},
+                    "epic": {"color": 0xff69b4, "emoji": "🎣"},
+                    "legendary": {"color": 0xffa500, "emoji": "🌟"},
+                    "mythical": {"color": 0xff0000, "emoji": "⭐"},
+                    "ancient": {"color": 0x8b0000, "emoji": "🏺"},
+                    "divine": {"color": 0xffd700, "emoji": "✨"},
+                    "cosmic": {"color": 0x4b0082, "emoji": "🌌"},
+                    "transcendent": {"color": 0xdda0dd, "emoji": "💫"},
+                    "void": {"color": 0x2f4f4f, "emoji": "🕳️"},
+                    "celestial": {"color": 0x87ceeb, "emoji": "🌠"},
+                    "mutated": {"color": 0x32cd32, "emoji": "☢️"},
+                    "crystalline": {"color": 0x40e0d0, "emoji": "💎"},
+                    "subatomic": {"color": 0xff1493, "emoji": "⚛️"},
+                    "super": {"color": 0x00ffff, "emoji": "🦸"},
+                    "dev": {"color": 0xff69b4, "emoji": "👑"}
+                }
+                
+                config = rarity_config.get(caught_rarity, {"color": 0x8b0000, "emoji": "🐟"})
+                
                 escape_embed = discord.Embed(
-                    title="The one that got away...",
+                    title="💔 The one that got away...",
                     description=f"A **{fish_template['name']}** ({fish_weight:.2f}kg) broke free!",
-                    color=0x2b2d31
+                    color=config['color']
                 )
                 escape_embed.add_field(
-                    name="Potential Value",
+                    name="💸 Potential Value",
                     value=f"You could have earned **{fish_template['base_value']:,}** {self.currency}",
                     inline=True
                 )
                 escape_embed.add_field(
-                    name="Tip",
+                    name="💡 Tip",
                     value="Try using a stronger rod for big fish!",
                     inline=True
                 )
+                escape_embed.add_field(
+                    name="🎯 Rarity Lost",
+                    value=f"{config['emoji']} **{caught_rarity.title()}**",
+                    inline=True
+                )
+                
+                # Add rarity-specific escape messages
+                if caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent"]:
+                    escape_embed.set_footer(text="💀 A legendary fish has escaped! The ocean mocks your efforts...")
+                elif caught_rarity in ["epic", "rare"]:
+                    escape_embed.set_footer(text="😤 A rare catch slipped away! Better luck next time...")
+                else:
+                    escape_embed.set_footer(text="🎣 It happens to the best of us. Keep fishing!")
                 
                 await message.edit(embed=escape_embed)
                 return
@@ -1212,47 +1579,86 @@ class Fishing(commands.Cog):
             }
             
             if await db.add_fish(ctx.author.id, fish):
-                # Success embed with consistent styling
+                # Define rarity colors and emojis
+                rarity_config = {
+                    "junk": {"color": 0x8b4513, "emoji": "🗑️"},  # Brown
+                    "tiny": {"color": 0x808080, "emoji": "🐟"},  # Gray
+                    "small": {"color": 0x90EE90, "emoji": "🐠"},  # Light Green
+                    "common": {"color": 0x00ff00, "emoji": "🐟"},  # Green
+                    "uncommon": {"color": 0x1e90ff, "emoji": "🐠"},  # Blue
+                    "rare": {"color": 0x9932cc, "emoji": "🐟"},  # Purple
+                    "epic": {"color": 0xff69b4, "emoji": "🎣"},  # Pink
+                    "legendary": {"color": 0xffa500, "emoji": "🌟"},  # Orange
+                    "mythical": {"color": 0xff0000, "emoji": "⭐"},  # Red
+                    "ancient": {"color": 0x8b0000, "emoji": "🏺"},  # Dark Red
+                    "divine": {"color": 0xffd700, "emoji": "✨"},  # Gold
+                    "cosmic": {"color": 0x4b0082, "emoji": "🌌"},  # Indigo
+                    "transcendent": {"color": 0xdda0dd, "emoji": "💫"},  # Plum
+                    "void": {"color": 0x2f4f4f, "emoji": "🕳️"},  # Dark Slate Gray
+                    "celestial": {"color": 0x87ceeb, "emoji": "🌠"},  # Sky Blue
+                    "mutated": {"color": 0x32cd32, "emoji": "☢️"},  # Lime Green
+                    "crystalline": {"color": 0x40e0d0, "emoji": "💎"},  # Turquoise
+                    "subatomic": {"color": 0xff1493, "emoji": "⚛️"},  # Deep Pink
+                    "super": {"color": 0x00ffff, "emoji": "🦸"},  # Cyan
+                    "dev": {"color": 0xff69b4, "emoji": "👑"}  # Pink
+                }
+                
+                # Get rarity config or default
+                config = rarity_config.get(caught_rarity, {"color": 0x2b2d31, "emoji": "🐟"})
+                
+                # Check how many of this fish the user already has
+                user_fish = await db.get_fish(ctx.author.id)
+                fish_count = len([f for f in user_fish if f.get('name') == fish['name']])
+                
+                # Create enhanced success embed with rarity colors
                 success_embed = discord.Embed(
-                    title="Fish Caught!",
+                    title=f"{config['emoji']} Fish Caught!",
                     description=f"You caught a **{fish['name']}**!",
-                    color=0x2b2d31
+                    color=config['color']
                 )
                 
+                # Add fish count if user has multiple
+                if fish_count > 1:
+                    success_embed.description += f"\n*(You have **{fish_count}x** of this fish)*"
+                
                 success_embed.add_field(
-                    name="Value",
+                    name="💰 Value",
                     value=f"**{final_value:,}** {self.currency}",
                     inline=True
                 )
                 
                 success_embed.add_field(
-                    name="Weight",
+                    name="⚖️ Weight",
                     value=f"{fish_weight:.2f} kg",
                     inline=True
                 )
                 
                 success_embed.add_field(
-                    name="Rarity",
-                    value=caught_rarity.title(),
+                    name="✨ Rarity",
+                    value=f"**{caught_rarity.title()}**",
                     inline=True
                 )
                 
-                # Add special message for rare fish
+                # Add special messages for rare fish with enhanced styling
                 if caught_rarity == "subatomic":
-                    success_embed.set_footer(text="LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
+                    success_embed.set_footer(text="🔬 LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
                 elif caught_rarity == "super":
-                    success_embed.set_footer(text="SUPER HERO CATCH! You've reeled in a legendary superhero fish!")
+                    success_embed.set_footer(text="🦸 SUPER HERO CATCH! You've reeled in a legendary superhero fish!")
                 elif caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent", "void", "celestial"]:
-                    success_embed.set_footer(text="Incredible catch! This is extremely rare!")
+                    success_embed.set_footer(text="🌟 Incredible catch! This is extremely rare!")
                 elif caught_rarity in ["epic", "rare"]:
-                    success_embed.set_footer(text="Nice catch! This is quite rare!")
+                    success_embed.set_footer(text="🎣 Nice catch! This is quite rare!")
+                elif caught_rarity == "crystalline":
+                    success_embed.set_footer(text="💎 Shimmering crystalline catch! Worth a small fortune!")
+                elif caught_rarity == "mutated":
+                    success_embed.set_footer(text="☢️ Mutated specimen! Science will pay well for this!")
                 
                 await message.edit(embed=success_embed)
             else:
                 await message.edit(embed=discord.Embed(
-                    title="Storage Error",
-                    description="Failed to store your catch!",
-                    color=0x2b2d31
+                    title="❌ Storage Error",
+                    description="Failed to store your catch! Please try again.",
+                    color=0xff0000
                 ))
                 
         except Exception as e:
@@ -1260,48 +1666,275 @@ class Fishing(commands.Cog):
             await ctx.reply("❌ An error occurred while fishing!")
 
     @commands.command(name="sellfish", aliases=["sf"])
-    async def sell_fish(self, ctx, fish_id: str = None):
-        """Sell a specific fish or all fish"""
+    async def sell_fish(self, ctx, *args):
+        """Enhanced fish selling with filtering and interactive selection
+        
+        Usage:
+        .sf - Interactive fish browser with buttons
+        .sf all - Sell all fish
+        .sf <fish_id> - Sell specific fish by ID
+        .sf <rarity> - Sell all fish of a specific rarity
+        .sf > <value> - Sell fish with value greater than specified amount
+        .sf < <value> - Sell fish with value less than specified amount
+        .sf >= <value> - Sell fish with value greater than or equal to specified amount  
+        .sf <= <value> - Sell fish with value less than or equal to specified amount
+        """
         try:
             user_fish = await db.get_fish(ctx.author.id)
             if not user_fish:
                 return await ctx.reply("❌ You haven't caught any fish yet!")
             
-            if fish_id:
-                # Sell specific fish
-                fish = next((f for f in user_fish if f.get("id") == fish_id), None)
-                if not fish:
-                    return await ctx.reply("❌ Fish not found in your inventory!")
-                
-                if await db.remove_fish(ctx.author.id, fish_id):
-                    await db.add_currency(ctx.author.id, fish["value"])
-                    embed = discord.Embed(
-                        title="Fish Sold!",
-                        description=f"Sold **{fish['name']}** for **{fish['value']:,}** {self.currency}",
-                        color=0x2b2d31
-                    )
-                    await ctx.reply(embed=embed)
-                else:
-                    await ctx.reply("❌ Failed to sell fish!")
+            # Parse arguments
+            if not args:
+                # Interactive fish browser
+                return await self._interactive_fish_sale(ctx, user_fish)
+            
+            arg1 = args[0].lower()
+            
+            # Handle value-based filtering
+            if arg1 in ['>', '<', '>=', '<='] and len(args) > 1:
+                try:
+                    value_threshold = int(args[1])
+                    return await self._sell_fish_by_value(ctx, user_fish, arg1, value_threshold)
+                except ValueError:
+                    return await ctx.reply("❌ Invalid value! Please use a number.")
+            
+            # Handle specific fish ID
+            elif len(arg1) > 8:  # Fish IDs are usually longer
+                return await self._sell_specific_fish(ctx, user_fish, arg1)
+            
+            # Handle "all" command
+            elif arg1 == "all":
+                return await self._sell_all_fish(ctx, user_fish)
+            
+            # Handle rarity-based selling
             else:
-                # Sell all fish
-                total_value = sum(fish.get("value", 0) for fish in user_fish)
-                fish_count = len(user_fish)
+                return await self._sell_fish_by_rarity(ctx, user_fish, arg1)
                 
-                if await db.clear_fish(ctx.author.id):
-                    await db.add_currency(ctx.author.id, total_value)
-                    embed = discord.Embed(
-                        title="All Fish Sold!",
-                        description=f"Sold **{fish_count:,}** fish for **{total_value:,}** {self.currency}",
-                        color=0x2b2d31
-                    )
-                    await ctx.reply(embed=embed)
-                else:
-                    await ctx.reply("❌ Failed to sell fish!")
-                    
         except Exception as e:
             self.logger.error(f"Sell fish error: {e}")
             await ctx.reply("❌ An error occurred while selling fish!")
+
+    async def _interactive_fish_sale(self, ctx, user_fish):
+        """Interactive fish browser with sell buttons"""
+        # Sort fish by value (highest first)
+        user_fish.sort(key=lambda x: x.get("value", 0), reverse=True)
+        
+        view = InteractiveFishSeller(ctx.author.id, user_fish, self.currency, self)
+        embed = await view.create_embed()
+        
+        message = await ctx.reply(embed=embed, view=view)
+        view.message = message
+
+    async def _sell_specific_fish(self, ctx, user_fish, fish_id):
+        """Sell a specific fish by ID"""
+        fish = next((f for f in user_fish if f.get("id") == fish_id), None)
+        if not fish:
+            return await ctx.reply("❌ Fish not found in your inventory!")
+        
+        if await db.remove_fish(ctx.author.id, fish_id):
+            await db.add_currency(ctx.author.id, fish["value"])
+            
+            # Get rarity config for colors
+            rarity_config = self._get_rarity_config()
+            config = rarity_config.get(fish.get("type", "common"), {"color": 0x2b2d31, "emoji": "🐟"})
+            
+            embed = discord.Embed(
+                title=f"{config['emoji']} Fish Sold!",
+                description=f"Sold **{fish['name']}** for **{fish['value']:,}** {self.currency}",
+                color=config['color']
+            )
+            embed.add_field(
+                name="📊 Details",
+                value=f"**Rarity:** {fish.get('type', 'unknown').title()}\n**Weight:** {fish.get('weight', 0):.2f}kg",
+                inline=False
+            )
+            await ctx.reply(embed=embed)
+        else:
+            await ctx.reply("❌ Failed to sell fish!")
+
+    async def _sell_all_fish(self, ctx, user_fish):
+        """Sell all fish"""
+        total_value = sum(fish.get("value", 0) for fish in user_fish)
+        fish_count = len(user_fish)
+        
+        if await db.clear_fish(ctx.author.id):
+            await db.add_currency(ctx.author.id, total_value)
+            embed = discord.Embed(
+                title="🐟 All Fish Sold!",
+                description=f"Sold **{fish_count:,}** fish for **{total_value:,}** {self.currency}",
+                color=0x00ff00
+            )
+            
+            # Add breakdown by rarity
+            rarity_counts = {}
+            rarity_values = {}
+            for fish in user_fish:
+                rarity = fish.get("type", "unknown")
+                rarity_counts[rarity] = rarity_counts.get(rarity, 0) + 1
+                rarity_values[rarity] = rarity_values.get(rarity, 0) + fish.get("value", 0)
+            
+            if rarity_counts:
+                breakdown = []
+                for rarity, count in sorted(rarity_counts.items()):
+                    value = rarity_values[rarity]
+                    breakdown.append(f"**{rarity.title()}:** {count}x ({value:,} {self.currency})")
+                
+                embed.add_field(
+                    name="📈 Breakdown by Rarity",
+                    value="\n".join(breakdown[:10]) + ("..." if len(breakdown) > 10 else ""),
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+        else:
+            await ctx.reply("❌ Failed to sell fish!")
+
+    async def _sell_fish_by_rarity(self, ctx, user_fish, rarity):
+        """Sell all fish of a specific rarity"""
+        # Valid rarities
+        valid_rarities = [
+            "junk", "tiny", "small", "common", "uncommon", "rare", "epic", 
+            "legendary", "mythical", "ancient", "divine", "cosmic", "transcendent",
+            "mutated", "crystalline", "void", "celestial", "subatomic", "super", "dev"
+        ]
+        
+        if rarity not in valid_rarities:
+            return await ctx.reply(f"❌ Invalid rarity! Valid rarities: {', '.join(valid_rarities)}")
+        
+        matching_fish = [fish for fish in user_fish if fish.get("type", "").lower() == rarity]
+        
+        if not matching_fish:
+            return await ctx.reply(f"❌ You don't have any **{rarity}** fish!")
+        
+        # Calculate total value
+        total_value = sum(fish.get("value", 0) for fish in matching_fish)
+        fish_count = len(matching_fish)
+        
+        # Remove fish from database
+        fish_ids = [fish["id"] for fish in matching_fish]
+        
+        success_count = 0
+        for fish_id in fish_ids:
+            if await db.remove_fish(ctx.author.id, fish_id):
+                success_count += 1
+        
+        if success_count > 0:
+            await db.add_currency(ctx.author.id, total_value)
+            
+            # Get rarity config for colors
+            rarity_config = self._get_rarity_config()
+            config = rarity_config.get(rarity, {"color": 0x2b2d31, "emoji": "🐟"})
+            
+            embed = discord.Embed(
+                title=f"{config['emoji']} {rarity.title()} Fish Sold!",
+                description=f"Sold **{success_count:,}** {rarity} fish for **{total_value:,}** {self.currency}",
+                color=config['color']
+            )
+            
+            if success_count < fish_count:
+                embed.add_field(
+                    name="⚠️ Warning",
+                    value=f"Only {success_count}/{fish_count} fish were sold successfully.",
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+        else:
+            await ctx.reply("❌ Failed to sell any fish!")
+
+    async def _sell_fish_by_value(self, ctx, user_fish, operator, value_threshold):
+        """Sell fish based on value comparison"""
+        matching_fish = []
+        
+        for fish in user_fish:
+            fish_value = fish.get("value", 0)
+            
+            if operator == ">" and fish_value > value_threshold:
+                matching_fish.append(fish)
+            elif operator == "<" and fish_value < value_threshold:
+                matching_fish.append(fish)
+            elif operator == ">=" and fish_value >= value_threshold:
+                matching_fish.append(fish)
+            elif operator == "<=" and fish_value <= value_threshold:
+                matching_fish.append(fish)
+        
+        if not matching_fish:
+            return await ctx.reply(f"❌ No fish found with value {operator} {value_threshold:,}!")
+        
+        # Calculate total value
+        total_value = sum(fish.get("value", 0) for fish in matching_fish)
+        fish_count = len(matching_fish)
+        
+        # Remove fish from database
+        fish_ids = [fish["id"] for fish in matching_fish]
+        
+        success_count = 0
+        for fish_id in fish_ids:
+            if await db.remove_fish(ctx.author.id, fish_id):
+                success_count += 1
+        
+        if success_count > 0:
+            await db.add_currency(ctx.author.id, total_value)
+            
+            embed = discord.Embed(
+                title="💰 Value-Based Fish Sale Complete!",
+                description=f"Sold **{success_count:,}** fish (value {operator} {value_threshold:,}) for **{total_value:,}** {self.currency}",
+                color=0x00ff00
+            )
+            
+            # Add breakdown by rarity
+            rarity_counts = {}
+            for fish in matching_fish:
+                rarity = fish.get("type", "unknown")
+                rarity_counts[rarity] = rarity_counts.get(rarity, 0) + 1
+            
+            if rarity_counts:
+                breakdown = []
+                for rarity, count in sorted(rarity_counts.items()):
+                    breakdown.append(f"**{rarity.title()}:** {count}x")
+                
+                embed.add_field(
+                    name="📊 Sold by Rarity",
+                    value=", ".join(breakdown),
+                    inline=False
+                )
+            
+            if success_count < fish_count:
+                embed.add_field(
+                    name="⚠️ Warning",
+                    value=f"Only {success_count}/{fish_count} fish were sold successfully.",
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+        else:
+            await ctx.reply("❌ Failed to sell any fish!")
+
+    def _get_rarity_config(self):
+        """Get rarity configuration for colors and emojis"""
+        return {
+            "junk": {"color": 0x8b4513, "emoji": "🗑️"},
+            "tiny": {"color": 0x808080, "emoji": "🐟"},
+            "small": {"color": 0x90EE90, "emoji": "🐠"},
+            "common": {"color": 0x00ff00, "emoji": "🐟"},
+            "uncommon": {"color": 0x1e90ff, "emoji": "🐠"},
+            "rare": {"color": 0x9932cc, "emoji": "🐟"},
+            "epic": {"color": 0xff69b4, "emoji": "🎣"},
+            "legendary": {"color": 0xffa500, "emoji": "🌟"},
+            "mythical": {"color": 0xff0000, "emoji": "⭐"},
+            "ancient": {"color": 0x8b0000, "emoji": "🏺"},
+            "divine": {"color": 0xffd700, "emoji": "✨"},
+            "cosmic": {"color": 0x4b0082, "emoji": "🌌"},
+            "transcendent": {"color": 0xdda0dd, "emoji": "💫"},
+            "void": {"color": 0x2f4f4f, "emoji": "🕳️"},
+            "celestial": {"color": 0x87ceeb, "emoji": "🌠"},
+            "mutated": {"color": 0x32cd32, "emoji": "☢️"},
+            "crystalline": {"color": 0x40e0d0, "emoji": "💎"},
+            "subatomic": {"color": 0xff1493, "emoji": "⚛️"},
+            "super": {"color": 0x00ffff, "emoji": "🦸"},
+            "dev": {"color": 0xff69b4, "emoji": "👑"}
+        }
 
     @commands.command(name="fishinv", aliases=["fi", "fishbag"])
     async def fish_inventory(self, ctx, page: int = 1):
@@ -1494,12 +2127,19 @@ class Fishing(commands.Cog):
             )
             
             for i, fish in enumerate(page_fish, start=start_idx + 1):
-                user_id = fish.get("user_id", "Unknown")
-                try:
-                    user = self.bot.get_user(int(user_id))
-                    username = user.display_name if user else f"User {user_id}"
-                except:
-                    username = f"User {user_id}"
+                user_id = fish.get("user_id")
+                username = "Unknown User"
+                if user_id:
+                    try:
+                        user = self.bot.get_user(int(user_id))
+                        if user:
+                            username = user.display_name
+                        else:
+                            # Try to fetch user if not in cache
+                            user = await self.bot.fetch_user(int(user_id))
+                            username = user.display_name if user else f"User {user_id}"
+                    except:
+                        username = f"User {user_id}"
                 
                 caught_time = fish.get("caught_at", "Unknown")
                 if caught_time != "Unknown":
@@ -1508,7 +2148,7 @@ class Fishing(commands.Cog):
                         caught_time = dt.strftime("%Y-%m-%d %H:%M")
                     except:
                         caught_time = "Unknown"
-                
+            
                 fish_info = f"**#{i} • Caught by:** {username}\n"
                 fish_info += f"**Value:** {fish.get('value', 0):,} {self.currency}\n"
                 fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
@@ -2044,7 +2684,7 @@ class Fishing(commands.Cog):
             for user in users:
                 try:
                     # Check if user already has a dev rod using new inventory structure
-                    user_inventory = await self.get_user_inventory(user.id)
+                    user_inventory = await db.get_user_inventory(user.id)
                     rod_inventory = user_inventory.get("rod", {}) if user_inventory else {}
                     has_dev_rod = rod_inventory.get("dev_rod", 0) > 0
                     
@@ -2098,278 +2738,139 @@ class Fishing(commands.Cog):
             self.logger.error(f"Dev rod command error: {e}")
             await ctx.reply("❌ An error occurred while giving dev rods!")
 
-# ...existing code...
-async def setup(bot):
-    await bot.add_cog(Fishing(bot))
-
-class FishInventoryPaginator(discord.ui.View):
-    def __init__(self, user_id: int, fish_list: list, current_page: int, total_pages: int, currency: str, rod_data: dict, bait_data: dict, get_user_bait_func):
+class InteractiveFishSeller(discord.ui.View):
+    """Interactive fish seller with buttons for selection"""
+    
+    def __init__(self, user_id: int, fish_list: list, currency: str, fishing_cog):
         super().__init__(timeout=300)  # 5 minute timeout
         self.user_id = user_id
         self.fish_list = fish_list
-        self.current_page = current_page
-        self.total_pages = total_pages
         self.currency = currency
-        self.rod_data = rod_data
-        self.bait_data = bait_data
-        self.get_user_bait = get_user_bait_func
-        self.message = None
+        self.fishing_cog = fishing_cog
+        self.current_page = 0
         self.items_per_page = 5
-        
-        # Update button states
-        self.update_buttons()
-    
-    def update_buttons(self):
-        """Update button states based on current page"""
-        # First page button
-        self.children[0].disabled = self.current_page <= 1
-        # Previous page button  
-        self.children[1].disabled = self.current_page <= 1
-        # Next page button
-        self.children[2].disabled = self.current_page >= self.total_pages
-        # Last page button
-        self.children[3].disabled = self.current_page >= self.total_pages
-    
-    async def create_embed(self):
-        """Create embed for current page"""
-        if self.current_page == 1:
-            # Page 1: Show gear overview
-            from utils.db import async_db as db
-            
-            active_gear = await db.get_active_fishing_gear(self.user_id)
-            total_fish = len(self.fish_list)
-            total_value = sum(fish.get("value", 0) for fish in self.fish_list)
-            
-            embed = discord.Embed(
-                title="Fishing Overview",
-                description=f"**Total Fish:** {total_fish:,} | **Total Value:** {total_value:,} {self.currency}",
-                color=0x2b2d31
-            )
-            
-            # Show equipped rod
-            if active_gear.get("rod"):
-                rod_id = active_gear["rod"]
-                if rod_id in self.rod_data:
-                    rod = self.rod_data[rod_id]
-                    embed.add_field(
-                        name="Equipped Rod",
-                        value=f"**{rod['name']}**\n"
-                              f"Multiplier: {rod.get('multiplier', 1.0)}x\n"
-                              f"Power: {rod.get('power', 1)}\n"
-                              f"Durability: {(rod.get('durability', 0.95)*100):.1f}%",
-                        inline=True
-                    )
-                else:
-                    embed.add_field(
-                        name="Equipped Rod",
-                        value="Rod data not found",
-                        inline=True
-                    )
-            else:
-                embed.add_field(
-                    name="Equipped Rod",
-                    value="No rod equipped\nUse `.rod` to equip one",
-                    inline=True
-                )
-            
-            # Show equipped bait
-            if active_gear.get("bait"):
-                bait_id = active_gear["bait"]
-                user_bait = await self.get_user_bait(self.user_id)
-                equipped_bait = next((b for b in user_bait if b.get("_id") == bait_id), None)
-                
-                if equipped_bait:
-                    embed.add_field(
-                        name="Equipped Bait",
-                        value=f"**{equipped_bait['name']}**\n"
-                              f"Amount: {equipped_bait.get('amount', 1)}\n"
-                              f"Type: {equipped_bait.get('rarity', 'Common').title()}",
-                        inline=True
-                    )
-                else:
-                    embed.add_field(
-                        name="Equipped Bait",
-                        value="Bait data not found",
-                        inline=True
-                    )
-            else:
-                embed.add_field(
-                    name="Equipped Bait",
-                    value="No bait equipped\nUse `.bait` to equip some",
-                    inline=True
-                )
-            
-            # Add top catches if user has fish
-            if self.fish_list:
-                sorted_fish = sorted(self.fish_list, key=lambda x: x.get("value", 0), reverse=True)
-                top_fish = sorted_fish[:3]
-                
-                top_catches = []
-                for i, fish in enumerate(top_fish, 1):
-                    top_catches.append(f"{i}. **{fish.get('name', 'Unknown')}** - {fish.get('value', 0):,} {self.currency}")
-                
-                embed.add_field(
-                    name="Top Catches",
-                    value="\n".join(top_catches),
-                    inline=False
-                )
-            else:
-                embed.add_field(
-                    name="Fish Collection",
-                    value="No fish caught yet! Use `.fish` to start fishing.",
-                    inline=False
-                )
-            
-            embed.set_footer(text=f"Page 1/{self.total_pages} • Use buttons to view your fish collection")
-            return embed
-        
-        else:
-            # Pages 2+: Show fish
-            fish_page = self.current_page - 1
-            start_idx = (fish_page - 1) * self.items_per_page
-            end_idx = start_idx + self.items_per_page
-            page_fish = self.fish_list[start_idx:end_idx]
-            
-            total_value = sum(fish.get("value", 0) for fish in self.fish_list)
-            embed = discord.Embed(
-                title="Your Fish Collection",
-                description=f"**Total Fish:** {len(self.fish_list):,} | **Total Value:** {total_value:,} {self.currency}",
-                color=0x2b2d31
-            )
-            
-            # Add fish to embed
-            for i, fish in enumerate(page_fish, start=start_idx + 1):
-                fish_info = (
-                    f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
-                    f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
-                    f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
-                    f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
-                )
-                
-                embed.add_field(
-                    name=f"🐟 {fish.get('name', 'Unknown Fish')}",
-                    value=fish_info,
-                    inline=False
-                )
-            
-            embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • Use buttons to navigate")
-            return embed
-    
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Only allow the command author to use the buttons"""
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ You can't use these buttons!", ephemeral=True)
-            return False
-        return True
-    
-    @discord.ui.button(label="First", style=discord.ButtonStyle.gray)
-    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to first page"""
-        self.current_page = 1
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Previous", style=discord.ButtonStyle.primary)
-    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to previous page"""
-        self.current_page = max(1, self.current_page - 1)
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
-    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to next page"""
-        self.current_page = min(self.total_pages, self.current_page + 1)
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Last", style=discord.ButtonStyle.gray)
-    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to last page"""
-        self.current_page = self.total_pages
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
-    async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Delete the paginator message"""
-        await interaction.response.edit_message(content="Fish inventory closed.", embed=None, view=None)
-    
-    async def on_timeout(self):
-        """Called when the view times out"""
-        if self.message:
-            try:
-                # Disable all buttons
-                for item in self.children:
-                    item.disabled = True
-                await self.message.edit(view=self)
-            except:
-                pass  # Message might be deleted
-
-class GlobalFishPaginator(discord.ui.View):
-    def __init__(self, fish_list: list, current_page: int, total_pages: int, currency: str, bot):
-        super().__init__(timeout=300)  # 5 minute timeout
-        self.fish_list = fish_list
-        self.current_page = current_page
-        self.total_pages = total_pages
-        self.currency = currency
-        self.bot = bot
         self.message = None
-        self.items_per_page = 2
+        
+        # Calculate total pages
+        self.total_pages = math.ceil(len(fish_list) / self.items_per_page) if fish_list else 1
         
         # Update button states
         self.update_buttons()
-    
+
     def update_buttons(self):
         """Update button states based on current page"""
-        # First page button
-        self.children[0].disabled = self.current_page <= 1
-        # Previous page button  
-        self.children[1].disabled = self.current_page <= 1
+        # Clear all items first
+        self.clear_items()
+        
+        # Previous page button
+        prev_button = discord.ui.Button(
+            label="◀️ Previous",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page == 0
+        )
+        prev_button.callback = self.previous_page
+        self.add_item(prev_button)
+        
+        # Page info button (not clickable)
+        page_button = discord.ui.Button(
+            label=f"Page {self.current_page + 1}/{self.total_pages}",
+            style=discord.ButtonStyle.secondary,
+            disabled=True
+        )
+        self.add_item(page_button)
+        
         # Next page button
-        self.children[2].disabled = self.current_page >= self.total_pages
-        # Last page button
-        self.children[3].disabled = self.current_page >= self.total_pages
-    
-    async def create_embed(self):
-        """Create embed for current page"""
-        start_idx = (self.current_page - 1) * self.items_per_page
+        next_button = discord.ui.Button(
+            label="Next ▶️",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page >= self.total_pages - 1
+        )
+        next_button.callback = self.next_page
+        self.add_item(next_button)
+        
+        # Add individual fish sell buttons for current page
+        start_idx = self.current_page * self.items_per_page
         end_idx = start_idx + self.items_per_page
         page_fish = self.fish_list[start_idx:end_idx]
         
+        for i, fish in enumerate(page_fish):
+            # Create a button for each fish
+            fish_name = fish.get('name', 'Unknown Fish')
+            fish_value = fish.get('value', 0)
+            
+            # Truncate name if too long for button
+            display_name = fish_name[:15] + "..." if len(fish_name) > 15 else fish_name
+            
+            button = discord.ui.Button(
+                label=f"Sell {display_name}",
+                style=discord.ButtonStyle.danger,
+                emoji="💰"
+            )
+            
+            # Create callback with fish data - Fix closure issue with default parameter
+            def create_sell_callback(fish_data=fish):
+                async def sell_callback(interaction):
+                    if interaction.user.id != self.user_id:
+                        return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+                    
+                    # Sell the specific fish
+                    await self.sell_specific_fish(interaction, fish_data)
+                return sell_callback
+            
+            button.callback = create_sell_callback()
+            self.add_item(button)
+        
+        # Add bulk action buttons in a new row
+        if len(self.fish_list) > 0:
+            # Sell all button
+            sell_all_button = discord.ui.Button(
+                label="💸 Sell All Fish",
+                style=discord.ButtonStyle.danger,
+                emoji="🐟"
+            )
+            sell_all_button.callback = self.sell_all_fish
+            self.add_item(sell_all_button)
+            
+            # Sell by rarity dropdown
+            rarity_select = RaritySelect(self.user_id, self.fish_list, self.currency, self.fishing_cog)
+            self.add_item(rarity_select)
+
+    async def create_embed(self):
+        """Create embed for current page"""
+        if not self.fish_list:
+            embed = discord.Embed(
+                title="🐟 Fish Market",
+                description="❌ You don't have any fish to sell!",
+                color=0x2b2d31
+            )
+            return embed
+        
+        # Calculate page fish
+        start_idx = self.current_page * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        page_fish = self.fish_list[start_idx:end_idx]
+        
+        # Calculate total value
+        total_value = sum(fish.get("value", 0) for fish in self.fish_list)
+        
         embed = discord.Embed(
-            title="Global Fish Leaderboard",
-            description="Top catches from all players",
-            color=0x2b2d31
+            title="🐟 Interactive Fish Market",
+            description=f"**Total Fish:** {len(self.fish_list):,} | **Total Value:** {total_value:,} {self.currency}",
+            color=0x00ff00
         )
         
+        # Add fish to embed
         for i, fish in enumerate(page_fish, start=start_idx + 1):
-            user_id = fish.get("user_id", "Unknown")
-            try:
-                user = self.bot.get_user(int(user_id))
-                username = user.display_name if user else f"User {user_id}"
-            except:
-                username = f"User {user_id}"
+            rarity = fish.get("type", "unknown")
+            rarity_config = self.fishing_cog._get_rarity_config()
+            config = rarity_config.get(rarity, {"color": 0x2b2d31, "emoji": "🐟"})
             
-            caught_time = fish.get("caught_at", "Unknown")
-            if caught_time != "Unknown":
-                try:
-                    dt = datetime.datetime.fromisoformat(caught_time)
-                    caught_time = dt.strftime("%Y-%m-%d %H:%M")
-                except:
-                    caught_time = "Unknown"
-            
-            fish_info = f"**#{i} • Caught by:** {username}\n"
-            fish_info += f"**Value:** {fish.get('value', 0):,} {self.currency}\n"
-            fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
-            fish_info += f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
-            fish_info += f"**Rod Used:** {fish.get('rod_used', 'Unknown')}\n"
-            fish_info += f"**Bait Used:** {fish.get('bait_used', 'Unknown')}\n"
-            fish_info += f"**Caught:** {caught_time}"
+            fish_info = (
+                f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
+                f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+                f"**Rarity:** {config['emoji']} {rarity.title()}\n"
+                f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
+            )
             
             embed.add_field(
                 name=f"🐟 {fish.get('name', 'Unknown Fish')}",
@@ -2377,46 +2878,121 @@ class GlobalFishPaginator(discord.ui.View):
                 inline=False
             )
         
-        embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • {len(self.fish_list)} total catches")
+        embed.add_field(
+            name="💡 How to Use",
+            value="• Click **Sell** buttons to sell individual fish\n• Use **💸 Sell All Fish** to sell everything\n• Use the dropdown to sell by rarity\n• Navigate with ◀️ ▶️ buttons",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages} • Use the buttons below to interact")
+        
         return embed
-    
-    @discord.ui.button(label="First", style=discord.ButtonStyle.gray)
-    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to first page"""
-        self.current_page = 1
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Previous", style=discord.ButtonStyle.primary)
-    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    async def previous_page(self, interaction):
         """Go to previous page"""
-        self.current_page = max(1, self.current_page - 1)
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
-    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+        
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def next_page(self, interaction):
         """Go to next page"""
-        self.current_page = min(self.total_pages, self.current_page + 1)
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Last", style=discord.ButtonStyle.gray)
-    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Go to last page"""
-        self.current_page = self.total_pages
-        self.update_buttons()
-        embed = await self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
-    async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Delete the paginator message"""
-        await interaction.response.edit_message(content="Global fish leaderboard closed.", embed=None, view=None)
-    
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+        
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def sell_specific_fish(self, interaction, fish):
+        """Sell a specific fish"""
+        try:
+            fish_id = fish.get("id")
+            if await db.remove_fish(self.user_id, fish_id):
+                await db.add_currency(self.user_id, fish["value"])
+                
+                # Remove fish from local list
+                self.fish_list = [f for f in self.fish_list if f.get("id") != fish_id]
+                
+                # Update pagination
+                self.total_pages = math.ceil(len(self.fish_list) / self.items_per_page) if self.fish_list else 1
+                if self.current_page >= self.total_pages:
+                    self.current_page = max(0, self.total_pages - 1)
+                
+                # Get rarity config for colors
+                rarity_config = self.fishing_cog._get_rarity_config()
+                config = rarity_config.get(fish.get("type", "common"), {"color": 0x2b2d31, "emoji": "🐟"})
+                
+                # Create success embed
+                success_embed = discord.Embed(
+                    title=f"{config['emoji']} Fish Sold!",
+                    description=f"Sold **{fish['name']}** for **{fish['value']:,}** {self.currency}",
+                    color=config['color']
+                )
+                
+                await interaction.response.send_message(embed=success_embed, ephemeral=True)
+                
+                # Update the main market view
+                if self.fish_list:
+                    self.update_buttons()
+                    embed = await self.create_embed()
+                    await interaction.edit_original_response(embed=embed, view=self)
+                else:
+                    # No fish left
+                    empty_embed = discord.Embed(
+                        title="🐟 Fish Market",
+                        description="✅ All fish sold! Your market is now empty.",
+                        color=0x00ff00
+                    )
+                    self.clear_items()
+                    await interaction.edit_original_response(embed=empty_embed, view=self)
+            else:
+                await interaction.response.send_message("❌ Failed to sell fish!", ephemeral=True)
+                
+        except Exception as e:
+            await interaction.response.send_message("❌ An error occurred while selling the fish!", ephemeral=True)
+
+    async def sell_all_fish(self, interaction):
+        """Sell all fish"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+        
+        try:
+            total_value = sum(fish.get("value", 0) for fish in self.fish_list)
+            fish_count = len(self.fish_list)
+            
+            if await db.clear_fish(self.user_id):
+                await db.add_currency(self.user_id, total_value)
+                
+                embed = discord.Embed(
+                    title="🐟 All Fish Sold!",
+                    description=f"Sold **{fish_count:,}** fish for **{total_value:,}** {self.currency}",
+                    color=0x00ff00
+                )
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+                # Clear the market
+                self.fish_list = []
+                empty_embed = discord.Embed(
+                    title="🐟 Fish Market",
+                    description="✅ All fish sold! Your market is now empty.",
+                    color=0x00ff00
+                )
+                self.clear_items()
+                await interaction.edit_original_response(embed=empty_embed, view=self)
+            else:
+                await interaction.response.send_message("❌ Failed to sell fish!", ephemeral=True)
+                
+        except Exception as e:
+            await interaction.response.send_message("❌ An error occurred while selling fish!", ephemeral=True)
+
     async def on_timeout(self):
         """Called when the view times out"""
         if self.message:
@@ -2427,3 +3003,123 @@ class GlobalFishPaginator(discord.ui.View):
                 await self.message.edit(view=self)
             except:
                 pass  # Message might be deleted
+
+
+class RaritySelect(discord.ui.Select):
+    """Dropdown for selecting rarity to sell"""
+    
+    def __init__(self, user_id: int, fish_list: list, currency: str, fishing_cog):
+        self.user_id = user_id
+        self.fish_list = fish_list
+        self.currency = currency
+        self.fishing_cog = fishing_cog
+        
+        # Get unique rarities from fish list
+        rarities = set(fish.get("type", "unknown") for fish in fish_list)
+        
+        # Create options for each rarity
+        options = []
+        for rarity in sorted(rarities):
+            rarity_fish = [f for f in fish_list if f.get("type") == rarity]
+            count = len(rarity_fish)
+            total_value = sum(f.get("value", 0) for f in rarity_fish)
+            
+            # Get rarity config
+            rarity_config = fishing_cog._get_rarity_config()
+            config = rarity_config.get(rarity, {"emoji": "🐟"})
+            
+            options.append(discord.SelectOption(
+                label=f"{rarity.title()} ({count}x)",
+                value=rarity,
+                description=f"Sell all {rarity} fish for {total_value:,} coins",
+                emoji=config.get("emoji", "🐟")
+            ))
+        
+        super().__init__(
+            placeholder="Sell all fish of a specific rarity...",
+            options=options[:25],  # Discord limit
+            min_values=1,
+            max_values=1
+        )
+
+    async def callback(self, interaction):
+        """Handle rarity selection"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+        
+        selected_rarity = self.values[0]
+        
+        try:
+            # Get fish of selected rarity
+            matching_fish = [fish for fish in self.fish_list if fish.get("type", "").lower() == selected_rarity.lower()]
+            
+            if not matching_fish:
+                return await interaction.response.send_message(f"❌ No {selected_rarity} fish found!", ephemeral=True)
+            
+            # Calculate total value
+            total_value = sum(fish.get("value", 0) for fish in matching_fish)
+            fish_count = len(matching_fish)
+            
+            # Remove fish from database
+            fish_ids = [fish["id"] for fish in matching_fish]
+            
+            success_count = 0
+            for fish_id in fish_ids:
+                if await db.remove_fish(self.user_id, fish_id):
+                    success_count += 1
+            
+            if success_count > 0:
+                await db.add_currency(self.user_id, total_value)
+                
+                # Get rarity config for colors
+                rarity_config = self.fishing_cog._get_rarity_config()
+                config = rarity_config.get(selected_rarity, {"color": 0x2b2d31, "emoji": "🐟"})
+                
+                embed = discord.Embed(
+                    title=f"{config['emoji']} {selected_rarity.title()} Fish Sold!",
+                    description=f"Sold **{success_count:,}** {selected_rarity} fish for **{total_value:,}** {self.currency}",
+                    color=config['color']
+                )
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+                # Update the parent view's fish list by removing sold fish
+                # Find the parent view (InteractiveFishSeller)
+                parent_view = None
+                for view in interaction.client._connection._view_store._views:
+                    if isinstance(view, InteractiveFishSeller) and view.user_id == self.user_id:
+                        parent_view = view
+                        break
+                
+                if parent_view:
+                    # Remove sold fish from parent's fish list
+                    parent_view.fish_list = [f for f in parent_view.fish_list if f.get("type", "").lower() != selected_rarity.lower()]
+                    
+                    # Update pagination
+                    parent_view.total_pages = math.ceil(len(parent_view.fish_list) / parent_view.items_per_page) if parent_view.fish_list else 1
+                    if parent_view.current_page >= parent_view.total_pages:
+                        parent_view.current_page = max(0, parent_view.total_pages - 1)
+                    
+                    # Update the parent view
+                    if parent_view.fish_list:
+                        parent_view.update_buttons()
+                        parent_embed = await parent_view.create_embed()
+                        await interaction.edit_original_response(embed=parent_embed, view=parent_view)
+                    else:
+                        # No fish left
+                        empty_embed = discord.Embed(
+                            title="🐟 Fish Market",
+                            description="✅ All fish sold! Your market is now empty.",
+                            color=0x00ff00
+                        )
+                        parent_view.clear_items()
+                        await interaction.edit_original_response(embed=empty_embed, view=parent_view)
+            else:
+                await interaction.response.send_message("❌ Failed to sell any fish!", ephemeral=True)
+                
+        except Exception as e:
+            await interaction.response.send_message("❌ An error occurred while selling fish!", ephemeral=True)
+
+async def setup(bot):
+    """Setup function to load the Fishing cog"""
+    await bot.add_cog(Fishing(bot))
