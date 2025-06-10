@@ -13,7 +13,7 @@ class AutoFishing(commands.Cog):
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.BASE_PRICE = 1000
         self.PRICE_MULTIPLIER = 2.5
-        self.MAX_AUTOFISHERS = 10
+        self.MAX_AUTOFISHERS = 30
         self.BAIT_COST = 50
         self.CATCH_CHANCE = 0.5
         self.AUTOFISH_INTERVAL = 30  # seconds
@@ -24,114 +24,9 @@ class AutoFishing(commands.Cog):
         self.available_rods = self._load_available_rods()
         self.available_baits = self._load_available_baits()
         
-        # Rod and bait aliases for easier user input
-        self.rod_aliases = {
-            # Basic rods
-            "basic": "basic_rod",
-            "bamboo": "basic_rod",
-            "starter": "basic_rod",
-            
-            # Advanced rods
-            "advanced": "advanced_rod",
-            "fiber": "advanced_rod",
-            "fiberglass": "advanced_rod",
-            
-            # Pro rods
-            "pro": "pro_rod",
-            "carbon": "pro_rod",
-            "professional": "pro_rod",
-            
-            # Master rods
-            "master": "master_rod",
-            "titanium": "master_rod",
-            
-            # Legendary rods
-            "legendary": "legendary_rod",
-            "legend": "legendary_rod",
-            "leg": "legendary_rod",
-            
-            # Mythical rods
-            "mythical": "mythical_rod",
-            "myth": "mythical_rod",
-            "godly": "mythical_rod",
-            
-            # Cosmic rods
-            "cosmic": "cosmic_rod",
-            "star": "cosmic_rod",
-            "space": "cosmic_rod",
-            
-            # High-end rods (from JSON)
-            "quantum": "quantum_rod",
-            "q": "quantum_rod",
-            "void": "void_rod",
-            "shadow": "void_rod",
-            "celestial": "celestial_rod",
-            "heaven": "celestial_rod",
-            "divine": "divine_rod",
-            "god": "divine_rod",
-            "reality": "reality_rod",
-            "real": "reality_rod",
-            "multiverse": "multiverse_rod",
-            "multi": "multiverse_rod",
-            "infinite": "infinite_rod",
-            "inf": "infinite_rod",
-            "transcendent": "transcendent_rod",
-            "trans": "transcendent_rod"
-        }
-        
-        self.bait_aliases = {
-            # Basic baits
-            "beginner": "beginner_bait",
-            "basic": "beginner_bait",
-            "worm": "beginner_bait",
-            "worms": "beginner_bait",
-            
-            # Pro baits
-            "pro": "pro_bait",
-            "professional": "pro_bait",
-            
-            # Premium baits
-            "premium": "premium_bait",
-            "prem": "premium_bait",
-            
-            # Legendary baits
-            "legendary": "legendary_bait",
-            "legend": "legendary_bait",
-            "leg": "legendary_bait",
-            
-            # Mythical baits
-            "mythical": "mythical_bait",
-            "myth": "mythical_bait",
-            
-            # Divine baits
-            "divine": "divine_bait",
-            "god": "divine_bait",
-            "holy": "divine_bait",
-            
-            # Cosmic baits
-            "cosmic": "cosmic_bait",
-            "star": "cosmic_bait",
-            "space": "cosmic_bait",
-            
-            # Quantum baits
-            "quantum": "quantum_bait",
-            "q": "quantum_bait",
-            
-            # Void baits
-            "void": "void_bait",
-            "shadow": "void_bait",
-            "dark": "void_bait",
-            
-            # Crystalline baits
-            "crystalline": "crystalline_bait",
-            "crystal": "crystalline_bait",
-            "gem": "crystalline_bait",
-            
-            # Celestial baits
-            "celestial": "celestial_bait",
-            "heaven": "celestial_bait",
-            "angel": "celestial_bait"
-        }
+        # Load aliases dynamically from JSON files
+        self.rod_aliases = self._load_rod_aliases()
+        self.bait_aliases = self._load_bait_aliases()
         
         # Bag limit system - based on total deposited amount
         self.BAG_LIMITS = {
@@ -450,9 +345,9 @@ class AutoFishing(commands.Cog):
             current_fish_count = await self.get_current_fish_count(ctx.author.id)
             bag_limit = self.get_bag_limit(total_deposited)
             
-            embed.add_field(name="Autofishers", value=f"{count}/{self.MAX_AUTOFISHERS}", inline=True)
+            embed.add_field(name="Autofishers", value=f"{count:,}/{self.MAX_AUTOFISHERS}", inline=True)
             embed.add_field(name="Balance", value=f"{balance:,} {self.currency}", inline=True)
-            embed.add_field(name="Fish Bag", value=f"{current_fish_count}/{bag_limit}", inline=True)
+            embed.add_field(name="Fish Bag", value=f"{current_fish_count:,}/{bag_limit:,}", inline=True)
             
             # Show next bag upgrade
             next_upgrade = None
@@ -482,11 +377,64 @@ class AutoFishing(commands.Cog):
                     embed.add_field(name="Next Autofish", value="Now!", inline=True)
             
             if count < self.MAX_AUTOFISHERS:
-                embed.add_field(name="Next Autofisher Cost", value=f"{next_cost} {self.currency}", inline=False)
+                embed.add_field(name="Next Autofisher Cost", value=f"{next_cost:,} {self.currency}", inline=False)
+                
+                # Create view with buy button
+                view = discord.ui.View(timeout=60.0)
+                
+                async def buy_callback(interaction):
+                    if interaction.user.id != ctx.author.id:
+                        return await interaction.response.send_message("❌ This isn't your button!", ephemeral=True)
+                    
+                    # Check if user can afford it
+                    balance = await db.get_balance(ctx.author.id)
+                    if balance < next_cost:
+                        return await interaction.response.send_message(
+                            f"❌ You need {next_cost:,} {self.currency} but only have {balance:,} {self.currency}!", 
+                            ephemeral=True
+                        )
+                    
+                    # Buy the autofisher
+                    if await db.update_balance(ctx.author.id, -next_cost):
+                        new_count = count + 1
+                        await db.db.users.update_one(
+                            {"_id": str(ctx.author.id)},
+                            {"$set": {
+                                "autofisher.count": new_count,
+                                "autofisher.balance": autofisher_data.get("balance", 0)
+                            }},
+                            upsert=True
+                        )
+                        await interaction.response.send_message(
+                            f"✅ Successfully purchased autofisher #{new_count:,}!", ephemeral=True
+                        )
+                        
+                        # Update the original embed
+                        embed.set_field_at(0, name="Autofishers", value=f"{new_count:,}/{self.MAX_AUTOFISHERS}", inline=True)
+                        
+                        if new_count < self.MAX_AUTOFISHERS:
+                            new_next_cost = int(self.BASE_PRICE * (self.PRICE_MULTIPLIER ** new_count))
+                            embed.set_field_at(-1, name="Next Autofisher Cost", value=f"{new_next_cost:,} {self.currency}", inline=False)
+                        else:
+                            embed.set_field_at(-1, name="Status", value="Maximum autofishers reached!", inline=False)
+                            view.clear_items()
+                        
+                        await interaction.edit_original_response(embed=embed, view=view)
+                    else:
+                        await interaction.response.send_message("❌ Failed to purchase autofisher!", ephemeral=True)
+                
+                buy_button = discord.ui.Button(
+                    label=f"Buy Autofisher #{count + 1:,} ({next_cost:,} {self.currency})", 
+                    style=discord.ButtonStyle.green,
+                    emoji="🤖"
+                )
+                buy_button.callback = buy_callback
+                view.add_item(buy_button)
+                
+                await safe_reply(ctx, embed=embed, view=view)
             else:
                 embed.add_field(name="Status", value="Maximum autofishers reached!", inline=False)
-                
-            await safe_reply(ctx, embed=embed)
+                await safe_reply(ctx, embed=embed)
         except Exception as e:
             print(f"Error in auto command: {e}")
             await safe_reply(ctx, "❌ Error retrieving autofisher data!")
@@ -507,7 +455,7 @@ class AutoFishing(commands.Cog):
             balance = await db.get_balance(ctx.author.id)
             
             if balance < cost:
-                return await safe_reply(ctx, f"Need {cost} {self.currency} (You have {balance})")
+                return await safe_reply(ctx, f"Need {cost:,} {self.currency} (You have {balance:,})")
                 
             if await db.update_balance(ctx.author.id, -cost):
                 new_count = current_count + 1
@@ -519,7 +467,7 @@ class AutoFishing(commands.Cog):
                     }},
                     upsert=True
                 )
-                await safe_reply(ctx, f"✅ Purchased autofisher #{new_count}!")
+                await safe_reply(ctx, f"✅ Purchased autofisher #{new_count:,}!")
             else:
                 await safe_reply(ctx, "❌ Failed to purchase autofisher!")
         except Exception as e:
@@ -574,7 +522,7 @@ class AutoFishing(commands.Cog):
                 
                 # Show bag limit upgrade if applicable
                 bag_limit = self.get_bag_limit(total_deposited)
-                embed.add_field(name="Fish Bag Limit", value=f"{bag_limit} fish", inline=True)
+                embed.add_field(name="Fish Bag Limit", value=f"{bag_limit:,} fish", inline=True)
                 
                 await safe_reply(ctx, embed=embed)
             else:
@@ -618,7 +566,7 @@ class AutoFishing(commands.Cog):
                 if await db.update_balance(ctx.author.id, total_value):
                     embed = discord.Embed(
                         title="🤖 Auto-Fish Collection",
-                        description=f"Sold {len(auto_fish)} auto-caught fish for **{total_value}** {self.currency}",
+                        description=f"Sold {len(auto_fish):,} auto-caught fish for **{total_value:,}** {self.currency}",
                         color=discord.Color.green()
                     )
                     await safe_reply(ctx, embed=embed)
@@ -671,7 +619,7 @@ class AutoFishing(commands.Cog):
             
             if auto_fish:
                 total_value = sum(f["value"] for f in auto_fish)
-                embed.add_field(name="Pending Value", value=f"{total_value} {self.currency}", inline=False)
+                embed.add_field(name="Pending Value", value=f"{total_value:,} {self.currency}", inline=False)
                 embed.set_footer(text="Use '.auto collect' to collect your fish!")
             
             await safe_reply(ctx, embed=embed)
@@ -685,9 +633,15 @@ class AutoFishing(commands.Cog):
         try:
             import json
             import os
-            
-            # Start with hardcoded rods
-            available = ["basic_rod", "advanced_rod", "pro_rod", "master_rod", "legendary_rod", "mythical_rod", "cosmic_rod"]
+             # Start with hardcoded rods - UPDATED to include new rods
+            available = [
+                "basic_rod", "advanced_rod", "reinforced_rod", "pro_rod", "expert_rod", "champion_rod",
+                "master_rod", "titanium_rod", "plasma_rod", "enchanted_rod", "legendary_rod", 
+                "dragon_rod", "phoenix_rod", "shadow_rod", "crystal_rod", "leviathan_rod", 
+                "stellar_rod", "mythical_rod", "cosmic_rod", "nebula_rod", "galactic_rod",
+                "quantum_rod", "astral_rod", "ethereal_rod", "void_rod", "infinity_rod",
+                "omniversal_rod", "genesis_rod", "subatomic_rod", "dev_rod"
+            ]
             
             # Try to load from JSON
             json_path = "data/shop/rods.json"
@@ -715,8 +669,15 @@ class AutoFishing(commands.Cog):
             import json
             import os
             
-            # Start with hardcoded baits
-            available = ["beginner_bait", "pro_bait", "premium_bait", "legendary_bait", "mythical_bait", "divine_bait", "cosmic_bait"]
+            # Start with hardcoded baits - UPDATED to include new baits
+            available = [
+                "beginner_bait", "advanced_bait", "enhanced_bait", "master_bait", "legendary_bait", 
+                "enchanted_bait", "phoenix_bait", "cosmic_bait", "solar_bait", "plasma_bait",
+                "mystic_bait", "ethereal_bait", "divine_bait", "shadow_bait", "arcane_bait",
+                "void_bait", "crystalline_bait", "temporal_bait", "celestial_bait", 
+                "primordial_bait", "reality_bait", "dimensional_bait", "quantum_bait",
+                "omega_bait", "nano_bait", "subatomic_bait"
+            ]
             
             # Try to load from JSON
             json_path = "data/shop/bait.json"
@@ -737,6 +698,62 @@ class AutoFishing(commands.Cog):
         except Exception as e:
             print(f"Could not load baits from JSON: {e}")
             return ["beginner_bait", "pro_bait", "premium_bait", "legendary_bait", "mythical_bait", "divine_bait", "cosmic_bait"]
+
+    def _load_rod_aliases(self):
+        """Load rod aliases dynamically from JSON file"""
+        try:
+            import json
+            import os
+            
+            aliases = {}
+            json_path = "data/shop/rods.json"
+            
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    rods_data = json.load(f)
+                
+                # Build aliases dictionary from JSON data
+                for rod_id, rod_data in rods_data.items():
+                    if "aliases" in rod_data:
+                        for alias in rod_data["aliases"]:
+                            aliases[alias.lower()] = rod_id
+                
+                print(f"Loaded {len(aliases)} rod aliases from JSON")
+            else:
+                print(f"Rod JSON file not found at {json_path}")
+                
+            return aliases
+        except Exception as e:
+            print(f"Could not load rod aliases from JSON: {e}")
+            return {}
+
+    def _load_bait_aliases(self):
+        """Load bait aliases dynamically from JSON file"""
+        try:
+            import json
+            import os
+            
+            aliases = {}
+            json_path = "data/shop/bait.json"
+            
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    baits_data = json.load(f)
+                
+                # Build aliases dictionary from JSON data
+                for bait_id, bait_data in baits_data.items():
+                    if "aliases" in bait_data:
+                        for alias in bait_data["aliases"]:
+                            aliases[alias.lower()] = bait_id
+                
+                print(f"Loaded {len(aliases)} bait aliases from JSON")
+            else:
+                print(f"Bait JSON file not found at {json_path}")
+                
+            return aliases
+        except Exception as e:
+            print(f"Could not load bait aliases from JSON: {e}")
+            return {}
 
     def _resolve_rod_alias(self, rod_input: str) -> str:
         """Resolve rod alias to full rod ID"""

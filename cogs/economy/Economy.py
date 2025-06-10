@@ -33,6 +33,119 @@ def logged_command(*args, **kwargs):
         return log_command(cmd)
     return decorator
 
+class PaymentConfirmView(discord.ui.View):
+    """Payment confirmation view for the receiving user"""
+    
+    def __init__(self, sender: discord.Member, receiver: discord.Member, amount: int, currency: str):
+        super().__init__(timeout=300)  # 5 minutes timeout
+        self.sender = sender
+        self.receiver = receiver
+        self.amount = amount
+        self.currency = currency
+        self.responded = False
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green, emoji="✅")
+    async def accept_payment(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.receiver.id:
+            return await interaction.response.send_message("❌ Only the payment recipient can respond!", ephemeral=True)
+        
+        if self.responded:
+            return await interaction.response.send_message("❌ This payment has already been responded to!", ephemeral=True)
+        
+        self.responded = True
+        
+        # Process the payment
+        success = await db.transfer_money(self.sender.id, self.receiver.id, self.amount, interaction.guild.id)
+        
+        if success:
+            embed = discord.Embed(
+                title="✅ Payment Accepted!",
+                description=f"Successfully transferred **{self.amount:,}** {self.currency}",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="From:", value=self.sender.display_name, inline=True)
+            embed.add_field(name="To:", value=self.receiver.display_name, inline=True)
+            embed.add_field(name="Amount:", value=f"{self.amount:,} {self.currency}", inline=True)
+            
+            # Send a notification to the sender
+            try:
+                sender_embed = discord.Embed(
+                    title="💰 Payment Completed!",
+                    description=f"{self.receiver.display_name} accepted your payment of **{self.amount:,}** {self.currency}",
+                    color=discord.Color.green()
+                )
+                await self.sender.send(embed=sender_embed)
+            except discord.Forbidden:
+                pass  # Sender has DMs disabled
+        else:
+            embed = discord.Embed(
+                title="❌ Payment Failed!",
+                description=f"The sender ({self.sender.display_name}) has insufficient funds.",
+                color=discord.Color.red()
+            )
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red, emoji="❌")
+    async def decline_payment(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.receiver.id:
+            return await interaction.response.send_message("❌ Only the payment recipient can respond!", ephemeral=True)
+        
+        if self.responded:
+            return await interaction.response.send_message("❌ This payment has already been responded to!", ephemeral=True)
+        
+        self.responded = True
+        
+        embed = discord.Embed(
+            title="❌ Payment Declined",
+            description=f"{self.receiver.display_name} declined the payment of **{self.amount:,}** {self.currency}",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="From:", value=self.sender.display_name, inline=True)
+        embed.add_field(name="Amount:", value=f"{self.amount:,} {self.currency}", inline=True)
+        
+        # Send a notification to the sender
+        try:
+            sender_embed = discord.Embed(
+                title="❌ Payment Declined",
+                description=f"{self.receiver.display_name} declined your payment of **{self.amount:,}** {self.currency}",
+                color=discord.Color.red()
+            )
+            await self.sender.send(embed=sender_embed)
+        except discord.Forbidden:
+            pass  # Sender has DMs disabled
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if not self.responded:
+            embed = discord.Embed(
+                title="⏰ Payment Expired",
+                description=f"Payment request from {self.sender.display_name} has expired",
+                color=discord.Color.orange()
+            )
+            embed.add_field(name="Amount:", value=f"{self.amount:,} {self.currency}", inline=True)
+            
+            # Disable all buttons
+            for item in self.children:
+                item.disabled = True
+            
+            # Try to edit the message (may fail if message was deleted)
+            try:
+                if hasattr(self, 'message') and self.message:
+                    await self.message.edit(embed=embed, view=self)
+            except:
+                pass  # Message might have been deleted
+
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -237,10 +350,38 @@ class Economy(commands.Cog):
         if member == ctx.author:
             return await ctx.reply("You can't pay yourself!")
         
-        if await db.transfer_money(ctx.author.id, member.id, amount, ctx.guild.id):
-            await ctx.reply(f"Transferred **{amount}** {self.currency} to {member.mention}")
-        else:
-            await ctx.reply("Insufficient funds!")
+        # Check if sender has enough funds
+        sender_balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        if sender_balance < amount:
+            return await ctx.reply("Insufficient funds!")
+        
+        # Create payment confirmation for receiver
+        view = PaymentConfirmView(ctx.author, member, amount, self.currency)
+        
+        embed = discord.Embed(
+            title="💳 Payment Confirmation Required",
+            description=f"{ctx.author.mention} wants to send you **{amount:,}** {self.currency}",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="From:",
+            value=ctx.author.display_name,
+            inline=True
+        )
+        embed.add_field(
+            name="Amount:",
+            value=f"{amount:,} {self.currency}",
+            inline=True
+        )
+        embed.add_field(
+            name="Action Required:",
+            value="Click **Accept** or **Decline** below",
+            inline=False
+        )
+        embed.set_footer(text="This payment request will expire in 5 minutes")
+        
+        message = await ctx.reply(f"{member.mention}", embed=embed, view=view)
+        view.message = message  # Store message reference for timeout handling
 
     @commands.command()
     @commands.cooldown(1, 86400, commands.BucketType.user)
@@ -625,88 +766,241 @@ class Economy(commands.Cog):
     @commands.command(aliases=['upgrade_bank', 'bu'])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def bankupgrade(self, ctx):
-        """Upgrade your bank capacity (price scales with current limit)"""
+        """Upgrade your bank capacity with improved options"""
         
         async def create_upgrade_embed(user_id, guild_id):
             # Get current bank stats
             current_limit = await db.get_bank_limit(user_id, guild_id)
             current_balance = await db.get_bank_balance(user_id, guild_id)
+            wallet_balance = await db.get_wallet_balance(user_id, guild_id)
             
-            # Dynamic pricing formula (example: 10% of current limit + base 1000)
+            # Dynamic pricing formula
             base_cost = 1000
             upgrade_cost = int(current_limit * 0.1) + base_cost
-            new_limit = current_limit + 5000  # Fixed increase per upgrade
+            new_limit = current_limit + 5000
             
-            # Check if user can afford it
-            can_afford = current_balance >= upgrade_cost
+            # Check affordability from both sources
+            can_afford_bank = current_balance >= upgrade_cost
+            can_afford_wallet = wallet_balance >= upgrade_cost
+            can_afford_combined = (current_balance + wallet_balance) >= upgrade_cost
+            
+            # Calculate max upgrades possible
+            max_from_bank = current_balance // upgrade_cost if upgrade_cost > 0 else 0
+            max_from_wallet = wallet_balance // upgrade_cost if upgrade_cost > 0 else 0
+            max_combined = (current_balance + wallet_balance) // upgrade_cost if upgrade_cost > 0 else 0
             
             # Create embed
             embed = discord.Embed(
-                title="🏦 Bank Upgrade",
-                color=0x2ecc71 if can_afford else 0xe74c3c,
+                title="🏦 Bank Upgrade Center",
+                color=0x2ecc71 if can_afford_combined else 0xe74c3c,
                 description=(
-                    f"Current Bank Limit: **{current_limit:,}** {self.currency}\n"
-                    f"Current Bank Balance: **{current_balance:,}** {self.currency}\n\n"
-                    f"Upgrade Cost: **{upgrade_cost:,}** {self.currency}\n"
-                    f"New Limit: **{new_limit:,}** {self.currency}\n"
-                    f"*Money will be taken directly from your bank*"
+                    f"**Current Status:**\n"
+                    f"🏦 Bank Limit: **{current_limit:,}** {self.currency}\n"
+                    f"💰 Bank Balance: **{current_balance:,}** {self.currency}\n"
+                    f"💵 Wallet Balance: **{wallet_balance:,}** {self.currency}\n\n"
+                    f"**Upgrade Details:**\n"
+                    f"💲 Cost per Upgrade: **{upgrade_cost:,}** {self.currency}\n"
+                    f"📈 New Limit: **{new_limit:,}** {self.currency} (+5,000)\n"
+                    f"🔢 Max Possible: **{max_combined}** upgrades"
                 )
             )
             
-            if not can_afford:
+            if not can_afford_combined:
+                needed = upgrade_cost - (current_balance + wallet_balance)
                 embed.add_field(
-                    name="Insufficient Funds",
-                    value=f"You need **{upgrade_cost - current_balance:,}** more {self.currency} in your bank to upgrade!",
+                    name="💸 Insufficient Funds",
+                    value=f"You need **{needed:,}** more {self.currency} to upgrade!",
+                    inline=False
+                )
+            else:
+                funding_options = []
+                if can_afford_bank:
+                    funding_options.append(f"🏦 From Bank (Max: {max_from_bank})")
+                if can_afford_wallet:
+                    funding_options.append(f"💵 From Wallet (Max: {max_from_wallet})")
+                if not can_afford_bank and not can_afford_wallet:
+                    funding_options.append(f"🔄 Combined Funds")
+                
+                embed.add_field(
+                    name="💳 Payment Options",
+                    value="\n".join(funding_options),
                     inline=False
                 )
             
-            # Create view with buttons
-            view = discord.ui.View()
+            # Create view with improved buttons
+            view = discord.ui.View(timeout=180)
             
-            if can_afford:
-                confirm_button = discord.ui.Button(label="Upgrade", style=discord.ButtonStyle.green)
+            if can_afford_combined:
+                # Single upgrade buttons
+                if can_afford_bank:
+                    bank_button = discord.ui.Button(
+                        label="Upgrade (Bank)", 
+                        style=discord.ButtonStyle.primary,
+                        emoji="🏦"
+                    )
+                    bank_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "bank")
+                    view.add_item(bank_button)
                 
-                async def confirm_callback(interaction):
-                    if interaction.user != ctx.author:
-                        return await interaction.response.send_message("This isn't your upgrade!", ephemeral=True)
-                    
-                    # Verify balance again in case it changed
-                    fresh_balance = await db.get_bank_balance(user_id, guild_id)
-                    fresh_limit = await db.get_bank_limit(user_id, guild_id)
-                    fresh_cost = int(fresh_limit * 0.1) + base_cost
-                    
-                    if fresh_balance < fresh_cost:
-                        error_embed = discord.Embed(
-                            description="❌ Your bank balance changed and you can no longer afford this upgrade!",
-                            color=discord.Color.red()
+                if can_afford_wallet:
+                    wallet_button = discord.ui.Button(
+                        label="Upgrade (Wallet)", 
+                        style=discord.ButtonStyle.secondary,
+                        emoji="💵"
+                    )
+                    wallet_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "wallet")
+                    view.add_item(wallet_button)
+                
+                if not can_afford_bank and not can_afford_wallet and can_afford_combined:
+                    combined_button = discord.ui.Button(
+                        label="Upgrade (Combined)", 
+                        style=discord.ButtonStyle.primary,
+                        emoji="🔄"
+                    )
+                    combined_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "combined")
+                    view.add_item(combined_button)
+                
+                # Max upgrade buttons (if more than 1 possible)
+                if max_combined > 1:
+                    if max_from_bank > 1 and can_afford_bank:
+                        max_bank_button = discord.ui.Button(
+                            label=f"Max {max_from_bank} (Bank)", 
+                            style=discord.ButtonStyle.success,
+                            emoji="🏦"
                         )
-                        return await interaction.response.edit_message(embed=error_embed, view=None)
+                        max_bank_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_from_bank, "bank")
+                        view.add_item(max_bank_button)
                     
-                    # Process the upgrade
-                    await db.update_bank(user_id, -fresh_cost, guild_id)
-                    await db.update_bank_limit(user_id, 5000, guild_id)  # Increase by 5000
+                    if max_from_wallet > 1 and can_afford_wallet:
+                        max_wallet_button = discord.ui.Button(
+                            label=f"Max {max_from_wallet} (Wallet)", 
+                            style=discord.ButtonStyle.success,
+                            emoji="💵"
+                        )
+                        max_wallet_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_from_wallet, "wallet")
+                        view.add_item(max_wallet_button)
                     
-                    # Show new upgrade options
-                    new_embed, new_view = await create_upgrade_embed(user_id, guild_id)
-                    await interaction.response.edit_message(embed=new_embed, view=new_view)
-                
-                confirm_button.callback = confirm_callback
-                view.add_item(confirm_button)
+                    if max_combined > max(max_from_bank, max_from_wallet):
+                        max_combined_button = discord.ui.Button(
+                            label=f"Max {max_combined} (Combined)", 
+                            style=discord.ButtonStyle.success,
+                            emoji="🔄"
+                        )
+                        max_combined_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_combined, "combined")
+                        view.add_item(max_combined_button)
             
-            cancel_button = discord.ui.Button(label="Close", style=discord.ButtonStyle.red)
-            
-            async def cancel_callback(interaction):
-                if interaction.user != ctx.author:
-                    return await interaction.response.send_message("This isn't your upgrade!", ephemeral=True)
-                await interaction.response.edit_message(content="Bank upgrade closed.", embed=None, view=None)
-            
-            cancel_button.callback = cancel_callback
-            view.add_item(cancel_button)
+            # Close button
+            close_button = discord.ui.Button(label="Close", style=discord.ButtonStyle.red, emoji="❌")
+            close_button.callback = lambda i: self._handle_close(i, ctx)
+            view.add_item(close_button)
             
             return embed, view
         
         embed, view = await create_upgrade_embed(ctx.author.id, ctx.guild.id)
         await ctx.reply(embed=embed, view=view)
+    
+    async def _handle_upgrade(self, interaction, ctx, user_id, guild_id, count, source):
+        """Handle bank upgrade transaction"""
+        if interaction.user != ctx.author:
+            return await interaction.response.send_message("❌ This isn't your upgrade!", ephemeral=True)
+        
+        # Get fresh data
+        current_limit = await db.get_bank_limit(user_id, guild_id)
+        current_balance = await db.get_bank_balance(user_id, guild_id)
+        wallet_balance = await db.get_wallet_balance(user_id, guild_id)
+        
+        base_cost = 1000
+        upgrade_cost = int(current_limit * 0.1) + base_cost
+        total_cost = upgrade_cost * count
+        
+        # Verify affordability
+        if source == "bank" and current_balance < total_cost:
+            return await interaction.response.send_message("❌ Insufficient bank funds!", ephemeral=True)
+        elif source == "wallet" and wallet_balance < total_cost:
+            return await interaction.response.send_message("❌ Insufficient wallet funds!", ephemeral=True)
+        elif source == "combined" and (current_balance + wallet_balance) < total_cost:
+            return await interaction.response.send_message("❌ Insufficient combined funds!", ephemeral=True)
+        
+        # Process payment
+        try:
+            if source == "bank":
+                await db.update_bank(user_id, -total_cost, guild_id)
+            elif source == "wallet":
+                await db.update_wallet(user_id, -total_cost, guild_id)
+            elif source == "combined":
+                # Take from bank first, then wallet
+                bank_payment = min(current_balance, total_cost)
+                wallet_payment = total_cost - bank_payment
+                
+                if bank_payment > 0:
+                    await db.update_bank(user_id, -bank_payment, guild_id)
+                if wallet_payment > 0:
+                    await db.update_wallet(user_id, -wallet_payment, guild_id)
+            
+            # Apply upgrades
+            limit_increase = 5000 * count
+            await db.update_bank_limit(user_id, limit_increase, guild_id)
+            
+            # Show success and new options
+            success_embed = discord.Embed(
+                title="✅ Bank Upgrade Successful!",
+                description=(
+                    f"**Upgraded:** {count} time{'s' if count > 1 else ''}\n"
+                    f"**Cost:** {total_cost:,} {self.currency} (from {source})\n"
+                    f"**Limit Increased:** +{limit_increase:,} {self.currency}\n"
+                    f"**New Limit:** {current_limit + limit_increase:,} {self.currency}"
+                ),
+                color=discord.Color.green()
+            )
+            
+            # Show new upgrade options
+            embed, view = await self._create_upgrade_embed_for_interaction(user_id, guild_id, ctx)
+            await interaction.response.edit_message(embeds=[success_embed, embed], view=view)
+            
+        except Exception as e:
+            self.logger.error(f"Bank upgrade error: {e}")
+            await interaction.response.send_message("❌ An error occurred during the upgrade!", ephemeral=True)
+    
+    async def _handle_close(self, interaction, ctx):
+        """Handle close button"""
+        if interaction.user != ctx.author:
+            return await interaction.response.send_message("❌ This isn't your upgrade!", ephemeral=True)
+        await interaction.response.edit_message(content="🏦 Bank upgrade center closed.", embed=None, view=None)
+    
+    async def _create_upgrade_embed_for_interaction(self, user_id, guild_id, ctx):
+        """Create upgrade embed for interaction (helper method)"""
+        # This is the same logic as create_upgrade_embed but adapted for the interaction context
+        current_limit = await db.get_bank_limit(user_id, guild_id)
+        current_balance = await db.get_bank_balance(user_id, guild_id)
+        wallet_balance = await db.get_wallet_balance(user_id, guild_id)
+        
+        base_cost = 1000
+        upgrade_cost = int(current_limit * 0.1) + base_cost
+        new_limit = current_limit + 5000
+        
+        can_afford_combined = (current_balance + wallet_balance) >= upgrade_cost
+        max_combined = (current_balance + wallet_balance) // upgrade_cost if upgrade_cost > 0 else 0
+        
+        embed = discord.Embed(
+            title="🏦 Continue Upgrading?",
+            color=0x2ecc71 if can_afford_combined else 0xe74c3c,
+            description=(
+                f"**Current Status:**\n"
+                f"🏦 Bank Limit: **{current_limit:,}** {self.currency}\n"
+                f"💰 Bank Balance: **{current_balance:,}** {self.currency}\n"
+                f"💵 Wallet Balance: **{wallet_balance:,}** {self.currency}\n\n"
+                f"**Next Upgrade:**\n"
+                f"💲 Cost: **{upgrade_cost:,}** {self.currency}\n"
+                f"📈 New Limit: **{new_limit:,}** {self.currency}\n"
+                f"🔢 Max Possible: **{max_combined}** more upgrades"
+            )
+        )
+        
+        view = discord.ui.View(timeout=180)
+        close_button = discord.ui.Button(label="Done", style=discord.ButtonStyle.red, emoji="✅")
+        close_button.callback = lambda i: self._handle_close(i, ctx)
+        view.add_item(close_button)
+        
+        return embed, view
 
     @commands.command()
     async def voteinfo(self, ctx):
@@ -769,5 +1063,445 @@ class Economy(commands.Cog):
             self.logger.error(f"Vote check error: {e}")
             return await ctx.send("An error occurred while checking your vote status.")
 
+    # Item Usage Commands
+    @commands.command(aliases=['use', 'consume', 'activate'])
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def useitem(self, ctx, *, item_name: str = None):
+        """Use an item, potion, or upgrade from your inventory"""
+        if not item_name:
+            return await self._show_inventory_usage_guide(ctx)
+        
+        try:
+            # Get user inventory
+            inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+            if not inventory:
+                return await ctx.reply("❌ Your inventory is empty! Buy items from `.shop`")
+            
+            # Search for the item
+            target_item = await self._find_item_in_inventory(inventory, item_name)
+            if not target_item:
+                return await self._show_item_not_found(ctx, item_name, inventory)
+            
+            # Determine item type and handle usage
+            item_type = target_item.get('type', 'item')
+            
+            if item_type == 'potion':
+                await self._use_potion(ctx, target_item)
+            elif item_type == 'upgrade':
+                await self._use_upgrade(ctx, target_item)
+            else:
+                await self._use_general_item(ctx, target_item)
+                
+        except Exception as e:
+            self.logger.error(f"Use item error: {e}")
+            await ctx.reply("❌ An error occurred while using the item!")
+    
+    async def _show_inventory_usage_guide(self, ctx):
+        """Show inventory and usage guide"""
+        inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+        
+        embed = discord.Embed(
+            title="📦 Item Usage Guide",
+            description="Use `.use <item_name>` to consume items from your inventory",
+            color=discord.Color.blue()
+        )
+        
+        if inventory:
+            # Group items by type
+            potions = [item for item in inventory if item.get('type') == 'potion']
+            upgrades = [item for item in inventory if item.get('type') == 'upgrade']
+            general = [item for item in inventory if item.get('type') not in ['potion', 'upgrade']]
+            
+            if potions:
+                potion_list = [f"🧪 {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in potions[:5]]
+                embed.add_field(
+                    name="🧪 Potions",
+                    value="\n".join(potion_list) + ("..." if len(potions) > 5 else ""),
+                    inline=True
+                )
+            
+            if upgrades:
+                upgrade_list = [f"⬆️ {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in upgrades[:5]]
+                embed.add_field(
+                    name="⬆️ Upgrades",
+                    value="\n".join(upgrade_list) + ("..." if len(upgrades) > 5 else ""),
+                    inline=True
+                )
+            
+            if general:
+                general_list = [f"📦 {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in general[:5]]
+                embed.add_field(
+                    name="📦 General Items",
+                    value="\n".join(general_list) + ("..." if len(general) > 5 else ""),
+                    inline=True
+                )
+        else:
+            embed.add_field(
+                name="Empty Inventory",
+                value="You don't have any items! Visit `.shop` to buy some.",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="💡 Usage Examples",
+            value=(
+                "`.use luck potion` - Use a luck potion\n"
+                "`.use bank boost` - Apply a bank upgrade\n"
+                "`.use interest token` - Consume an interest token"
+            ),
+            inline=False
+        )
+        
+        await ctx.reply(embed=embed)
+    
+    async def _find_item_in_inventory(self, inventory, item_name):
+        """Find an item in inventory by name or partial match"""
+        item_name = item_name.lower().strip()
+        
+        # Exact name match first
+        for item in inventory:
+            if item.get('name', '').lower() == item_name:
+                return item
+        
+        # Partial name match
+        for item in inventory:
+            if item_name in item.get('name', '').lower():
+                return item
+        
+        # ID match
+        for item in inventory:
+            if item.get('id', '').lower() == item_name:
+                return item
+        
+        return None
+    
+    async def _show_item_not_found(self, ctx, item_name, inventory):
+        """Show item not found message with suggestions"""
+        embed = discord.Embed(
+            title="❌ Item Not Found",
+            description=f"Couldn't find '{item_name}' in your inventory!",
+            color=discord.Color.red()
+        )
+        
+        # Show available items
+        if inventory:
+            available = [f"`{item.get('name', 'Unknown')}`" for item in inventory[:10]]
+            embed.add_field(
+                name="Available Items",
+                value=", ".join(available) + ("..." if len(inventory) > 10 else ""),
+                inline=False
+            )
+        
+        embed.add_field(
+            name="💡 Tip",
+            value="Try using part of the item name or check your spelling!",
+            inline=False
+        )
+        
+        await ctx.reply(embed=embed)
+    
+    async def _use_potion(self, ctx, potion):
+        """Handle potion usage"""
+        from utils.potion_effects import get_potion_effects
+        
+        potion_id = potion.get('id') or potion.get('_id')
+        potion_name = potion.get('name', 'Unknown Potion')
+        
+        # Apply potion effect
+        potion_effects = get_potion_effects(self.bot)
+        success = await potion_effects.apply_potion_effect(ctx.author.id, potion_id)
+        
+        if success:
+            # Remove potion from inventory
+            await db.remove_from_inventory(ctx.author.id, ctx.guild.id, potion_id, 1)
+            
+            # Get potion details for display
+            potion_data = potion_effects.potion_data.get(potion_id, {})
+            duration = potion_data.get('duration', 600) // 60  # Convert to minutes
+            effects = potion_data.get('effects', {})
+            
+            embed = discord.Embed(
+                title="🧪 Potion Consumed!",
+                description=f"You drank **{potion_name}**!",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="⏱️ Duration",
+                value=f"{duration} minutes",
+                inline=True
+            )
+            
+            # Show effects
+            effect_list = []
+            for effect_type, value in effects.items():
+                if 'multiplier' in effect_type:
+                    effect_list.append(f"• {effect_type.replace('_', ' ').title()}: {value}x")
+                elif effect_type == 'cooldown_reduction':
+                    effect_list.append(f"• Cooldown Reduction: {value*100:.0f}%")
+                else:
+                    effect_list.append(f"• {effect_type.replace('_', ' ').title()}: {value}")
+            
+            if effect_list:
+                embed.add_field(
+                    name="✨ Effects",
+                    value="\n".join(effect_list),
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+        else:
+            await ctx.reply(f"❌ Failed to consume {potion_name}! It might not be a valid potion.")
+    
+    async def _use_upgrade(self, ctx, upgrade):
+        """Handle upgrade usage"""
+        upgrade_id = upgrade.get('id') or upgrade.get('_id')
+        upgrade_name = upgrade.get('name', 'Unknown Upgrade')
+        upgrade_type = upgrade.get('upgrade_type', 'unknown')
+        amount = upgrade.get('amount', 0)
+        
+        try:
+            if upgrade_type == 'bank':
+                # Bank limit upgrade
+                await db.update_bank_limit(ctx.author.id, amount, ctx.guild.id)
+                await db.remove_from_inventory(ctx.author.id, ctx.guild.id, upgrade_id, 1)
+                
+                embed = discord.Embed(
+                    title="🏦 Bank Upgrade Applied!",
+                    description=f"Used **{upgrade_name}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="📈 Upgrade",
+                    value=f"Bank limit increased by **{amount:,}** {self.currency}",
+                    inline=False
+                )
+                
+            elif upgrade_type == 'wallet':
+                # Wallet upgrade (if implemented)
+                # For now, just give money
+                await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
+                await db.remove_from_inventory(ctx.author.id, ctx.guild.id, upgrade_id, 1)
+                
+                embed = discord.Embed(
+                    title="💵 Wallet Boost Applied!",
+                    description=f"Used **{upgrade_name}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="💰 Bonus",
+                    value=f"Added **{amount:,}** {self.currency} to your wallet",
+                    inline=False
+                )
+                
+            elif upgrade_type == 'interest':
+                # Interest level upgrade
+                current_level = await db.get_interest_level(ctx.author.id)
+                if current_level >= 60:
+                    return await ctx.reply("❌ You're already at the maximum interest level!")
+                
+                # Apply the upgrade
+                success = await db.upgrade_interest_with_item(ctx.author.id)
+                if success:
+                    await db.remove_from_inventory(ctx.author.id, ctx.guild.id, upgrade_id, 1)
+                    
+                    embed = discord.Embed(
+                        title="📈 Interest Upgrade Applied!",
+                        description=f"Used **{upgrade_name}**",
+                        color=discord.Color.green()
+                    )
+                    embed.add_field(
+                        name="🎯 Result",
+                        value=f"Interest level increased to **{current_level + 1}**!",
+                        inline=False
+                    )
+                else:
+                    return await ctx.reply("❌ Failed to apply interest upgrade!")
+                    
+            else:
+                # Generic upgrade - just give the amount as money
+                await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
+                await db.remove_from_inventory(ctx.author.id, ctx.guild.id, upgrade_id, 1)
+                
+                embed = discord.Embed(
+                    title="⬆️ Upgrade Applied!",
+                    description=f"Used **{upgrade_name}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="💰 Benefit",
+                    value=f"Received **{amount:,}** {self.currency}",
+                    inline=False
+                )
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Upgrade usage error: {e}")
+            await ctx.reply(f"❌ Failed to use {upgrade_name}!")
+    
+    async def _use_general_item(self, ctx, item):
+        """Handle general item usage"""
+        item_id = item.get('id') or item.get('_id')
+        item_name = item.get('name', 'Unknown Item')
+        item_value = item.get('value', 0)
+        
+        # For general items, convert to money or provide description
+        description = item.get('description', '')
+        
+        if 'sell' in description.lower() or item_value > 0:
+            # Sellable item
+            await db.update_wallet(ctx.author.id, item_value, ctx.guild.id)
+            await db.remove_from_inventory(ctx.author.id, ctx.guild.id, item_id, 1)
+            
+            embed = discord.Embed(
+                title="💰 Item Sold!",
+                description=f"Sold **{item_name}** for **{item_value:,}** {self.currency}",
+                color=discord.Color.green()
+            )
+        else:
+            # Just remove the item (consumable)
+            await db.remove_from_inventory(ctx.author.id, ctx.guild.id, item_id, 1)
+            
+            embed = discord.Embed(
+                title="📦 Item Used!",
+                description=f"Used **{item_name}**",
+                color=discord.Color.green()
+            )
+            
+            if description:
+                embed.add_field(
+                    name="📝 Effect",
+                    value=description,
+                    inline=False
+                )
+        
+        await ctx.reply(embed=embed)
+    
+    @commands.command(aliases=['pot', 'potions', 'effects'])
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def activeeffects(self, ctx):
+        """View your active potion effects"""
+        from utils.potion_effects import get_potion_effects
+        
+        try:
+            potion_effects = get_potion_effects(self.bot)
+            effects_display = await potion_effects.get_active_effects_display(ctx.author.id)
+            
+            embed = discord.Embed(
+                title="✨ Active Effects",
+                description=effects_display,
+                color=discord.Color.purple()
+            )
+            
+            # Get user's available potions
+            inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+            potions = [item for item in inventory if item.get('type') == 'potion']
+            
+            if potions:
+                available_potions = [f"🧪 {p.get('name', 'Unknown')} (x{p.get('quantity', 1)})" for p in potions[:5]]
+                embed.add_field(
+                    name="🎒 Available Potions",
+                    value="\n".join(available_potions) + ("..." if len(potions) > 5 else ""),
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="💡 Usage",
+                value="Use `.use <potion_name>` to consume a potion",
+                inline=False
+            )
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Active effects error: {e}")
+            await ctx.reply("❌ An error occurred while checking your effects!")
+    
+    @commands.command(aliases=['inv', 'items', 'bag'])
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def inventory(self, ctx):
+        """View your complete inventory with usage options"""
+        try:
+            inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
+            
+            if not inventory:
+                embed = discord.Embed(
+                    title="📦 Inventory",
+                    description="Your inventory is empty! Visit `.shop` to buy items.",
+                    color=discord.Color.blue()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Group items by type
+            potions = [item for item in inventory if item.get('type') == 'potion']
+            upgrades = [item for item in inventory if item.get('type') == 'upgrade']
+            general = [item for item in inventory if item.get('type') not in ['potion', 'upgrade']]
+            
+            # Calculate total value
+            total_value = sum(item.get('value', 0) * item.get('quantity', 1) for item in inventory)
+            
+            embed = discord.Embed(
+                title="📦 Your Inventory",
+                description=f"**Total Items:** {len(inventory)} | **Total Value:** {total_value:,} {self.currency}",
+                color=discord.Color.blue()
+            )
+            
+            if potions:
+                potion_text = []
+                for potion in potions[:8]:
+                    qty = potion.get('quantity', 1)
+                    value = potion.get('value', 0)
+                    potion_text.append(f"🧪 **{potion.get('name', 'Unknown')}** (x{qty}) - {value:,} {self.currency}")
+                
+                embed.add_field(
+                    name=f"🧪 Potions ({len(potions)})",
+                    value="\n".join(potion_text) + ("..." if len(potions) > 8 else ""),
+                    inline=False
+                )
+            
+            if upgrades:
+                upgrade_text = []
+                for upgrade in upgrades[:8]:
+                    qty = upgrade.get('quantity', 1)
+                    value = upgrade.get('value', 0)
+                    upgrade_text.append(f"⬆️ **{upgrade.get('name', 'Unknown')}** (x{qty}) - {value:,} {self.currency}")
+                
+                embed.add_field(
+                    name=f"⬆️ Upgrades ({len(upgrades)})",
+                    value="\n".join(upgrade_text) + ("..." if len(upgrades) > 8 else ""),
+                    inline=False
+                )
+            
+            if general:
+                general_text = []
+                for item in general[:8]:
+                    qty = item.get('quantity', 1)
+                    value = item.get('value', 0)
+                    general_text.append(f"📦 **{item.get('name', 'Unknown')}** (x{qty}) - {value:,} {self.currency}")
+                
+                embed.add_field(
+                    name=f"📦 General Items ({len(general)})",
+                    value="\n".join(general_text) + ("..." if len(general) > 8 else ""),
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="💡 Quick Actions",
+                value=(
+                    "`.use <item_name>` - Use an item\n"
+                    "`.activeeffects` - View active potion effects\n"
+                    "`.shop` - Buy more items"
+                ),
+                inline=False
+            )
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Inventory error: {e}")
+            await ctx.reply("❌ An error occurred while checking your inventory!")
+
 async def setup(bot):
+    """Setup function for loading the Economy cog"""
     await bot.add_cog(Economy(bot))

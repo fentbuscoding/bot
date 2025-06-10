@@ -274,6 +274,17 @@ class AsyncDatabase:
             # Debug logging
             print(f"set_active_bait called: user={user_id}, bait_id='{bait_id}'")
             
+            # Handle clearing active bait (bait_id is None)
+            if bait_id is None:
+                result = await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$unset": {"active_fishing.bait": ""}},
+                    upsert=True
+                )
+                success = result.modified_count > 0 or result.upserted_id is not None
+                print(f"Cleared active bait for user {user_id}: {'SUCCESS' if success else 'FAILED'}")
+                return success
+            
             # Verify user has this bait in inventory
             inventory = await self.get_user_inventory_by_type(user_id, "bait")
             print(f"User {user_id} bait inventory: {inventory}")
@@ -286,6 +297,11 @@ class AsyncDatabase:
                 print(f"User {user_id} has 0 of bait {bait_id}")
                 return False
             
+            # Check current active bait before update
+            current_user = await self.db.users.find_one({"_id": str(user_id)})
+            current_active = current_user.get("active_fishing", {}).get("bait") if current_user else None
+            print(f"Current active bait for user {user_id}: {current_active}")
+            
             # Update active fishing gear
             result = await self.db.users.update_one(
                 {"_id": str(user_id)},
@@ -293,14 +309,25 @@ class AsyncDatabase:
                 upsert=True
             )
             
-            success = result.modified_count > 0 or result.upserted_id is not None
+            print(f"Database update result: modified_count={result.modified_count}, upserted_id={result.upserted_id}")
+            
+            # Consider it successful if the document was modified, upserted, OR if the bait is already active
+            success = (result.modified_count > 0 or 
+                      result.upserted_id is not None or 
+                      current_active == bait_id)
             print(f"Set active bait {bait_id} for user {user_id}: {'SUCCESS' if success else 'FAILED'}")
             
-            # Verify the update worked
-            if success:
-                updated_user = await self.db.users.find_one({"_id": str(user_id)})
-                current_active = updated_user.get("active_fishing", {}).get("bait")
-                print(f"Verification - User {user_id} active bait is now: {current_active}")
+            # Verify the update worked - always check final state
+            updated_user = await self.db.users.find_one({"_id": str(user_id)})
+            final_active = updated_user.get("active_fishing", {}).get("bait") if updated_user else None
+            print(f"Verification - User {user_id} active bait is now: {final_active}")
+            
+            # Consider successful if the final state matches what we wanted
+            if final_active == bait_id:
+                success = True
+                print(f"Final verification: SUCCESS - bait is correctly set to {bait_id}")
+            else:
+                print(f"Final verification: FAILED - expected {bait_id}, got {final_active}")
             
             return success
             
@@ -1151,6 +1178,66 @@ class AsyncDatabase:
             await self.update_wallet(user_id, cost)
             self.logger.error(f"Interest upgrade error: {e}")
             return False, f"Upgrade failed: {str(e)}"
+
+    async def upgrade_interest_with_item(self, user_id: int) -> bool:
+        """Upgrade user's interest level using an item (no cost)"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            current_level = await self.get_interest_level(user_id)
+            
+            # Check max level
+            if current_level >= 60:
+                return False
+            
+            # Update interest level directly (no cost since item was already consumed)
+            result = await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$inc": {"interest_level": 1}},
+                upsert=True
+            )
+            
+            return result.modified_count > 0 or result.upserted_id is not None
+                
+        except Exception as e:
+            self.logger.error(f"Interest upgrade with item error: {e}")
+            return False
+
+    async def add_to_inventory(self, user_id: int, guild_id: int, item: dict, quantity: int = 1) -> bool:
+        """Add an item to user's inventory"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            # Create a clean item without unwanted fields
+            clean_item = {
+                "id": item.get("id", item.get("_id", str(ObjectId()))),
+                "name": item.get("name", "Unknown Item"),
+                "description": item.get("description", ""),
+                "price": item.get("price", 0),
+                "value": item.get("value", item.get("price", 0)),
+                "type": item.get("type", "item"),
+                "quantity": quantity
+            }
+            
+            # Add any additional fields that might be relevant
+            if "upgrade_type" in item:
+                clean_item["upgrade_type"] = item["upgrade_type"]
+            if "amount" in item:
+                clean_item["amount"] = item["amount"]
+            
+            result = await self.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$push": {"inventory": clean_item}},
+                upsert=True
+            )
+            
+            return result.modified_count > 0 or result.upserted_id is not None
+            
+        except Exception as e:
+            self.logger.error(f"Error adding item to inventory: {e}")
+            return False
 
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""

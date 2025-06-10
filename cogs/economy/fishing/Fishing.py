@@ -25,115 +25,9 @@ class Fishing(commands.Cog):
         # Load bait data from both sources
         self.bait_data = self._load_all_bait_data()
         
-        # Rod and bait aliases for easier user input
-        self.rod_aliases = {
-            # Basic rods
-            "basic": "basic_rod",
-            "bamboo": "basic_rod",
-            "starter": "basic_rod",
-            
-            # Advanced rods
-            "advanced": "advanced_rod",
-            "fiber": "advanced_rod",
-            "fiberglass": "advanced_rod",
-            
-            # Pro rods
-            "pro": "pro_rod",
-            "carbon": "pro_rod",
-            "professional": "pro_rod",
-            
-            # Master rods
-            "master": "master_rod",
-            "titanium": "master_rod",
-            
-            # Legendary rods
-            "legendary": "legendary_rod",
-            "legend": "legendary_rod",
-            "leg": "legendary_rod",
-            
-            # Mythical rods
-            "mythical": "mythical_rod",
-            "myth": "mythical_rod",
-            "godly": "mythical_rod",
-            
-            # Cosmic rods
-            "cosmic": "cosmic_rod",
-            "star": "cosmic_rod",
-            "space": "cosmic_rod",
-            
-            # High-end rods (from JSON)
-            "quantum": "quantum_rod",
-            "q": "quantum_rod",
-            "void": "void_rod",
-            "shadow": "void_rod",
-            "celestial": "celestial_rod",
-            "heaven": "celestial_rod",
-            "divine": "divine_rod",
-            "god": "divine_rod",
-            "reality": "reality_rod",
-            "real": "reality_rod",
-            "multiverse": "multiverse_rod",
-            "multi": "multiverse_rod",
-            "infinite": "infinite_rod",
-            "inf": "infinite_rod",
-            "transcendent": "transcendent_rod",
-            "trans": "transcendent_rod"
-        }
-        
-        self.bait_aliases = {
-            # Basic baits
-            "beginner": "beginner_bait",
-            "basic": "beginner_bait",
-            "worm": "beginner_bait",
-            "worms": "beginner_bait",
-            
-            # Pro baits
-            "pro": "pro_bait",
-            "professional": "pro_bait",
-            
-            # Premium baits
-            "premium": "premium_bait",
-            "prem": "premium_bait",
-            
-            # Legendary baits
-            "legendary": "legendary_bait",
-            "legend": "legendary_bait",
-            "leg": "legendary_bait",
-            
-            # Mythical baits
-            "mythical": "mythical_bait",
-            "myth": "mythical_bait",
-            
-            # Divine baits
-            "divine": "divine_bait",
-            "god": "divine_bait",
-            "holy": "divine_bait",
-            
-            # Cosmic baits
-            "cosmic": "cosmic_bait",
-            "star": "cosmic_bait",
-            "space": "cosmic_bait",
-            
-            # Quantum baits
-            "quantum": "quantum_bait",
-            "q": "quantum_bait",
-            
-            # Void baits
-            "void": "void_bait",
-            "shadow": "void_bait",
-            "dark": "void_bait",
-            
-            # Crystalline baits
-            "crystalline": "crystalline_bait",
-            "crystal": "crystalline_bait",
-            "gem": "crystalline_bait",
-            
-            # Celestial baits
-            "celestial": "celestial_bait",
-            "heaven": "celestial_bait",
-            "angel": "celestial_bait"
-        }
-        
+        # Load aliases dynamically from JSON files
+        self.rod_aliases = self._load_rod_aliases()
+        self.bait_aliases = self._load_bait_aliases()
         # REBALANCED FISH DATABASE - More reasonable values and better progression
         self.fish_database = {
             "junk": [
@@ -221,31 +115,31 @@ class Fishing(commands.Cog):
                 {"name": "Goblin Shark", "min_weight": 150.0, "max_weight": 500.0, "base_value": 32000, "escape_chance": 0.75}
             ],
             "mythical": [
-                {"name": "Kraken", "min_weight": 50000.0, "max_weight": 200000.0, "base_value": 850000, "escape_chance": 0.85},
-                {"name": "Leviathan", "min_weight": 80000.0, "max_weight": 300000.0, "base_value": 1200000, "escape_chance": 0.88},
-                {"name": "Ancient Megalodon", "min_weight": 30000.0, "max_weight": 150000.0, "base_value": 950000, "escape_chance": 0.85},
-                {"name": "Sea Serpent", "min_weight": 25000.0, "max_weight": 120000.0, "base_value": 780000, "escape_chance": 0.87},
-                {"name": "Jörmungandr", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 1500000, "escape_chance": 0.90}
+                {"name": "Kraken", "min_weight": 50000.0, "max_weight": 200000.0, "base_value": 8500, "escape_chance": 0.85},
+                {"name": "Leviathan", "min_weight": 80000.0, "max_weight": 300000.0, "base_value": 12000, "escape_chance": 0.88},
+                {"name": "Ancient Megalodon", "min_weight": 30000.0, "max_weight": 150000.0, "base_value": 9500, "escape_chance": 0.85},
+                {"name": "Sea Serpent", "min_weight": 25000.0, "max_weight": 120000.0, "base_value": 7800, "escape_chance": 0.87},
+                {"name": "Jörmungandr", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 15000, "escape_chance": 0.90}
             ],
             "ancient": [
-                {"name": "Dunkleosteus", "min_weight": 60000.0, "max_weight": 200000.0, "base_value": 3500000, "escape_chance": 0.88},
-                {"name": "Leedsichthys", "min_weight": 120000.0, "max_weight": 400000.0, "base_value": 5500000, "escape_chance": 0.90},
-                {"name": "Helicoprion", "min_weight": 40000.0, "max_weight": 150000.0, "base_value": 4200000, "escape_chance": 0.89},
-                {"name": "Xiphactinus", "min_weight": 25000.0, "max_weight": 100000.0, "base_value": 3200000, "escape_chance": 0.88}
+                {"name": "Dunkleosteus", "min_weight": 60000.0, "max_weight": 200000.0, "base_value": 35000, "escape_chance": 0.88},
+                {"name": "Leedsichthys", "min_weight": 120000.0, "max_weight": 400000.0, "base_value": 55000, "escape_chance": 0.90},
+                {"name": "Helicoprion", "min_weight": 40000.0, "max_weight": 150000.0, "base_value": 42000, "escape_chance": 0.89},
+                {"name": "Xiphactinus", "min_weight": 25000.0, "max_weight": 100000.0, "base_value": 32000, "escape_chance": 0.88}
             ],
             "divine": [
-                {"name": "Poseidon's Trident Fish", "min_weight": 200000.0, "max_weight": 800000.0, "base_value": 18500000, "escape_chance": 0.92},
-                {"name": "Neptune's Crown Jewel", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 28000000, "escape_chance": 0.95},
-                {"name": "Oceanic Phoenix", "min_weight": 150000.0, "max_weight": 600000.0, "base_value": 22000000, "escape_chance": 0.93}
+                {"name": "Poseidon's Trident Fish", "min_weight": 200000.0, "max_weight": 800000.0, "base_value": 185000, "escape_chance": 0.92},
+                {"name": "Neptune's Crown Jewel", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 280000, "escape_chance": 0.95},
+                {"name": "Oceanic Phoenix", "min_weight": 150000.0, "max_weight": 600000.0, "base_value": 220000, "escape_chance": 0.93}
             ],
             "cosmic": [
-                {"name": "Stellar Whale", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 85000000, "escape_chance": 0.94},
-                {"name": "Void Leviathan", "min_weight": 2000000.0, "max_weight": 10000000.0, "base_value": 125000000, "escape_chance": 0.96},
-                {"name": "Cosmic Kraken", "min_weight": 3000000.0, "max_weight": 15000000.0, "base_value": 180000000, "escape_chance": 0.97}
+                {"name": "Stellar Whale", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 850000, "escape_chance": 0.94},
+                {"name": "Void Leviathan", "min_weight": 2000000.0, "max_weight": 10000000.0, "base_value": 1250000, "escape_chance": 0.96},
+                {"name": "Cosmic Kraken", "min_weight": 3000000.0, "max_weight": 15000000.0, "base_value": 1800000, "escape_chance": 0.97}
             ],
             "transcendent": [
-                {"name": "The First Fish", "min_weight": 10000000.0, "max_weight": 50000000.0, "base_value": 850000000, "escape_chance": 0.96},
-                {"name": "Alpha Omega", "min_weight": 25000000.0, "max_weight": 100000000.0, "base_value": 1500000000, "escape_chance": 0.98}
+                {"name": "The First Fish", "min_weight": 10000000.0, "max_weight": 50000000.0, "base_value": 8500000, "escape_chance": 0.96},
+                {"name": "Alpha Omega", "min_weight": 25000000.0, "max_weight": 100000000.0, "base_value": 15000000, "escape_chance": 0.98}
             ],
             "mutated": [
                 {"name": "Two-Headed Bass", "min_weight": 2.0, "max_weight": 8.0, "base_value": 1800, "escape_chance": 0.30},
@@ -257,20 +151,30 @@ class Fishing(commands.Cog):
                 {"name": "Neon Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 12000, "escape_chance": 0.65}
             ],
             "crystalline": [
-                {"name": "Diamond Angelfish", "min_weight": 5.0, "max_weight": 15.0, "base_value": 28000, "escape_chance": 0.70},
-                {"name": "Ruby Goldfish", "min_weight": 2.0, "max_weight": 8.0, "base_value": 22000, "escape_chance": 0.65},
-                {"name": "Sapphire Tuna", "min_weight": 80.0, "max_weight": 300.0, "base_value": 65000, "escape_chance": 0.75},
-                {"name": "Emerald Shark", "min_weight": 200.0, "max_weight": 800.0, "base_value": 125000, "escape_chance": 0.80}
+                {"name": "Diamond Angelfish", "min_weight": 5.0, "max_weight": 15.0, "base_value": 280, "escape_chance": 0.70},
+                {"name": "Ruby Goldfish", "min_weight": 2.0, "max_weight": 8.0, "base_value": 220, "escape_chance": 0.65},
+                {"name": "Sapphire Tuna", "min_weight": 80.0, "max_weight": 300.0, "base_value": 650, "escape_chance": 0.75},
+                {"name": "Emerald Shark", "min_weight": 200.0, "max_weight": 800.0, "base_value": 1250, "escape_chance": 0.80}
             ],
             "void": [
-                {"name": "Shadow Leviathan", "min_weight": 5000.0, "max_weight": 25000.0, "base_value": 850000, "escape_chance": 0.82},
-                {"name": "Nightmare Squid", "min_weight": 8000.0, "max_weight": 40000.0, "base_value": 1200000, "escape_chance": 0.85},
-                {"name": "Abyss Walker", "min_weight": 12000.0, "max_weight": 60000.0, "base_value": 1800000, "escape_chance": 0.87}
+                {"name": "Shadow Leviathan", "min_weight": 5000.0, "max_weight": 25000.0, "base_value": 8500, "escape_chance": 0.82},
+                {"name": "Nightmare Squid", "min_weight": 8000.0, "max_weight": 40000.0, "base_value": 12000, "escape_chance": 0.85},
+                {"name": "Abyss Walker", "min_weight": 12000.0, "max_weight": 60000.0, "base_value": 18000, "escape_chance": 0.87}
             ],
             "celestial": [
-                {"name": "Starlight Manta", "min_weight": 20000.0, "max_weight": 100000.0, "base_value": 4500000, "escape_chance": 0.90},
-                {"name": "Moonbeam Whale", "min_weight": 50000.0, "max_weight": 250000.0, "base_value": 8500000, "escape_chance": 0.92},
-                {"name": "Solar Kraken", "min_weight": 80000.0, "max_weight": 400000.0, "base_value": 15000000, "escape_chance": 0.94}
+                {"name": "Starlight Manta", "min_weight": 20000.0, "max_weight": 100000.0, "base_value": 45000, "escape_chance": 0.90},
+                {"name": "Moonbeam Whale", "min_weight": 50000.0, "max_weight": 250000.0, "base_value": 85000, "escape_chance": 0.92},
+                {"name": "Solar Kraken", "min_weight": 80000.0, "max_weight": 400000.0, "base_value": 150000, "escape_chance": 0.94}
+            ],
+            "subatomic": [
+                {"name": "Quantum Plankton", "min_weight": 0.2, "max_weight": 0.2, "base_value": 7000, "escape_chance": 0.95},
+                {"name": "Nano-Bacteriophage", "min_weight": 0.0001, "max_weight": 0.001, "base_value": 5000, "escape_chance": 0.98},
+                {"name": "Particle Fish", "min_weight": 0.05, "max_weight": 0.15, "base_value": 4500, "escape_chance": 0.90},
+                {"name": "Microscopic Leviathan", "min_weight": 0.1, "max_weight": 0.3, "base_value": 8500, "escape_chance": 0.92},
+                {"name": "Atomic Kraken", "min_weight": 0.01, "max_weight": 0.05, "base_value": 12000, "escape_chance": 0.96},
+                {"name": "Subatomic Void Fish", "min_weight": 0.001, "max_weight": 0.01, "base_value": 20000, "escape_chance": 0.99},
+                {"name": "Proton Swimmer", "min_weight": 0.0005, "max_weight": 0.005, "base_value": 3500, "escape_chance": 0.94},
+                {"name": "Neutron Star Fish", "min_weight": 0.02, "max_weight": 0.08, "base_value": 18000, "escape_chance": 0.97}
             ]
         }
     async def cog_check(self, ctx):
@@ -314,6 +218,15 @@ class Fishing(commands.Cog):
                 "min_fish_weight": 0.1,
                 "max_fish_weight": 100.0  # Much higher weight limit
             },
+            "expert_rod": {
+                "name": "Expert Rod", 
+                "multiplier": 1.8, 
+                "description": "Precision-engineered rod with enhanced sensitivity",
+                "durability": 0.975,  # 2.5% break chance
+                "power": 3,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 200.0
+            },
             "master_rod": {
                 "name": "Master Rod", 
                 "multiplier": 3.0, 
@@ -323,6 +236,24 @@ class Fishing(commands.Cog):
                 "min_fish_weight": 0.1,
                 "max_fish_weight": 500.0  # Even higher weight limit
             },
+            "titanium_rod": {
+                "name": "Titanium Rod", 
+                "multiplier": 2.3, 
+                "description": "Aerospace-grade titanium rod",
+                "durability": 0.988,  # 1.2% break chance
+                "power": 4,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 800.0
+            },
+            "enchanted_rod": {
+                "name": "Enchanted Rod", 
+                "multiplier": 2.5, 
+                "description": "Mystical rod blessed by lunar magic",
+                "durability": 0.990,  # 1.0% break chance
+                "power": 4,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 1200.0
+            },
             "legendary_rod": {
                 "name": "Legendary Rod", 
                 "multiplier": 4.0, 
@@ -331,6 +262,42 @@ class Fishing(commands.Cog):
                 "power": 5,
                 "min_fish_weight": 0.1,
                 "max_fish_weight": 2000.0  # Can handle large legendary fish
+            },
+            "dragon_rod": {
+                "name": "Dragon Rod", 
+                "multiplier": 2.8, 
+                "description": "Forged from ancient dragon scales",
+                "durability": 0.9925,  # 0.75% break chance
+                "power": 5,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 3000.0
+            },
+            "phoenix_rod": {
+                "name": "Phoenix Rod", 
+                "multiplier": 3.2, 
+                "description": "Crafted with phoenix feathers",
+                "durability": 0.994,  # 0.6% break chance
+                "power": 5,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 4000.0
+            },
+            "crystal_rod": {
+                "name": "Crystal Rod", 
+                "multiplier": 3.5, 
+                "description": "Made from resonating crystals",
+                "durability": 0.995,  # 0.5% break chance
+                "power": 5,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 5000.0
+            },
+            "leviathan_rod": {
+                "name": "Leviathan Rod", 
+                "multiplier": 3.8, 
+                "description": "Carved from ancient sea beast bones",
+                "durability": 0.996,  # 0.4% break chance
+                "power": 6,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 7500.0
             },
             "mythical_rod": {
                 "name": "Mythical Rod", 
@@ -349,6 +316,60 @@ class Fishing(commands.Cog):
                 "power": 8,
                 "min_fish_weight": 0.1,
                 "max_fish_weight": 100000000.0  # Can handle any fish
+            },
+            "nebula_rod": {
+                "name": "Nebula Rod", 
+                "multiplier": 4.5, 
+                "description": "Woven from the fabric of space itself",
+                "durability": 0.9985,  # 0.15% break chance
+                "power": 7,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 25000000.0
+            },
+            "quantum_rod": {
+                "name": "Quantum Rod", 
+                "multiplier": 5.0, 
+                "description": "Exists in multiple dimensions simultaneously",
+                "durability": 0.9988,  # 0.12% break chance
+                "power": 7,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 50000000.0
+            },
+            "astral_rod": {
+                "name": "Astral Rod", 
+                "multiplier": 5.5, 
+                "description": "Transcends physical limitations",
+                "durability": 0.9990,  # 0.10% break chance
+                "power": 8,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 75000000.0
+            },
+            "void_rod": {
+                "name": "Void Rod", 
+                "multiplier": 6.0, 
+                "description": "Fishes in the spaces between reality",
+                "durability": 0.9993,  # 0.07% break chance
+                "power": 8,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 100000000.0
+            },
+            "infinity_rod": {
+                "name": "Infinity Rod", 
+                "multiplier": 7.5, 
+                "description": "Contains infinite potential within finite form",
+                "durability": 0.9995,  # 0.05% break chance
+                "power": 9,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 250000000.0
+            },
+            "genesis_rod": {
+                "name": "Genesis Rod", 
+                "multiplier": 10.0, 
+                "description": "The first and final rod, existing at beginning and end",
+                "durability": 0.9998,  # 0.02% break chance
+                "power": 10,
+                "min_fish_weight": 0.1,
+                "max_fish_weight": 1000000000.0
             }
         }
         
@@ -572,6 +593,14 @@ class Fishing(commands.Cog):
                         # If no catch_rates, use default based on bait name/id
                         if "quantum" in bait_id.lower():
                             catch_rates = combined_data["quantum_bait"]["catch_rates"]
+                        elif "dimensional" in bait_id.lower():
+                            catch_rates = combined_data["quantum_bait"]["catch_rates"]  # Use quantum as fallback for high-tier
+                        elif "reality" in bait_id.lower():
+                            catch_rates = combined_data["quantum_bait"]["catch_rates"]
+                        elif "primordial" in bait_id.lower():
+                            catch_rates = combined_data["celestial_bait"]["catch_rates"]
+                        elif "temporal" in bait_id.lower():
+                            catch_rates = combined_data["crystalline_bait"]["catch_rates"]
                         elif "void" in bait_id.lower():
                             catch_rates = combined_data["void_bait"]["catch_rates"]
                         elif "celestial" in bait_id.lower():
@@ -579,6 +608,8 @@ class Fishing(commands.Cog):
                         elif "crystalline" in bait_id.lower():
                             catch_rates = combined_data["crystalline_bait"]["catch_rates"]
                         elif "cosmic" in bait_id.lower():
+                            catch_rates = combined_data["cosmic_bait"]["catch_rates"]
+                        elif "mystic" in bait_id.lower():
                             catch_rates = combined_data["cosmic_bait"]["catch_rates"]
                         elif "divine" in bait_id.lower():
                             catch_rates = combined_data["divine_bait"]["catch_rates"]
@@ -609,6 +640,62 @@ class Fishing(commands.Cog):
             
         self.logger.info(f"Total bait types loaded: {len(combined_data)}")
         return combined_data
+
+    def _load_rod_aliases(self):
+        """Load rod aliases dynamically from JSON file"""
+        try:
+            import json
+            import os
+            
+            aliases = {}
+            json_path = "data/shop/rods.json"
+            
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    rods_data = json.load(f)
+                
+                # Build aliases dictionary from JSON data
+                for rod_id, rod_data in rods_data.items():
+                    if "aliases" in rod_data:
+                        for alias in rod_data["aliases"]:
+                            aliases[alias.lower()] = rod_id
+                
+                print(f"Loaded {len(aliases)} rod aliases from JSON")
+            else:
+                print(f"Rod JSON file not found at {json_path}")
+                
+            return aliases
+        except Exception as e:
+            print(f"Could not load rod aliases from JSON: {e}")
+            return {}
+
+    def _load_bait_aliases(self):
+        """Load bait aliases dynamically from JSON file"""
+        try:
+            import json
+            import os
+            
+            aliases = {}
+            json_path = "data/shop/bait.json"
+            
+            if os.path.exists(json_path):
+                with open(json_path, "r") as f:
+                    baits_data = json.load(f)
+                
+                # Build aliases dictionary from JSON data
+                for bait_id, bait_data in baits_data.items():
+                    if "aliases" in bait_data:
+                        for alias in bait_data["aliases"]:
+                            aliases[alias.lower()] = bait_id
+                
+                print(f"Loaded {len(aliases)} bait aliases from JSON")
+            else:
+                print(f"Bait JSON file not found at {json_path}")
+                
+            return aliases
+        except Exception as e:
+            print(f"Could not load bait aliases from JSON: {e}")
+            return {}
 
     def _resolve_rod_alias(self, rod_input: str) -> str:
         """Resolve rod alias to full rod ID"""
@@ -928,6 +1015,7 @@ class Fishing(commands.Cog):
             # Get active gear
             active_gear = await db.get_active_fishing_gear(ctx.author.id)
             active_rod_id = active_gear.get("rod") if active_gear else None
+            active_bait_id = active_gear.get("bait") if active_gear else None
             
             if active_rod_id:
                 rod = next((r for r in rods if r.get("_id") == active_rod_id), None)
@@ -939,9 +1027,29 @@ class Fishing(commands.Cog):
             if not rod:
                 return await ctx.reply("❌ Your active rod is no longer available!")
             
-            # Use first available bait
-            current_bait = bait[0]
-            bait_id = current_bait.get("_id")
+            # Use active bait or first available bait
+            current_bait = None
+            bait_id = None
+            
+            # First try to use the active bait if it exists and user has it
+            if active_bait_id:
+                current_bait = next((b for b in bait if b.get("_id") == active_bait_id), None)
+                if current_bait and current_bait.get("amount", 0) > 0:
+                    bait_id = active_bait_id
+                else:
+                    # Active bait not available, clear it from active gear
+                    await db.set_active_bait(ctx.author.id, None)
+                    current_bait = None
+            
+            # If no active bait or active bait unavailable, use first available
+            if not current_bait:
+                current_bait = bait[0]
+                bait_id = current_bait.get("_id")
+                # Set this as the new active bait
+                await db.set_active_bait(ctx.author.id, bait_id)
+            
+            # Debug logging to track what bait is being used
+            self.logger.info(f"User {ctx.author.id} fishing with bait: {current_bait.get('name')} (ID: {bait_id})")
             
             # Remove bait
             if not await self.remove_bait(ctx.author.id, bait_id):
@@ -1048,7 +1156,7 @@ class Fishing(commands.Cog):
                 )
                 escape_embed.add_field(
                     name="💰 Potential Value",
-                    value=f"You could have earned **{fish_template['base_value']}** {self.currency}",
+                    value=f"You could have earned **{fish_template['base_value']:,}** {self.currency}",
                     inline=True
                 )
                 escape_embed.add_field(
@@ -1094,7 +1202,9 @@ class Fishing(commands.Cog):
                     "cosmic": discord.Color.red(),
                     "transcendent": discord.Color.red(),
                     "void": discord.Color.red(),
-                    "celestial": discord.Color.red()
+                    "celestial": discord.Color.red(),
+                    "subatomic": discord.Color.magenta(),
+                    "dev": discord.Color.gold()
                 }
                 
                 success_embed = discord.Embed(
@@ -1105,7 +1215,7 @@ class Fishing(commands.Cog):
                 
                 success_embed.add_field(
                     name="💰 Value",
-                    value=f"**{final_value}** {self.currency}",
+                    value=f"**{final_value:,}** {self.currency}",
                     inline=True
                 )
                 
@@ -1122,7 +1232,9 @@ class Fishing(commands.Cog):
                 )
                 
                 # Add special message for rare fish
-                if caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent"]:
+                if caught_rarity == "subatomic":
+                    success_embed.set_footer(text="⚛️ LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
+                elif caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent", "void", "celestial"]:
                     success_embed.set_footer(text="🌟 Incredible catch! This is extremely rare!")
                 elif caught_rarity in ["epic", "rare"]:
                     success_embed.set_footer(text="✨ Nice catch! This is quite rare!")
@@ -1157,7 +1269,7 @@ class Fishing(commands.Cog):
                     await db.add_currency(ctx.author.id, fish["value"])
                     embed = discord.Embed(
                         title="🐟 Fish Sold!",
-                        description=f"Sold **{fish['name']}** for **{fish['value']}** {self.currency}",
+                        description=f"Sold **{fish['name']}** for **{fish['value']:,}** {self.currency}",
                         color=discord.Color.green()
                     )
                     await ctx.reply(embed=embed)
@@ -1172,7 +1284,7 @@ class Fishing(commands.Cog):
                     await db.add_currency(ctx.author.id, total_value)
                     embed = discord.Embed(
                         title="🐟 All Fish Sold!",
-                        description=f"Sold **{fish_count}** fish for **{total_value}** {self.currency}",
+                        description=f"Sold **{fish_count:,}** fish for **{total_value:,}** {self.currency}",
                         color=discord.Color.green()
                     )
                     await ctx.reply(embed=embed)
@@ -1200,7 +1312,7 @@ class Fishing(commands.Cog):
                 
                 embed = discord.Embed(
                     title="🎣 Fishing Overview",
-                    description=f"**Total Fish:** {total_fish} | **Total Value:** {total_value:,} {self.currency}",
+                    description=f"**Total Fish:** {total_fish:,} | **Total Value:** {total_value:,} {self.currency}",
                     color=discord.Color.blue()
                 )
                 
@@ -1317,7 +1429,7 @@ class Fishing(commands.Cog):
             total_value = sum(fish.get("value", 0) for fish in user_fish)
             embed = discord.Embed(
                 title="🐟 Your Fish Collection",
-                description=f"**Total Fish:** {len(user_fish)} | **Total Value:** {total_value:,} {self.currency}",
+                description=f"**Total Fish:** {len(user_fish):,} | **Total Value:** {total_value:,} {self.currency}",
                 color=discord.Color.blue()
             )
             
@@ -1347,7 +1459,7 @@ class Fishing(commands.Cog):
             self.logger.error(f"Fish inventory error: {e}")
             await ctx.reply("❌ An error occurred while viewing your fish inventory!")
 
-    @commands.command(name="globalfish", aliases=["gf", "fishleaderboard"])
+    @commands.command(name="topfish", aliases=["gf", "globalfish", "flb", "fishleaderboard"])
     async def global_fish_leaderboard(self, ctx, page: int = 1):
         """Global fish leaderboard showing all catches"""
         try:
@@ -1389,7 +1501,7 @@ class Fishing(commands.Cog):
                         caught_time = "Unknown"
                 
                 fish_info = f"**#{i} • Caught by:** {username}\n"
-                fish_info += f"**Value:** {fish.get('value', 0)} {self.currency}\n"
+                fish_info += f"**Value:** {fish.get('value', 0):,} {self.currency}\n"
                 fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
                 fish_info += f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
                 fish_info += f"**Rod Used:** {fish.get('rod_used', 'Unknown')}\n"
@@ -1403,7 +1515,11 @@ class Fishing(commands.Cog):
                 )
             
             embed.set_footer(text=f"Page {page}/{total_pages} • {len(all_fish)} total catches")
-            await ctx.reply(embed=embed)
+            
+            # Create pagination view
+            view = GlobalFishPaginator(all_fish, page, total_pages, self.currency, self.bot)
+            message = await ctx.reply(embed=embed, view=view)
+            view.message = message
             
         except Exception as e:
             self.logger.error(f"Global fish leaderboard error: {e}")
@@ -1429,7 +1545,7 @@ class Fishing(commands.Cog):
             # Find rarest fish
             rarity_order = ["junk", "tiny", "small", "common", "uncommon", "rare", "epic", 
                            "legendary", "mythical", "ancient", "divine", "cosmic", "transcendent",
-                           "mutated", "crystalline", "void", "celestial"]
+                           "mutated", "crystalline", "void", "celestial", "subatomic", "dev"]
             
             rarest_fish = None
             for rarity in reversed(rarity_order):
@@ -1456,7 +1572,7 @@ class Fishing(commands.Cog):
             
             embed.add_field(
                 name="💰 Total Value",
-                value=f"**{total_value}** {self.currency}",
+                value=f"**{total_value:,}** {self.currency}",
                 inline=True
             )
             
@@ -1727,7 +1843,8 @@ class Fishing(commands.Cog):
                 
                 await ctx.reply(embed=embed)
             else:
-                await ctx.reply("❌ Failed to equip bait! Please try again.")
+                self.logger.error(f"Failed to equip bait '{bait_id}' for user {ctx.author.id}")
+                await ctx.reply("❌ Failed to equip bait! Database operation failed. Please try again or contact support if the issue persists.")
                 
         except Exception as e:
             self.logger.error(f"Equip bait error: {e}")
@@ -1895,6 +2012,99 @@ class Fishing(commands.Cog):
             self.logger.error(f"Fish rates error: {e}")
             await ctx.reply("❌ An error occurred while calculating catch rates!")
 
+    @commands.command(name="devrod", aliases=["givedevrod", "adminrod"], hidden=True)
+    @commands.is_owner()
+    async def give_dev_rod(self, ctx, *users: discord.Member):
+        """Admin command to give dev rods to specified users - Bot owner only"""
+        try:
+            
+            if not users:
+                return await ctx.reply("❌ Please specify at least one user to give the dev rod to!\n"
+                                     "Usage: `.devrod @user1 @user2 @user3`")
+            
+            # Validate that dev_rod exists in our rod data
+            if "dev_rod" not in self.rod_data:
+                return await ctx.reply("❌ Dev rod not found in rod database!")
+            
+            successful_gives = []
+            failed_gives = []
+            
+            for user in users:
+                try:
+                    # Get user's current rods
+                    user_rods = await self.get_user_rods(user.id)
+                    
+                    # Check if user already has a dev rod
+                    has_dev_rod = any(rod.get("rod_type") == "dev_rod" for rod in user_rods)
+                    
+                    if has_dev_rod:
+                        failed_gives.append(f"{user.display_name} (already has dev rod)")
+                        continue
+                    
+                    # Create the dev rod with maximum durability and unique ID
+                    dev_rod = {
+                        "_id": str(uuid.uuid4()),
+                        "rod_type": "dev_rod",
+                        "name": "Developer's Omnipotent Rod",
+                        "description": "A legendary rod wielded only by the creators themselves, bending reality to their will",
+                        "multiplier": 1000.0,
+                        "durability": 999999,
+                        "max_durability": 999999,
+                        "rarity": "dev",
+                        "special_effects": ["faster_catch", "rare_fish_boost", "legendary_chance", "mythical_attraction", 
+                                          "cosmic_fishing", "void_fishing", "quantum_manipulation", "subatomic_detection", 
+                                          "reality_control", "dev_powers"],
+                        "created_at": datetime.datetime.utcnow().isoformat(),
+                        "given_by": ctx.author.id
+                    }
+                    
+                    # Add dev rod to user's collection
+                    user_rods.append(dev_rod)
+                    
+                    # Save updated rods
+                    await db.update_user_data(user.id, "fishing_rods", user_rods)
+                    
+                    successful_gives.append(user.display_name)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error giving dev rod to {user.id}: {e}")
+                    failed_gives.append(f"{user.display_name} (error occurred)")
+            
+            # Create response embed
+            embed = discord.Embed(
+                title="🛠️ Dev Rod Distribution",
+                color=discord.Color.gold()
+            )
+            
+            if successful_gives:
+                embed.add_field(
+                    name="✅ Successfully Given",
+                    value="\n".join([f"• {name}" for name in successful_gives]),
+                    inline=False
+                )
+            
+            if failed_gives:
+                embed.add_field(
+                    name="❌ Failed",
+                    value="\n".join([f"• {name}" for name in failed_gives]),
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="📊 Summary",
+                value=f"**Success:** {len(successful_gives)}\n**Failed:** {len(failed_gives)}",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Command executed by {ctx.author.display_name}")
+            
+            await ctx.reply(embed=embed)
+            
+        except Exception as e:
+            self.logger.error(f"Dev rod command error: {e}")
+            await ctx.reply("❌ An error occurred while giving dev rods!")
+
+# ...existing code...
 async def setup(bot):
     await bot.add_cog(Fishing(bot))
 
@@ -1938,7 +2148,7 @@ class FishInventoryPaginator(discord.ui.View):
             
             embed = discord.Embed(
                 title="🎣 Fishing Overview",
-                description=f"**Total Fish:** {total_fish} | **Total Value:** {total_value:,} {self.currency}",
+                description=f"**Total Fish:** {total_fish:,} | **Total Value:** {total_value:,} {self.currency}",
                 color=discord.Color.blue()
             )
             
@@ -2029,10 +2239,11 @@ class FishInventoryPaginator(discord.ui.View):
             total_value = sum(fish.get("value", 0) for fish in self.fish_list)
             embed = discord.Embed(
                 title="🐟 Your Fish Collection",
-                description=f"**Total Fish:** {len(self.fish_list)} | **Total Value:** {total_value:,} {self.currency}",
+                description=f"**Total Fish:** {len(self.fish_list):,} | **Total Value:** {total_value:,} {self.currency}",
                 color=discord.Color.blue()
             )
             
+            # Add fish to embed
             for i, fish in enumerate(page_fish, start=start_idx + 1):
                 fish_info = (
                     f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
@@ -2093,6 +2304,124 @@ class FishInventoryPaginator(discord.ui.View):
     async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Delete the paginator message"""
         await interaction.response.edit_message(content="Fish inventory closed.", embed=None, view=None)
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if self.message:
+            try:
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
+                await self.message.edit(view=self)
+            except:
+                pass  # Message might be deleted
+
+class GlobalFishPaginator(discord.ui.View):
+    def __init__(self, fish_list: list, current_page: int, total_pages: int, currency: str, bot):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.fish_list = fish_list
+        self.current_page = current_page
+        self.total_pages = total_pages
+        self.currency = currency
+        self.bot = bot
+        self.message = None
+        self.items_per_page = 2
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states based on current page"""
+        # First page button
+        self.children[0].disabled = self.current_page <= 1
+        # Previous page button  
+        self.children[1].disabled = self.current_page <= 1
+        # Next page button
+        self.children[2].disabled = self.current_page >= self.total_pages
+        # Last page button
+        self.children[3].disabled = self.current_page >= self.total_pages
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        start_idx = (self.current_page - 1) * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        page_fish = self.fish_list[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🌍 Global Fish Leaderboard",
+            description="Top catches from all players",
+            color=discord.Color.gold()
+        )
+        
+        for i, fish in enumerate(page_fish, start=start_idx + 1):
+            user_id = fish.get("user_id", "Unknown")
+            try:
+                user = self.bot.get_user(int(user_id))
+                username = user.display_name if user else f"User {user_id}"
+            except:
+                username = f"User {user_id}"
+            
+            caught_time = fish.get("caught_at", "Unknown")
+            if caught_time != "Unknown":
+                try:
+                    dt = datetime.datetime.fromisoformat(caught_time)
+                    caught_time = dt.strftime("%Y-%m-%d %H:%M")
+                except:
+                    caught_time = "Unknown"
+            
+            fish_info = f"**#{i} • Caught by:** {username}\n"
+            fish_info += f"**Value:** {fish.get('value', 0):,} {self.currency}\n"
+            fish_info += f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+            fish_info += f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
+            fish_info += f"**Rod Used:** {fish.get('rod_used', 'Unknown')}\n"
+            fish_info += f"**Bait Used:** {fish.get('bait_used', 'Unknown')}\n"
+            fish_info += f"**Caught:** {caught_time}"
+            
+            embed.add_field(
+                name=f"🐟 {fish.get('name', 'Unknown Fish')}",
+                value=fish_info,
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • {len(self.fish_list)} total catches")
+        return embed
+    
+    @discord.ui.button(label="⏪", style=discord.ButtonStyle.gray)
+    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to first page"""
+        self.current_page = 1
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.primary)
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to previous page"""
+        self.current_page = max(1, self.current_page - 1)
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to next page"""
+        self.current_page = min(self.total_pages, self.current_page + 1)
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="⏩", style=discord.ButtonStyle.gray)
+    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to last page"""
+        self.current_page = self.total_pages
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🗑️", style=discord.ButtonStyle.red)
+    async def delete_message(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Delete the paginator message"""
+        await interaction.response.edit_message(content="Global fish leaderboard closed.", embed=None, view=None)
     
     async def on_timeout(self):
         """Called when the view times out"""

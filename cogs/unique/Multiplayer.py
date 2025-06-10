@@ -22,6 +22,9 @@ class Multiplayer(commands.Cog):
         # Game constants
         self.SLOT_EMOJIS = ["🍒", "🍋", "🍊", "🍇", "7️⃣", "💎"]
         self.SLOT_VALUES = {"🍒": 10, "🍋": 20, "🍊": 30, "🍇": 50, "7️⃣": 100, "💎": 200}
+        
+        # Start active games cleanup task
+        self.bot.loop.create_task(self.cleanup_active_games())
 
     def _create_embed(self, description: str, color: discord.Color = discord.Color.blue()) -> discord.Embed:
         """Helper to create consistent embeds"""
@@ -383,6 +386,21 @@ class Multiplayer(commands.Cog):
         await ctx.send(embed=self._create_embed(
             f"🏆 **{winner.display_name} wins the word chain game!**", discord.Color.green()
         ))
+
+    async def cleanup_active_games(self):
+        """Clear active games queue every 15 minutes to prevent stuck games"""
+        while True:
+            try:
+                await asyncio.sleep(900)  # 15 minutes = 900 seconds
+                
+                if self.active_games:
+                    cleared_count = len(self.active_games)
+                    self.active_games.clear()
+                    self.logger.info(f"Cleared {cleared_count:,} stuck active games")
+                    
+            except Exception as e:
+                self.logger.error(f"Error in active games cleanup: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
 
 async def setup(bot):
     try:

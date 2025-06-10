@@ -37,6 +37,9 @@ class Gambling(commands.Cog):
         # Start message edit processor
         self.bot.loop.create_task(self.process_message_edits())
         
+        # Start active games cleanup task
+        self.bot.loop.create_task(self.cleanup_active_games())
+        
         # Card suits and values for blackjack
         self.suits = ["♠", "♥", "♦", "♣"]
         self.values = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
@@ -1622,6 +1625,21 @@ class Gambling(commands.Cog):
             'timestamp': time.time()
         }
         await self.message_edit_queue.put(edit_data)
+
+    async def cleanup_active_games(self):
+        """Clear active games queue every 15 minutes to prevent stuck games"""
+        while True:
+            try:
+                await asyncio.sleep(900)  # 15 minutes = 900 seconds
+                
+                if self.active_games:
+                    cleared_count = len(self.active_games)
+                    self.active_games.clear()
+                    self.logger.info(f"Cleared {cleared_count:,} stuck active games")
+                    
+            except Exception as e:
+                self.logger.error(f"Error in active games cleanup: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))
