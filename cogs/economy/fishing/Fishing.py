@@ -175,6 +175,23 @@ class Fishing(commands.Cog):
                 {"name": "Subatomic Void Fish", "min_weight": 0.001, "max_weight": 0.01, "base_value": 20000, "escape_chance": 0.99},
                 {"name": "Proton Swimmer", "min_weight": 0.0005, "max_weight": 0.005, "base_value": 3500, "escape_chance": 0.94},
                 {"name": "Neutron Star Fish", "min_weight": 0.02, "max_weight": 0.08, "base_value": 18000, "escape_chance": 0.97}
+            ],
+            "super": [
+                {"name": "Super Bass", "min_weight": 5.0, "max_weight": 25.0, "base_value": 3200, "escape_chance": 0.45},
+                {"name": "Captain Catfish", "min_weight": 8.0, "max_weight": 35.0, "base_value": 4500, "escape_chance": 0.50},
+                {"name": "Wonder Trout", "min_weight": 3.0, "max_weight": 18.0, "base_value": 3800, "escape_chance": 0.42},
+                {"name": "Flash Fish", "min_weight": 2.0, "max_weight": 12.0, "base_value": 4200, "escape_chance": 0.55},
+                {"name": "Aquaman's Apprentice", "min_weight": 15.0, "max_weight": 50.0, "base_value": 6500, "escape_chance": 0.60},
+                {"name": "Super Salmon", "min_weight": 12.0, "max_weight": 40.0, "base_value": 5800, "escape_chance": 0.52},
+                {"name": "Heroic Halibut", "min_weight": 20.0, "max_weight": 80.0, "base_value": 7200, "escape_chance": 0.65},
+                {"name": "Kryptonian Koi", "min_weight": 1.0, "max_weight": 8.0, "base_value": 8500, "escape_chance": 0.70},
+                {"name": "Batman's Bream", "min_weight": 6.0, "max_weight": 28.0, "base_value": 5200, "escape_chance": 0.48},
+                {"name": "Thor's Tuna", "min_weight": 25.0, "max_weight": 100.0, "base_value": 9200, "escape_chance": 0.72},
+                {"name": "Hulk Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 12000, "escape_chance": 0.75},
+                {"name": "Spider-Mackerel", "min_weight": 4.0, "max_weight": 20.0, "base_value": 4800, "escape_chance": 0.45},
+                {"name": "Iron Manta", "min_weight": 30.0, "max_weight": 120.0, "base_value": 10500, "escape_chance": 0.68},
+                {"name": "X-Ray Fish", "min_weight": 2.5, "max_weight": 15.0, "base_value": 6800, "escape_chance": 0.62},
+                {"name": "Cape Cod", "min_weight": 7.0, "max_weight": 32.0, "base_value": 5500, "escape_chance": 0.50}
             ]
         }
     async def cog_check(self, ctx):
@@ -755,7 +772,8 @@ class Fishing(commands.Cog):
             "junk": 5, "tiny": 25, "small": 60, "common": 140, "uncommon": 350,
             "rare": 1200, "epic": 6500, "legendary": 35000, "mythical": 900000, "ancient": 4000000,
             "divine": 20000000, "cosmic": 100000000, "transcendent": 1000000000,
-            "mutated": 3000, "crystalline": 50000, "void": 1400000, "celestial": 10000000
+            "mutated": 3000, "crystalline": 50000, "void": 1400000, "celestial": 10000000,
+            "super": 6000  # Superhero fish - mid-tier rarity between epic and legendary
         }
         
         for rarity, base_rate in bait_rates.items():
@@ -1204,6 +1222,7 @@ class Fishing(commands.Cog):
                     "void": discord.Color.red(),
                     "celestial": discord.Color.red(),
                     "subatomic": discord.Color.magenta(),
+                    "super": discord.Color.from_rgb(0, 100, 255),  # Superhero blue
                     "dev": discord.Color.gold()
                 }
                 
@@ -1234,6 +1253,8 @@ class Fishing(commands.Cog):
                 # Add special message for rare fish
                 if caught_rarity == "subatomic":
                     success_embed.set_footer(text="⚛️ LEGENDARY SUBATOMIC CATCH! You've caught microscopic life worth a fortune!")
+                elif caught_rarity == "super":
+                    success_embed.set_footer(text="🦸 SUPER HERO CATCH! You've reeled in a legendary superhero fish!")
                 elif caught_rarity in ["legendary", "mythical", "ancient", "divine", "cosmic", "transcendent", "void", "celestial"]:
                     success_embed.set_footer(text="🌟 Incredible catch! This is extremely rare!")
                 elif caught_rarity in ["epic", "rare"]:
@@ -1545,7 +1566,7 @@ class Fishing(commands.Cog):
             # Find rarest fish
             rarity_order = ["junk", "tiny", "small", "common", "uncommon", "rare", "epic", 
                            "legendary", "mythical", "ancient", "divine", "cosmic", "transcendent",
-                           "mutated", "crystalline", "void", "celestial", "subatomic", "dev"]
+                           "mutated", "crystalline", "void", "celestial", "subatomic", "super", "dev"]
             
             rarest_fish = None
             for rarity in reversed(rarity_order):
@@ -2031,40 +2052,22 @@ class Fishing(commands.Cog):
             
             for user in users:
                 try:
-                    # Get user's current rods
-                    user_rods = await self.get_user_rods(user.id)
-                    
-                    # Check if user already has a dev rod
-                    has_dev_rod = any(rod.get("rod_type") == "dev_rod" for rod in user_rods)
+                    # Check if user already has a dev rod using new inventory structure
+                    user_inventory = await self.get_user_inventory(user.id)
+                    rod_inventory = user_inventory.get("rod", {}) if user_inventory else {}
+                    has_dev_rod = rod_inventory.get("dev_rod", 0) > 0
                     
                     if has_dev_rod:
                         failed_gives.append(f"{user.display_name} (already has dev rod)")
                         continue
                     
-                    # Create the dev rod with maximum durability and unique ID
-                    dev_rod = {
-                        "_id": str(uuid.uuid4()),
-                        "rod_type": "dev_rod",
-                        "name": "Developer's Omnipotent Rod",
-                        "description": "A legendary rod wielded only by the creators themselves, bending reality to their will",
-                        "multiplier": 1000.0,
-                        "durability": 999999,
-                        "max_durability": 999999,
-                        "rarity": "dev",
-                        "special_effects": ["faster_catch", "rare_fish_boost", "legendary_chance", "mythical_attraction", 
-                                          "cosmic_fishing", "void_fishing", "quantum_manipulation", "subatomic_detection", 
-                                          "reality_control", "dev_powers"],
-                        "created_at": datetime.datetime.utcnow().isoformat(),
-                        "given_by": ctx.author.id
-                    }
+                    # Add dev rod to user's inventory using new inventory structure
+                    success = await db.add_fishing_rod(user.id, "dev_rod", 1)
                     
-                    # Add dev rod to user's collection
-                    user_rods.append(dev_rod)
-                    
-                    # Save updated rods
-                    await db.update_user_data(user.id, "fishing_rods", user_rods)
-                    
-                    successful_gives.append(user.display_name)
+                    if success:
+                        successful_gives.append(user.display_name)
+                    else:
+                        failed_gives.append(f"{user.display_name} (database error)")
                     
                 except Exception as e:
                     self.logger.error(f"Error giving dev rod to {user.id}: {e}")

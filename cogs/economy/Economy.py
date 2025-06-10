@@ -2,6 +2,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.betting import parse_bet
+from utils.amount_parser import parse_amount, get_amount_help_text
 from utils.safe_reply import safe_reply
 import discord
 import random
@@ -219,7 +220,9 @@ class Economy(commands.Cog):
                         "`.deposit 50%` - Deposit 50% of wallet\n"
                         "`.deposit all` - Deposit maximum amount\n"
                         "`.deposit 1k` - Deposit 1,000\n"
-                        "`.deposit 1.5m` - Deposit 1,500,000"
+                        "`.deposit 1.5m` - Deposit 1,500,000\n"
+                        "`.deposit 1e3` - Deposit 1,000 (scientific notation)\n"
+                        "`.deposit 2.5e5` - Deposit 250,000 (scientific notation)"
                     ),
                     color=0x2b2d31
                 )
@@ -230,42 +233,26 @@ class Economy(commands.Cog):
             limit = await db.get_bank_limit(ctx.author.id, ctx.guild.id)
             space = limit - bank
 
-            # Parse amount
-            if amount.lower() in ['all', 'max']:
-                amount = min(wallet, space)
-            elif amount.endswith('%'):
-                try:
-                    percentage = float(amount[:-1])
-                    if not 0 < percentage <= 100:
-                        return await safe_reply(ctx, "Percentage must be between 0 and 100!")
-                    amount = min(int((percentage / 100) * wallet), space)
-                except ValueError:
-                    return await safe_reply(ctx, "Invalid percentage!")
-            else:
-                try:
-                    if amount.lower().endswith('k'):
-                        amount = int(float(amount[:-1]) * 1000)
-                    elif amount.lower().endswith('m'):
-                        amount = int(float(amount[:-1]) * 1000000)
-                    else:
-                        amount = int(amount)
-                except ValueError:
-                    return await safe_reply(ctx, "Invalid amount!")
+            # Parse amount using the new unified parser
+            parsed_amount, error = parse_amount(amount, wallet, max_amount=space, context="wallet")
+            
+            if error:
+                return await safe_reply(ctx, f"❌ {error}")
 
-            if amount <= 0:
+            if parsed_amount <= 0:
                 return await safe_reply(ctx, "Amount must be positive!")
-            if amount > wallet:
+            if parsed_amount > wallet:
                 return await safe_reply(ctx, "You don't have that much in your wallet!")
-            if amount > space:
+            if parsed_amount > space:
                 return await safe_reply(ctx, f"Your bank can only hold {space:,} more coins!")
 
-            if await db.update_wallet(ctx.author.id, -amount, ctx.guild.id):
-                if await db.update_bank(ctx.author.id, amount, ctx.guild.id):
+            if await db.update_wallet(ctx.author.id, -parsed_amount, ctx.guild.id):
+                if await db.update_bank(ctx.author.id, parsed_amount, ctx.guild.id):
                     # Log successful deposit
                     self.stats_logger.log_command_usage("deposit")
-                    await safe_reply(ctx, f"💰 Deposited **{amount:,}** {self.currency} into your bank!")
+                    await safe_reply(ctx, f"💰 Deposited **{parsed_amount:,}** {self.currency} into your bank!")
                 else:
-                    await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
+                    await db.update_wallet(ctx.author.id, parsed_amount, ctx.guild.id)
                     await safe_reply(ctx, "❌ Failed to deposit money! Transaction reverted.")
             else:
                 await safe_reply(ctx, "❌ Failed to deposit money!")
@@ -293,7 +280,9 @@ class Economy(commands.Cog):
                         "`.withdraw 50%` - Withdraw 50% of bank\n"
                         "`.withdraw all` - Withdraw everything\n"
                         "`.withdraw 1k` - Withdraw 1,000\n"
-                        "`.withdraw 1.5m` - Withdraw 1,500,000"
+                        "`.withdraw 1.5m` - Withdraw 1,500,000\n"
+                        "`.withdraw 1e3` - Withdraw 1,000 (scientific notation)\n"
+                        "`.withdraw 2.5e5` - Withdraw 250,000 (scientific notation)"
                     ),
                     color=0x2b2d31
                 )
@@ -301,38 +290,22 @@ class Economy(commands.Cog):
 
             bank = await db.get_bank_balance(ctx.author.id, ctx.guild.id)
 
-            # Parse amount
-            if amount.lower() in ['all', 'max']:
-                amount = bank
-            elif amount.endswith('%'):
-                try:
-                    percentage = float(amount[:-1])
-                    if not 0 < percentage <= 100:
-                        return await safe_reply(ctx, "Percentage must be between 0 and 100!")
-                    amount = int((percentage / 100) * bank)
-                except ValueError:
-                    return await safe_reply(ctx, "Invalid percentage!")
-            else:
-                try:
-                    if amount.lower().endswith('k'):
-                        amount = int(float(amount[:-1]) * 1000)
-                    elif amount.lower().endswith('m'):
-                        amount = int(float(amount[:-1]) * 1000000)
-                    else:
-                        amount = int(amount)
-                except ValueError:
-                    return await safe_reply(ctx, "Invalid amount!")
+            # Parse amount using the new unified parser
+            parsed_amount, error = parse_amount(amount, bank, context="bank")
+            
+            if error:
+                return await safe_reply(ctx, f"❌ {error}")
 
-            if amount <= 0:
+            if parsed_amount <= 0:
                 return await safe_reply(ctx, "Amount must be positive!")
-            if amount > bank:
+            if parsed_amount > bank:
                 return await safe_reply(ctx, "You don't have that much in your bank!")
 
-            if await db.update_bank(ctx.author.id, -amount, ctx.guild.id):
-                if await db.update_wallet(ctx.author.id, amount, ctx.guild.id):
-                    await safe_reply(ctx, f"💸 Withdrew **{amount:,}** {self.currency} from your bank!")
+            if await db.update_bank(ctx.author.id, -parsed_amount, ctx.guild.id):
+                if await db.update_wallet(ctx.author.id, parsed_amount, ctx.guild.id):
+                    await safe_reply(ctx, f"💸 Withdrew **{parsed_amount:,}** {self.currency} from your bank!")
                 else:
-                    await db.update_bank(ctx.author.id, amount, ctx.guild.id)
+                    await db.update_bank(ctx.author.id, parsed_amount, ctx.guild.id)
                     await safe_reply(ctx, "❌ Failed to withdraw money! Transaction reverted.")
             else:
                 await safe_reply(ctx, "❌ Failed to withdraw money!")
@@ -342,25 +315,53 @@ class Economy(commands.Cog):
 
     @commands.command(name="pay", aliases=["transfer", 'p'])
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def pay(self, ctx, member: discord.Member, amount: int):
+    async def pay(self, ctx, member: discord.Member, amount: str = None):
         """Transfer money to another user"""
-        if amount <= 0:
-            return await ctx.reply("Amount must be positive!")
+        if not amount:
+            wallet = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+            
+            embed = discord.Embed(
+                description=(
+                    f"**BronkBuks Payment Guide**\n\n"
+                    f"Your Wallet: **{wallet:,}** {self.currency}\n\n"
+                    f"**Usage:**\n"
+                    f"`.pay @user <amount>`\n"
+                    f"`.pay @user 50%` - Send 50% of wallet\n"
+                    f"`.pay @user all` - Send everything\n"
+                    f"`.pay @user half` - Send half of wallet\n"
+                    f"`.pay @user 1k` - Send 1,000\n"
+                    f"`.pay @user 1.5m` - Send 1,500,000\n"
+                    f"`.pay @user 1e3` - Send 1,000 (scientific notation)\n"
+                    f"`.pay @user 2.5e5` - Send 250,000 (scientific notation)"
+                ),
+                color=0x2b2d31
+            )
+            return await safe_reply(ctx, embed=embed)
         
         if member == ctx.author:
             return await ctx.reply("You can't pay yourself!")
         
-        # Check if sender has enough funds
+        # Get sender's wallet balance
         sender_balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
-        if sender_balance < amount:
+        
+        # Parse the amount using the new parser
+        parsed_amount, error = parse_amount(amount, sender_balance, context="wallet")
+        
+        if error:
+            return await ctx.reply(f"❌ {error}")
+        
+        if parsed_amount <= 0:
+            return await ctx.reply("Amount must be positive!")
+        
+        if parsed_amount > sender_balance:
             return await ctx.reply("Insufficient funds!")
         
         # Create payment confirmation for receiver
-        view = PaymentConfirmView(ctx.author, member, amount, self.currency)
+        view = PaymentConfirmView(ctx.author, member, parsed_amount, self.currency)
         
         embed = discord.Embed(
             title="💳 Payment Confirmation Required",
-            description=f"{ctx.author.mention} wants to send you **{amount:,}** {self.currency}",
+            description=f"{ctx.author.mention} wants to send you **{parsed_amount:,}** {self.currency}",
             color=discord.Color.blue()
         )
         embed.add_field(
@@ -370,7 +371,7 @@ class Economy(commands.Cog):
         )
         embed.add_field(
             name="Amount:",
-            value=f"{amount:,} {self.currency}",
+            value=f"{parsed_amount:,} {self.currency}",
             inline=True
         )
         embed.add_field(

@@ -9,10 +9,35 @@ It's mainly written by one dude, but with all the [contributors on github](https
 # BronxBots Features
 
 ## Accepted Variables
-***Most*** commands that use economic values also accept these:
-`1k = 1000`
-`2.5% = 2.5 percentage of balance or wallet where applicable`
-`2e5 = 200000 scientific notation`
+***All*** economy commands that take amount parameters now support these formats:
+
+**Number Formats:**
+- `1000` - Regular numbers
+- `1k` - 1,000 (K suffix)
+- `1.5k` - 1,500 (K suffix with decimals)
+- `2m` - 2,000,000 (M suffix) 
+- `2.5m` - 2,500,000 (M suffix with decimals)
+
+**Scientific Notation:**
+- `1e3` - 1,000
+- `2.5e5` - 250,000
+- `1e6` - 1,000,000
+
+**Percentages:**
+- `50%` - 50% of your balance
+- `2.5%` - 2.5% of your balance
+- `100%` - All your balance
+
+**Special Keywords:**
+- `all` / `max` - All available amount
+- `half` - Half of your balance
+
+**Supported Commands:**
+- `.pay` - Transfer money to users
+- `.deposit` - Bank deposits
+- `.withdraw` - Bank withdrawals  
+- `.crash`, `.blackjack`, `.slots` - All gambling commands
+- And more!
 
 # Help
 `.h`, `.help`

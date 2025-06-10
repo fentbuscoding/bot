@@ -57,9 +57,10 @@ class ItemSelectModal(discord.ui.Modal):
                 return
                 
             selected_item = self.items[item_idx]
+            item_id = selected_item.get("_id", selected_item.get("id", selected_item["name"].lower().replace(" ", "_")))
             await self.cog.handle_bazaar_purchase(
                 interaction,
-                selected_item.get("id", selected_item["name"].lower().replace(" ", "_")),
+                item_id,
                 amount
             )
             
@@ -169,22 +170,31 @@ class Bazaar(commands.Cog):
             # Get shop cog if available
             shop_cog = self.bot.get_cog("Shop")
             if shop_cog:
-                # Get items from database collections using Shop cog's methods
-                shop_items["items"].extend(await shop_cog.get_shop_items("items"))
-                shop_items["upgrades"].extend(await shop_cog.get_shop_items("upgrades"))
-                
-                # Get fishing items
-                fishing_items = await shop_cog.get_shop_items("fishing")
-                shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
-                shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+                # Get items from JSON files using Shop cog's methods
+                shop_items["items"].extend(shop_cog.get_shop_items("item"))  # Fixed: "item" not "items"
+                shop_items["upgrades"].extend(shop_cog.get_shop_items("upgrade"))  # Fixed: "upgrade" not "upgrades"
+                shop_items["rods"].extend(shop_cog.get_shop_items("rod"))  # Fixed: direct access to "rod"
+                shop_items["bait"].extend(shop_cog.get_shop_items("bait"))  # Fixed: direct access to "bait"
             else:
-                # Fallback to direct database access if Shop cog isn't loaded
-                shop_items["items"].extend(await db.get_shop_items("items"))
-                shop_items["upgrades"].extend(await db.get_shop_items("upgrades"))
+                # Fallback to direct JSON loading if Shop cog isn't loaded
+                import json
+                import os
                 
-                fishing_items = await db.get_shop_items("fishing")
-                shop_items["rods"].extend([item for item in fishing_items if item.get("type") == "rod"])
-                shop_items["bait"].extend([item for item in fishing_items if item.get("type") == "bait"])
+                json_files = {
+                    "items": "data/shop/items.json",
+                    "upgrades": "data/shop/upgrades.json", 
+                    "rods": "data/shop/rods.json",
+                    "bait": "data/shop/bait.json"
+                }
+                
+                for category, file_path in json_files.items():
+                    if os.path.exists(file_path):
+                        with open(file_path, 'r') as f:
+                            data = json.load(f)
+                            for item_id, item_data in data.items():
+                                item_data['_id'] = item_id
+                                item_data['type'] = category[:-1] if category.endswith('s') else category  # Remove 's' for consistency
+                                shop_items[category].append(item_data)
                 
         except Exception as e:
             self.logger.error(f"Error loading shop items: {e}")
@@ -365,10 +375,11 @@ class Bazaar(commands.Cog):
             
             for item in self.current_items:
                 discount_text = f" (~~{item['original_price']}~~ **{item['price']}** {self.currency}, {item['discount']*100:.0f}% off)"
+                item_id = item.get('_id', item.get('id', item['name'].lower().replace(' ', '_')))
                 embed.add_field(
                     name=f"🛍️ {item['name']}",
                     value=f"{item.get('description', 'No description')}{discount_text}\n"
-                         f"`{ctx.prefix}bazaar buy {item.get('id', item['name'].lower().replace(' ', '_'))}`",
+                         f"`{ctx.prefix}bazaar buy {item_id}`",
                     inline=False
                 )
         
@@ -539,8 +550,13 @@ class Bazaar(commands.Cog):
         # Find the item
         item = None
         for bazaar_item in self.current_items:
-            if (bazaar_item.get("id") == item_id or 
-                bazaar_item["name"].lower().replace(" ", "_") == item_id.lower()):
+            # Check both _id and name variations for item matching
+            item_id_matches = (
+                bazaar_item.get("_id") == item_id or 
+                bazaar_item.get("id") == item_id or
+                bazaar_item["name"].lower().replace(" ", "_") == item_id.lower()
+            )
+            if item_id_matches:
                 item = bazaar_item
                 break
         
@@ -600,7 +616,7 @@ class Bazaar(commands.Cog):
         
         # Add item to inventory
         clean_item = {
-            "id": item["id"],
+            "id": item.get("_id", item.get("id", item["name"].lower().replace(" ", "_"))),
             "name": item["name"],
             "description": item.get("description", ""),
             "price": item["price"],
