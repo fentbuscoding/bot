@@ -651,6 +651,8 @@ class Trading(commands.Cog):
         item_details = None
         available_quantity = 0
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item.get('id') == item_id:
                 item_details = item
                 available_quantity = item.get('quantity', 1)
@@ -1114,6 +1116,8 @@ class Trading(commands.Cog):
         inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
         item_details = None
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item.get('id') == item_id:
                 item_details = item
                 break
@@ -1192,6 +1196,8 @@ class Trading(commands.Cog):
         
         item_details = None
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item_name.lower() in item.get('name', '').lower() or item_name.lower() == item.get('id', '').lower():
                 item_details = item
                 break

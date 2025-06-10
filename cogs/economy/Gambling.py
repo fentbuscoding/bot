@@ -1070,6 +1070,8 @@ class Gambling(commands.Cog):
             for item_name in requested_items:
                 found = False
                 for item in inventory:
+                    if not isinstance(item, dict):
+                        continue
                     if (item.get("id", "").lower() == item_name.lower() or 
                         item.get("name", "").lower() == item_name.lower()):
                         items_to_bet.append(item)

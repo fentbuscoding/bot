@@ -28,170 +28,170 @@ class Fishing(commands.Cog):
         # Load aliases dynamically from JSON files
         self.rod_aliases = self._load_rod_aliases()
         self.bait_aliases = self._load_bait_aliases()
-        # REBALANCED FISH DATABASE - More reasonable values and better progression
+        # REBALANCED FISH DATABASE - Improved values with better progression
         self.fish_database = {
             "junk": [
-                {"name": "Rusty Can", "min_weight": 0.2, "max_weight": 0.5, "base_value": 1, "escape_chance": 0.0},
-                {"name": "Old Boot", "min_weight": 0.5, "max_weight": 1.2, "base_value": 2, "escape_chance": 0.0},
-                {"name": "Plastic Bottle", "min_weight": 0.05, "max_weight": 0.2, "base_value": 1, "escape_chance": 0.0},
-                {"name": "Seaweed Clump", "min_weight": 0.1, "max_weight": 0.3, "base_value": 5, "escape_chance": 0.0},
-                {"name": "Broken Net", "min_weight": 0.3, "max_weight": 0.8, "base_value": 8, "escape_chance": 0.0}
+                {"name": "Rusty Can", "min_weight": 0.2, "max_weight": 0.5, "base_value": 2, "escape_chance": 0.0},
+                {"name": "Old Boot", "min_weight": 0.5, "max_weight": 1.2, "base_value": 4, "escape_chance": 0.0},
+                {"name": "Plastic Bottle", "min_weight": 0.05, "max_weight": 0.2, "base_value": 2, "escape_chance": 0.0},
+                {"name": "Seaweed Clump", "min_weight": 0.1, "max_weight": 0.3, "base_value": 8, "escape_chance": 0.0},
+                {"name": "Broken Net", "min_weight": 0.3, "max_weight": 0.8, "base_value": 12, "escape_chance": 0.0}
             ],
             "tiny": [
-                {"name": "Minnow", "min_weight": 0.01, "max_weight": 0.05, "base_value": 15, "escape_chance": 0.02},
-                {"name": "Guppy", "min_weight": 0.01, "max_weight": 0.03, "base_value": 18, "escape_chance": 0.02},
-                {"name": "Tetra", "min_weight": 0.01, "max_weight": 0.04, "base_value": 22, "escape_chance": 0.03},
-                {"name": "Neon Fish", "min_weight": 0.01, "max_weight": 0.03, "base_value": 28, "escape_chance": 0.05},
-                {"name": "Baby Goldfish", "min_weight": 0.02, "max_weight": 0.06, "base_value": 35, "escape_chance": 0.03},
-                {"name": "Anchovy Fry", "min_weight": 0.005, "max_weight": 0.02, "base_value": 12, "escape_chance": 0.08},
-                {"name": "Sardine Fry", "min_weight": 0.008, "max_weight": 0.03, "base_value": 16, "escape_chance": 0.06}
+                {"name": "Minnow", "min_weight": 0.01, "max_weight": 0.05, "base_value": 25, "escape_chance": 0.02},
+                {"name": "Guppy", "min_weight": 0.01, "max_weight": 0.03, "base_value": 30, "escape_chance": 0.02},
+                {"name": "Tetra", "min_weight": 0.01, "max_weight": 0.04, "base_value": 35, "escape_chance": 0.03},
+                {"name": "Neon Fish", "min_weight": 0.01, "max_weight": 0.03, "base_value": 45, "escape_chance": 0.05},
+                {"name": "Baby Goldfish", "min_weight": 0.02, "max_weight": 0.06, "base_value": 55, "escape_chance": 0.03},
+                {"name": "Anchovy Fry", "min_weight": 0.005, "max_weight": 0.02, "base_value": 20, "escape_chance": 0.08},
+                {"name": "Sardine Fry", "min_weight": 0.008, "max_weight": 0.03, "base_value": 28, "escape_chance": 0.06}
             ],
             "small": [
-                {"name": "Goldfish", "min_weight": 0.05, "max_weight": 0.3, "base_value": 45, "escape_chance": 0.05},
-                {"name": "Anchovy", "min_weight": 0.02, "max_weight": 0.1, "base_value": 30, "escape_chance": 0.08},
-                {"name": "Sardine", "min_weight": 0.05, "max_weight": 0.2, "base_value": 38, "escape_chance": 0.06},
-                {"name": "Small Perch", "min_weight": 0.1, "max_weight": 0.5, "base_value": 55, "escape_chance": 0.10},
-                {"name": "Bluegill", "min_weight": 0.1, "max_weight": 0.4, "base_value": 50, "escape_chance": 0.08},
-                {"name": "Sunfish", "min_weight": 0.08, "max_weight": 0.3, "base_value": 48, "escape_chance": 0.07},
-                {"name": "Minnow School", "min_weight": 0.2, "max_weight": 0.6, "base_value": 75, "escape_chance": 0.15},
-                {"name": "Killifish", "min_weight": 0.03, "max_weight": 0.15, "base_value": 42, "escape_chance": 0.12}
+                {"name": "Goldfish", "min_weight": 0.05, "max_weight": 0.3, "base_value": 75, "escape_chance": 0.05},
+                {"name": "Anchovy", "min_weight": 0.02, "max_weight": 0.1, "base_value": 50, "escape_chance": 0.08},
+                {"name": "Sardine", "min_weight": 0.05, "max_weight": 0.2, "base_value": 65, "escape_chance": 0.06},
+                {"name": "Small Perch", "min_weight": 0.1, "max_weight": 0.5, "base_value": 90, "escape_chance": 0.10},
+                {"name": "Bluegill", "min_weight": 0.1, "max_weight": 0.4, "base_value": 80, "escape_chance": 0.08},
+                {"name": "Sunfish", "min_weight": 0.08, "max_weight": 0.3, "base_value": 78, "escape_chance": 0.07},
+                {"name": "Minnow School", "min_weight": 0.2, "max_weight": 0.6, "base_value": 120, "escape_chance": 0.15},
+                {"name": "Killifish", "min_weight": 0.03, "max_weight": 0.15, "base_value": 70, "escape_chance": 0.12}
             ],
             "common": [
-                {"name": "Bass", "min_weight": 0.3, "max_weight": 3.0, "base_value": 120, "escape_chance": 0.12},
-                {"name": "Carp", "min_weight": 0.5, "max_weight": 8.0, "base_value": 110, "escape_chance": 0.15},
-                {"name": "Trout", "min_weight": 0.2, "max_weight": 2.5, "base_value": 135, "escape_chance": 0.18},
-                {"name": "Catfish", "min_weight": 0.8, "max_weight": 12.0, "base_value": 125, "escape_chance": 0.10},
-                {"name": "Perch", "min_weight": 0.2, "max_weight": 1.5, "base_value": 105, "escape_chance": 0.15},
-                {"name": "Pike", "min_weight": 1.0, "max_weight": 15.0, "base_value": 160, "escape_chance": 0.22},
-                {"name": "Walleye", "min_weight": 0.5, "max_weight": 4.0, "base_value": 145, "escape_chance": 0.20},
-                {"name": "Bream", "min_weight": 0.3, "max_weight": 2.0, "base_value": 95, "escape_chance": 0.12},
-                {"name": "Roach", "min_weight": 0.1, "max_weight": 1.0, "base_value": 85, "escape_chance": 0.18},
-                {"name": "Chub", "min_weight": 0.5, "max_weight": 3.5, "base_value": 115, "escape_chance": 0.14}
+                {"name": "Bass", "min_weight": 0.3, "max_weight": 3.0, "base_value": 180, "escape_chance": 0.12},
+                {"name": "Carp", "min_weight": 0.5, "max_weight": 8.0, "base_value": 165, "escape_chance": 0.15},
+                {"name": "Trout", "min_weight": 0.2, "max_weight": 2.5, "base_value": 200, "escape_chance": 0.18},
+                {"name": "Catfish", "min_weight": 0.8, "max_weight": 12.0, "base_value": 190, "escape_chance": 0.10},
+                {"name": "Perch", "min_weight": 0.2, "max_weight": 1.5, "base_value": 160, "escape_chance": 0.15},
+                {"name": "Pike", "min_weight": 1.0, "max_weight": 15.0, "base_value": 240, "escape_chance": 0.22},
+                {"name": "Walleye", "min_weight": 0.5, "max_weight": 4.0, "base_value": 220, "escape_chance": 0.20},
+                {"name": "Bream", "min_weight": 0.3, "max_weight": 2.0, "base_value": 145, "escape_chance": 0.12},
+                {"name": "Roach", "min_weight": 0.1, "max_weight": 1.0, "base_value": 130, "escape_chance": 0.18},
+                {"name": "Chub", "min_weight": 0.5, "max_weight": 3.5, "base_value": 175, "escape_chance": 0.14}
             ],
             "uncommon": [
-                {"name": "Rainbow Trout", "min_weight": 0.8, "max_weight": 6.0, "base_value": 280, "escape_chance": 0.25},
-                {"name": "Salmon", "min_weight": 2.0, "max_weight": 20.0, "base_value": 320, "escape_chance": 0.28},
-                {"name": "Large Pike", "min_weight": 5.0, "max_weight": 25.0, "base_value": 380, "escape_chance": 0.32},
-                {"name": "Striped Bass", "min_weight": 2.0, "max_weight": 18.0, "base_value": 340, "escape_chance": 0.30},
-                {"name": "Muskie", "min_weight": 8.0, "max_weight": 30.0, "base_value": 420, "escape_chance": 0.35},
-                {"name": "Red Snapper", "min_weight": 1.5, "max_weight": 8.0, "base_value": 300, "escape_chance": 0.25},
-                {"name": "Mackerel", "min_weight": 0.8, "max_weight": 3.5, "base_value": 260, "escape_chance": 0.28},
-                {"name": "Cod", "min_weight": 2.0, "max_weight": 12.0, "base_value": 290, "escape_chance": 0.22},
-                {"name": "Halibut", "min_weight": 5.0, "max_weight": 40.0, "base_value": 450, "escape_chance": 0.26},
-                {"name": "Flounder", "min_weight": 1.0, "max_weight": 5.0, "base_value": 275, "escape_chance": 0.20}
+                {"name": "Rainbow Trout", "min_weight": 0.8, "max_weight": 6.0, "base_value": 420, "escape_chance": 0.25},
+                {"name": "Salmon", "min_weight": 2.0, "max_weight": 20.0, "base_value": 480, "escape_chance": 0.28},
+                {"name": "Large Pike", "min_weight": 5.0, "max_weight": 25.0, "base_value": 570, "escape_chance": 0.32},
+                {"name": "Striped Bass", "min_weight": 2.0, "max_weight": 18.0, "base_value": 510, "escape_chance": 0.30},
+                {"name": "Muskie", "min_weight": 8.0, "max_weight": 30.0, "base_value": 630, "escape_chance": 0.35},
+                {"name": "Red Snapper", "min_weight": 1.5, "max_weight": 8.0, "base_value": 450, "escape_chance": 0.25},
+                {"name": "Mackerel", "min_weight": 0.8, "max_weight": 3.5, "base_value": 390, "escape_chance": 0.28},
+                {"name": "Cod", "min_weight": 2.0, "max_weight": 12.0, "base_value": 435, "escape_chance": 0.22},
+                {"name": "Halibut", "min_weight": 5.0, "max_weight": 40.0, "base_value": 675, "escape_chance": 0.26},
+                {"name": "Flounder", "min_weight": 1.0, "max_weight": 5.0, "base_value": 415, "escape_chance": 0.20}
             ],
             "rare": [
-                {"name": "Tuna", "min_weight": 15.0, "max_weight": 120.0, "base_value": 1200, "escape_chance": 0.40},
-                {"name": "Mahi-Mahi", "min_weight": 8.0, "max_weight": 35.0, "base_value": 980, "escape_chance": 0.45},
-                {"name": "Yellowfin Tuna", "min_weight": 20.0, "max_weight": 150.0, "base_value": 1350, "escape_chance": 0.48},
-                {"name": "Marlin", "min_weight": 30.0, "max_weight": 300.0, "base_value": 1600, "escape_chance": 0.52},
-                {"name": "Swordfish", "min_weight": 25.0, "max_weight": 250.0, "base_value": 1450, "escape_chance": 0.50},
-                {"name": "Tarpon", "min_weight": 40.0, "max_weight": 120.0, "base_value": 1100, "escape_chance": 0.55},
-                {"name": "King Salmon", "min_weight": 15.0, "max_weight": 50.0, "base_value": 920, "escape_chance": 0.42},
-                {"name": "Sturgeon", "min_weight": 50.0, "max_weight": 400.0, "base_value": 1800, "escape_chance": 0.45},
-                {"name": "Giant Grouper", "min_weight": 80.0, "max_weight": 300.0, "base_value": 1650, "escape_chance": 0.43},
-                {"name": "Barracuda", "min_weight": 8.0, "max_weight": 45.0, "base_value": 850, "escape_chance": 0.48}
+                {"name": "Tuna", "min_weight": 15.0, "max_weight": 120.0, "base_value": 1800, "escape_chance": 0.40},
+                {"name": "Mahi-Mahi", "min_weight": 8.0, "max_weight": 35.0, "base_value": 1470, "escape_chance": 0.45},
+                {"name": "Yellowfin Tuna", "min_weight": 20.0, "max_weight": 150.0, "base_value": 2025, "escape_chance": 0.48},
+                {"name": "Marlin", "min_weight": 30.0, "max_weight": 300.0, "base_value": 2400, "escape_chance": 0.52},
+                {"name": "Swordfish", "min_weight": 25.0, "max_weight": 250.0, "base_value": 2175, "escape_chance": 0.50},
+                {"name": "Tarpon", "min_weight": 40.0, "max_weight": 120.0, "base_value": 1650, "escape_chance": 0.55},
+                {"name": "King Salmon", "min_weight": 15.0, "max_weight": 50.0, "base_value": 1380, "escape_chance": 0.42},
+                {"name": "Sturgeon", "min_weight": 50.0, "max_weight": 400.0, "base_value": 2700, "escape_chance": 0.45},
+                {"name": "Giant Grouper", "min_weight": 80.0, "max_weight": 300.0, "base_value": 2475, "escape_chance": 0.43},
+                {"name": "Barracuda", "min_weight": 8.0, "max_weight": 45.0, "base_value": 1275, "escape_chance": 0.48}
             ],
             "epic": [
-                {"name": "Great White Shark", "min_weight": 500.0, "max_weight": 2500.0, "base_value": 8500, "escape_chance": 0.65},
-                {"name": "Giant Bluefin Tuna", "min_weight": 200.0, "max_weight": 680.0, "base_value": 7200, "escape_chance": 0.60},
-                {"name": "Atlantic Sturgeon", "min_weight": 150.0, "max_weight": 800.0, "base_value": 6800, "escape_chance": 0.55},
-                {"name": "Giant Squid", "min_weight": 300.0, "max_weight": 1500.0, "base_value": 9200, "escape_chance": 0.70},
-                {"name": "Hammerhead Shark", "min_weight": 200.0, "max_weight": 600.0, "base_value": 5800, "escape_chance": 0.65},
-                {"name": "Tiger Shark", "min_weight": 180.0, "max_weight": 900.0, "base_value": 6200, "escape_chance": 0.65},
-                {"name": "Bull Shark", "min_weight": 120.0, "max_weight": 400.0, "base_value": 4800, "escape_chance": 0.60},
-                {"name": "Mako Shark", "min_weight": 150.0, "max_weight": 650.0, "base_value": 5500, "escape_chance": 0.70},
-                {"name": "Giant Octopus", "min_weight": 100.0, "max_weight": 600.0, "base_value": 5200, "escape_chance": 0.65},
-                {"name": "Manta Ray", "min_weight": 800.0, "max_weight": 2000.0, "base_value": 7800, "escape_chance": 0.50}
+                {"name": "Great White Shark", "min_weight": 500.0, "max_weight": 2500.0, "base_value": 12750, "escape_chance": 0.65},
+                {"name": "Giant Bluefin Tuna", "min_weight": 200.0, "max_weight": 680.0, "base_value": 10800, "escape_chance": 0.60},
+                {"name": "Atlantic Sturgeon", "min_weight": 150.0, "max_weight": 800.0, "base_value": 10200, "escape_chance": 0.55},
+                {"name": "Giant Squid", "min_weight": 300.0, "max_weight": 1500.0, "base_value": 13800, "escape_chance": 0.70},
+                {"name": "Hammerhead Shark", "min_weight": 200.0, "max_weight": 600.0, "base_value": 8700, "escape_chance": 0.65},
+                {"name": "Tiger Shark", "min_weight": 180.0, "max_weight": 900.0, "base_value": 9300, "escape_chance": 0.65},
+                {"name": "Bull Shark", "min_weight": 120.0, "max_weight": 400.0, "base_value": 7200, "escape_chance": 0.60},
+                {"name": "Mako Shark", "min_weight": 150.0, "max_weight": 650.0, "base_value": 8250, "escape_chance": 0.70},
+                {"name": "Giant Octopus", "min_weight": 100.0, "max_weight": 600.0, "base_value": 7800, "escape_chance": 0.65},
+                {"name": "Manta Ray", "min_weight": 800.0, "max_weight": 2000.0, "base_value": 11700, "escape_chance": 0.50}
             ],
             "legendary": [
-                {"name": "Colossal Squid", "min_weight": 1000.0, "max_weight": 5000.0, "base_value": 25000, "escape_chance": 0.75},
-                {"name": "Whale Shark", "min_weight": 8000.0, "max_weight": 25000.0, "base_value": 45000, "escape_chance": 0.68},
-                {"name": "Great Barracuda King", "min_weight": 200.0, "max_weight": 800.0, "base_value": 18000, "escape_chance": 0.72},
-                {"name": "Emperor Tuna", "min_weight": 800.0, "max_weight": 1200.0, "base_value": 28000, "escape_chance": 0.65},
-                {"name": "Ancient Coelacanth", "min_weight": 80.0, "max_weight": 200.0, "base_value": 55000, "escape_chance": 0.80},
-                {"name": "Megamouth Shark", "min_weight": 2000.0, "max_weight": 8000.0, "base_value": 35000, "escape_chance": 0.70},
-                {"name": "Giant Oarfish", "min_weight": 200.0, "max_weight": 600.0, "base_value": 42000, "escape_chance": 0.78},
-                {"name": "Goblin Shark", "min_weight": 150.0, "max_weight": 500.0, "base_value": 32000, "escape_chance": 0.75}
+                {"name": "Colossal Squid", "min_weight": 1000.0, "max_weight": 5000.0, "base_value": 37500, "escape_chance": 0.75},
+                {"name": "Whale Shark", "min_weight": 8000.0, "max_weight": 25000.0, "base_value": 67500, "escape_chance": 0.68},
+                {"name": "Great Barracuda King", "min_weight": 200.0, "max_weight": 800.0, "base_value": 27000, "escape_chance": 0.72},
+                {"name": "Emperor Tuna", "min_weight": 800.0, "max_weight": 1200.0, "base_value": 42000, "escape_chance": 0.65},
+                {"name": "Ancient Coelacanth", "min_weight": 80.0, "max_weight": 200.0, "base_value": 82500, "escape_chance": 0.80},
+                {"name": "Megamouth Shark", "min_weight": 2000.0, "max_weight": 8000.0, "base_value": 52500, "escape_chance": 0.70},
+                {"name": "Giant Oarfish", "min_weight": 200.0, "max_weight": 600.0, "base_value": 63000, "escape_chance": 0.78},
+                {"name": "Goblin Shark", "min_weight": 150.0, "max_weight": 500.0, "base_value": 48000, "escape_chance": 0.75}
             ],
             "mythical": [
-                {"name": "Kraken", "min_weight": 50000.0, "max_weight": 200000.0, "base_value": 8500, "escape_chance": 0.85},
-                {"name": "Leviathan", "min_weight": 80000.0, "max_weight": 300000.0, "base_value": 12000, "escape_chance": 0.88},
-                {"name": "Ancient Megalodon", "min_weight": 30000.0, "max_weight": 150000.0, "base_value": 9500, "escape_chance": 0.85},
-                {"name": "Sea Serpent", "min_weight": 25000.0, "max_weight": 120000.0, "base_value": 7800, "escape_chance": 0.87},
-                {"name": "Jörmungandr", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 15000, "escape_chance": 0.90}
+                {"name": "Kraken", "min_weight": 50000.0, "max_weight": 200000.0, "base_value": 127500, "escape_chance": 0.85},
+                {"name": "Leviathan", "min_weight": 80000.0, "max_weight": 300000.0, "base_value": 180000, "escape_chance": 0.88},
+                {"name": "Ancient Megalodon", "min_weight": 30000.0, "max_weight": 150000.0, "base_value": 142500, "escape_chance": 0.85},
+                {"name": "Sea Serpent", "min_weight": 25000.0, "max_weight": 120000.0, "base_value": 117000, "escape_chance": 0.87},
+                {"name": "Jörmungandr", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 225000, "escape_chance": 0.90}
             ],
             "ancient": [
-                {"name": "Dunkleosteus", "min_weight": 60000.0, "max_weight": 200000.0, "base_value": 35000, "escape_chance": 0.88},
-                {"name": "Leedsichthys", "min_weight": 120000.0, "max_weight": 400000.0, "base_value": 55000, "escape_chance": 0.90},
-                {"name": "Helicoprion", "min_weight": 40000.0, "max_weight": 150000.0, "base_value": 42000, "escape_chance": 0.89},
-                {"name": "Xiphactinus", "min_weight": 25000.0, "max_weight": 100000.0, "base_value": 32000, "escape_chance": 0.88}
+                {"name": "Dunkleosteus", "min_weight": 60000.0, "max_weight": 200000.0, "base_value": 525000, "escape_chance": 0.88},
+                {"name": "Leedsichthys", "min_weight": 120000.0, "max_weight": 400000.0, "base_value": 825000, "escape_chance": 0.90},
+                {"name": "Helicoprion", "min_weight": 40000.0, "max_weight": 150000.0, "base_value": 630000, "escape_chance": 0.89},
+                {"name": "Xiphactinus", "min_weight": 25000.0, "max_weight": 100000.0, "base_value": 480000, "escape_chance": 0.88}
             ],
             "divine": [
-                {"name": "Poseidon's Trident Fish", "min_weight": 200000.0, "max_weight": 800000.0, "base_value": 185000, "escape_chance": 0.92},
-                {"name": "Neptune's Crown Jewel", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 280000, "escape_chance": 0.95},
-                {"name": "Oceanic Phoenix", "min_weight": 150000.0, "max_weight": 600000.0, "base_value": 220000, "escape_chance": 0.93}
+                {"name": "Poseidon's Trident Fish", "min_weight": 200000.0, "max_weight": 800000.0, "base_value": 2775000, "escape_chance": 0.92},
+                {"name": "Neptune's Crown Jewel", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 4200000, "escape_chance": 0.95},
+                {"name": "Oceanic Phoenix", "min_weight": 150000.0, "max_weight": 600000.0, "base_value": 3300000, "escape_chance": 0.93}
             ],
             "cosmic": [
-                {"name": "Stellar Whale", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 850000, "escape_chance": 0.94},
-                {"name": "Void Leviathan", "min_weight": 2000000.0, "max_weight": 10000000.0, "base_value": 1250000, "escape_chance": 0.96},
-                {"name": "Cosmic Kraken", "min_weight": 3000000.0, "max_weight": 15000000.0, "base_value": 1800000, "escape_chance": 0.97}
+                {"name": "Stellar Whale", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 12750000, "escape_chance": 0.94},
+                {"name": "Void Leviathan", "min_weight": 2000000.0, "max_weight": 10000000.0, "base_value": 18750000, "escape_chance": 0.96},
+                {"name": "Cosmic Kraken", "min_weight": 3000000.0, "max_weight": 15000000.0, "base_value": 27000000, "escape_chance": 0.97}
             ],
             "transcendent": [
-                {"name": "The First Fish", "min_weight": 10000000.0, "max_weight": 50000000.0, "base_value": 8500000, "escape_chance": 0.96},
-                {"name": "Alpha Omega", "min_weight": 25000000.0, "max_weight": 100000000.0, "base_value": 15000000, "escape_chance": 0.98}
+                {"name": "The First Fish", "min_weight": 10000000.0, "max_weight": 50000000.0, "base_value": 127500000, "escape_chance": 0.96},
+                {"name": "Alpha Omega", "min_weight": 25000000.0, "max_weight": 100000000.0, "base_value": 225000000, "escape_chance": 0.98}
             ],
             "mutated": [
-                {"name": "Two-Headed Bass", "min_weight": 2.0, "max_weight": 8.0, "base_value": 1800, "escape_chance": 0.30},
-                {"name": "Glowing Trout", "min_weight": 1.5, "max_weight": 6.0, "base_value": 2200, "escape_chance": 0.35},
-                {"name": "Crystal Carp", "min_weight": 3.0, "max_weight": 12.0, "base_value": 2800, "escape_chance": 0.38},
-                {"name": "Electric Eel-fish", "min_weight": 2.5, "max_weight": 10.0, "base_value": 3200, "escape_chance": 0.42},
-                {"name": "Phase Salmon", "min_weight": 8.0, "max_weight": 25.0, "base_value": 4500, "escape_chance": 0.50},
-                {"name": "Toxic Catfish", "min_weight": 5.0, "max_weight": 20.0, "base_value": 3800, "escape_chance": 0.35},
-                {"name": "Neon Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 12000, "escape_chance": 0.65}
+                {"name": "Two-Headed Bass", "min_weight": 2.0, "max_weight": 8.0, "base_value": 2700, "escape_chance": 0.30},
+                {"name": "Glowing Trout", "min_weight": 1.5, "max_weight": 6.0, "base_value": 3300, "escape_chance": 0.35},
+                {"name": "Crystal Carp", "min_weight": 3.0, "max_weight": 12.0, "base_value": 4200, "escape_chance": 0.38},
+                {"name": "Electric Eel-fish", "min_weight": 2.5, "max_weight": 10.0, "base_value": 4800, "escape_chance": 0.42},
+                {"name": "Phase Salmon", "min_weight": 8.0, "max_weight": 25.0, "base_value": 6750, "escape_chance": 0.50},
+                {"name": "Toxic Catfish", "min_weight": 5.0, "max_weight": 20.0, "base_value": 5700, "escape_chance": 0.35},
+                {"name": "Neon Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 18000, "escape_chance": 0.65}
             ],
             "crystalline": [
-                {"name": "Diamond Angelfish", "min_weight": 5.0, "max_weight": 15.0, "base_value": 280, "escape_chance": 0.70},
-                {"name": "Ruby Goldfish", "min_weight": 2.0, "max_weight": 8.0, "base_value": 220, "escape_chance": 0.65},
-                {"name": "Sapphire Tuna", "min_weight": 80.0, "max_weight": 300.0, "base_value": 650, "escape_chance": 0.75},
-                {"name": "Emerald Shark", "min_weight": 200.0, "max_weight": 800.0, "base_value": 1250, "escape_chance": 0.80}
+                {"name": "Diamond Angelfish", "min_weight": 5.0, "max_weight": 15.0, "base_value": 4200, "escape_chance": 0.70},
+                {"name": "Ruby Goldfish", "min_weight": 2.0, "max_weight": 8.0, "base_value": 3300, "escape_chance": 0.65},
+                {"name": "Sapphire Tuna", "min_weight": 80.0, "max_weight": 300.0, "base_value": 9750, "escape_chance": 0.75},
+                {"name": "Emerald Shark", "min_weight": 200.0, "max_weight": 800.0, "base_value": 18750, "escape_chance": 0.80}
             ],
             "void": [
-                {"name": "Shadow Leviathan", "min_weight": 5000.0, "max_weight": 25000.0, "base_value": 8500, "escape_chance": 0.82},
-                {"name": "Nightmare Squid", "min_weight": 8000.0, "max_weight": 40000.0, "base_value": 12000, "escape_chance": 0.85},
-                {"name": "Abyss Walker", "min_weight": 12000.0, "max_weight": 60000.0, "base_value": 18000, "escape_chance": 0.87}
+                {"name": "Shadow Leviathan", "min_weight": 5000.0, "max_weight": 25000.0, "base_value": 127500, "escape_chance": 0.82},
+                {"name": "Nightmare Squid", "min_weight": 8000.0, "max_weight": 40000.0, "base_value": 180000, "escape_chance": 0.85},
+                {"name": "Abyss Walker", "min_weight": 12000.0, "max_weight": 60000.0, "base_value": 270000, "escape_chance": 0.87}
             ],
             "celestial": [
-                {"name": "Starlight Manta", "min_weight": 20000.0, "max_weight": 100000.0, "base_value": 45000, "escape_chance": 0.90},
-                {"name": "Moonbeam Whale", "min_weight": 50000.0, "max_weight": 250000.0, "base_value": 85000, "escape_chance": 0.92},
-                {"name": "Solar Kraken", "min_weight": 80000.0, "max_weight": 400000.0, "base_value": 150000, "escape_chance": 0.94}
+                {"name": "Starlight Manta", "min_weight": 20000.0, "max_weight": 100000.0, "base_value": 675000, "escape_chance": 0.90},
+                {"name": "Moonbeam Whale", "min_weight": 50000.0, "max_weight": 250000.0, "base_value": 1275000, "escape_chance": 0.92},
+                {"name": "Solar Kraken", "min_weight": 80000.0, "max_weight": 400000.0, "base_value": 2250000, "escape_chance": 0.94}
             ],
             "subatomic": [
-                {"name": "Quantum Plankton", "min_weight": 0.2, "max_weight": 0.2, "base_value": 7000, "escape_chance": 0.95},
-                {"name": "Nano-Bacteriophage", "min_weight": 0.0001, "max_weight": 0.001, "base_value": 5000, "escape_chance": 0.98},
-                {"name": "Particle Fish", "min_weight": 0.05, "max_weight": 0.15, "base_value": 4500, "escape_chance": 0.90},
-                {"name": "Microscopic Leviathan", "min_weight": 0.1, "max_weight": 0.3, "base_value": 8500, "escape_chance": 0.92},
-                {"name": "Atomic Kraken", "min_weight": 0.01, "max_weight": 0.05, "base_value": 12000, "escape_chance": 0.96},
-                {"name": "Subatomic Void Fish", "min_weight": 0.001, "max_weight": 0.01, "base_value": 20000, "escape_chance": 0.99},
-                {"name": "Proton Swimmer", "min_weight": 0.0005, "max_weight": 0.005, "base_value": 3500, "escape_chance": 0.94},
-                {"name": "Neutron Star Fish", "min_weight": 0.02, "max_weight": 0.08, "base_value": 18000, "escape_chance": 0.97}
+                {"name": "Quantum Plankton", "min_weight": 0.2, "max_weight": 0.2, "base_value": 105000, "escape_chance": 0.95},
+                {"name": "Nano-Bacteriophage", "min_weight": 0.0001, "max_weight": 0.001, "base_value": 75000, "escape_chance": 0.98},
+                {"name": "Particle Fish", "min_weight": 0.05, "max_weight": 0.15, "base_value": 67500, "escape_chance": 0.90},
+                {"name": "Microscopic Leviathan", "min_weight": 0.1, "max_weight": 0.3, "base_value": 127500, "escape_chance": 0.92},
+                {"name": "Atomic Kraken", "min_weight": 0.01, "max_weight": 0.05, "base_value": 180000, "escape_chance": 0.96},
+                {"name": "Subatomic Void Fish", "min_weight": 0.001, "max_weight": 0.01, "base_value": 300000, "escape_chance": 0.99},
+                {"name": "Proton Swimmer", "min_weight": 0.0005, "max_weight": 0.005, "base_value": 52500, "escape_chance": 0.94},
+                {"name": "Neutron Star Fish", "min_weight": 0.02, "max_weight": 0.08, "base_value": 270000, "escape_chance": 0.97}
             ],
             "super": [
-                {"name": "Super Bass", "min_weight": 5.0, "max_weight": 25.0, "base_value": 3200, "escape_chance": 0.45},
-                {"name": "Captain Catfish", "min_weight": 8.0, "max_weight": 35.0, "base_value": 4500, "escape_chance": 0.50},
-                {"name": "Wonder Trout", "min_weight": 3.0, "max_weight": 18.0, "base_value": 3800, "escape_chance": 0.42},
-                {"name": "Flash Fish", "min_weight": 2.0, "max_weight": 12.0, "base_value": 4200, "escape_chance": 0.55},
-                {"name": "Aquaman's Apprentice", "min_weight": 15.0, "max_weight": 50.0, "base_value": 6500, "escape_chance": 0.60},
-                {"name": "Super Salmon", "min_weight": 12.0, "max_weight": 40.0, "base_value": 5800, "escape_chance": 0.52},
-                {"name": "Heroic Halibut", "min_weight": 20.0, "max_weight": 80.0, "base_value": 7200, "escape_chance": 0.65},
-                {"name": "Kryptonian Koi", "min_weight": 1.0, "max_weight": 8.0, "base_value": 8500, "escape_chance": 0.70},
-                {"name": "Batman's Bream", "min_weight": 6.0, "max_weight": 28.0, "base_value": 5200, "escape_chance": 0.48},
-                {"name": "Thor's Tuna", "min_weight": 25.0, "max_weight": 100.0, "base_value": 9200, "escape_chance": 0.72},
-                {"name": "Hulk Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 12000, "escape_chance": 0.75},
-                {"name": "Spider-Mackerel", "min_weight": 4.0, "max_weight": 20.0, "base_value": 4800, "escape_chance": 0.45},
-                {"name": "Iron Manta", "min_weight": 30.0, "max_weight": 120.0, "base_value": 10500, "escape_chance": 0.68},
-                {"name": "X-Ray Fish", "min_weight": 2.5, "max_weight": 15.0, "base_value": 6800, "escape_chance": 0.62},
-                {"name": "Cape Cod", "min_weight": 7.0, "max_weight": 32.0, "base_value": 5500, "escape_chance": 0.50}
+                {"name": "Super Bass", "min_weight": 5.0, "max_weight": 25.0, "base_value": 4800, "escape_chance": 0.45},
+                {"name": "Captain Catfish", "min_weight": 8.0, "max_weight": 35.0, "base_value": 6750, "escape_chance": 0.50},
+                {"name": "Wonder Trout", "min_weight": 3.0, "max_weight": 18.0, "base_value": 5700, "escape_chance": 0.42},
+                {"name": "Flash Fish", "min_weight": 2.0, "max_weight": 12.0, "base_value": 6300, "escape_chance": 0.55},
+                {"name": "Aquaman's Apprentice", "min_weight": 15.0, "max_weight": 50.0, "base_value": 9750, "escape_chance": 0.60},
+                {"name": "Super Salmon", "min_weight": 12.0, "max_weight": 40.0, "base_value": 8700, "escape_chance": 0.52},
+                {"name": "Heroic Halibut", "min_weight": 20.0, "max_weight": 80.0, "base_value": 10800, "escape_chance": 0.65},
+                {"name": "Kryptonian Koi", "min_weight": 1.0, "max_weight": 8.0, "base_value": 12750, "escape_chance": 0.70},
+                {"name": "Batman's Bream", "min_weight": 6.0, "max_weight": 28.0, "base_value": 7800, "escape_chance": 0.48},
+                {"name": "Thor's Tuna", "min_weight": 25.0, "max_weight": 100.0, "base_value": 13800, "escape_chance": 0.72},
+                {"name": "Hulk Shark", "min_weight": 50.0, "max_weight": 200.0, "base_value": 18000, "escape_chance": 0.75},
+                {"name": "Spider-Mackerel", "min_weight": 4.0, "max_weight": 20.0, "base_value": 7200, "escape_chance": 0.45},
+                {"name": "Iron Manta", "min_weight": 30.0, "max_weight": 120.0, "base_value": 15750, "escape_chance": 0.68},
+                {"name": "X-Ray Fish", "min_weight": 2.5, "max_weight": 15.0, "base_value": 10200, "escape_chance": 0.62},
+                {"name": "Cape Cod", "min_weight": 7.0, "max_weight": 32.0, "base_value": 8250, "escape_chance": 0.50}
             ]
         }
     async def cog_check(self, ctx):

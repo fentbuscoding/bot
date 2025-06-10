@@ -1109,9 +1109,9 @@ class Economy(commands.Cog):
         
         if inventory:
             # Group items by type
-            potions = [item for item in inventory if item.get('type') == 'potion']
-            upgrades = [item for item in inventory if item.get('type') == 'upgrade']
-            general = [item for item in inventory if item.get('type') not in ['potion', 'upgrade']]
+            potions = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'potion']
+            upgrades = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'upgrade']
+            general = [item for item in inventory if isinstance(item, dict) and item.get('type') not in ['potion', 'upgrade']]
             
             if potions:
                 potion_list = [f"🧪 {item.get('name', 'Unknown')} (x{item.get('quantity', 1)})" for item in potions[:5]]
@@ -1161,16 +1161,22 @@ class Economy(commands.Cog):
         
         # Exact name match first
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item.get('name', '').lower() == item_name:
                 return item
         
         # Partial name match
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item_name in item.get('name', '').lower():
                 return item
         
         # ID match
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             if item.get('id', '').lower() == item_name:
                 return item
         
@@ -1186,7 +1192,7 @@ class Economy(commands.Cog):
         
         # Show available items
         if inventory:
-            available = [f"`{item.get('name', 'Unknown')}`" for item in inventory[:10]]
+            available = [f"`{item.get('name', 'Unknown')}`" for item in inventory[:10] if isinstance(item, dict)]
             embed.add_field(
                 name="Available Items",
                 value=", ".join(available) + ("..." if len(inventory) > 10 else ""),
@@ -1397,7 +1403,7 @@ class Economy(commands.Cog):
             
             # Get user's available potions
             inventory = await db.get_inventory(ctx.author.id, ctx.guild.id)
-            potions = [item for item in inventory if item.get('type') == 'potion']
+            potions = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'potion']
             
             if potions:
                 available_potions = [f"🧪 {p.get('name', 'Unknown')} (x{p.get('quantity', 1)})" for p in potions[:5]]
@@ -1435,12 +1441,12 @@ class Economy(commands.Cog):
                 return await ctx.reply(embed=embed)
             
             # Group items by type
-            potions = [item for item in inventory if item.get('type') == 'potion']
-            upgrades = [item for item in inventory if item.get('type') == 'upgrade']
-            general = [item for item in inventory if item.get('type') not in ['potion', 'upgrade']]
+            potions = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'potion']
+            upgrades = [item for item in inventory if isinstance(item, dict) and item.get('type') == 'upgrade']
+            general = [item for item in inventory if isinstance(item, dict) and item.get('type') not in ['potion', 'upgrade']]
             
             # Calculate total value
-            total_value = sum(item.get('value', 0) * item.get('quantity', 1) for item in inventory)
+            total_value = sum(item.get('value', 0) * item.get('quantity', 1) for item in inventory if isinstance(item, dict))
             
             embed = discord.Embed(
                 title="📦 Your Inventory",

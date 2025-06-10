@@ -521,6 +521,8 @@ class Work(commands.Cog):
             
             # Check inventory for giftable items
             for item in inventory:
+                if not isinstance(item, dict):
+                    continue
                 item_id = item.get("id", item.get("name", "").lower().replace(" ", "_"))
                 if item_id in shop_items:
                     giftable_items.append(item)
@@ -853,6 +855,8 @@ class BossRelationsView(discord.ui.View):
         
         # Check inventory for giftable items
         for item in inventory:
+            if not isinstance(item, dict):
+                continue
             item_id = item.get("id", item.get("name", "").lower().replace(" ", "_"))
             if item_id in shop_items:
                 giftable_items.append(item)

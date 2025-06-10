@@ -526,6 +526,11 @@ class AsyncDatabase:
         item_data = {}
         
         for item in user.get("inventory", []):
+            # Skip invalid items (strings or non-dict objects)
+            if not isinstance(item, dict):
+                self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
+                continue
+                
             item_key = item.get("id", item.get("name", "unknown"))
             item_counts[item_key] += item.get("quantity", 1)  # Add quantity if exists, default to 1
             if item_key not in item_data:
@@ -738,6 +743,11 @@ class AsyncDatabase:
         
         # Filter items to keep/remove
         for item in inventory:
+            # Skip invalid items (strings or non-dict objects)
+            if not isinstance(item, dict):
+                self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
+                continue
+                
             if (item.get("id") == item_id or item.get("name") == item_id) and remaining_to_remove > 0:
                 item_quantity = item.get("quantity", 1)
                 if item_quantity > remaining_to_remove:
@@ -1118,6 +1128,8 @@ class AsyncDatabase:
                 has_token = False
                 
                 for item in inventory:
+                    if not isinstance(item, dict):
+                        continue
                     if (item.get("id") == "interest_token" or 
                         item.get("name", "").lower() == "interest token"):
                         has_token = True
@@ -1238,6 +1250,46 @@ class AsyncDatabase:
         except Exception as e:
             self.logger.error(f"Error adding item to inventory: {e}")
             return False
+
+    async def cleanup_corrupted_inventory(self) -> int:
+        """Clean up corrupted inventory items (non-dict entries) from all users"""
+        if not await self.ensure_connected():
+            return 0
+        
+        try:
+            cleaned_count = 0
+            # Find all users with inventory
+            users = await self.db.users.find({"inventory": {"$exists": True}}).to_list(None)
+            
+            for user in users:
+                user_id = user["_id"]
+                inventory = user.get("inventory", [])
+                
+                if not isinstance(inventory, list):
+                    continue
+                
+                # Filter out non-dict items
+                original_count = len(inventory)
+                clean_inventory = [item for item in inventory if isinstance(item, dict)]
+                
+                if len(clean_inventory) < original_count:
+                    # Update the user's inventory
+                    await self.db.users.update_one(
+                        {"_id": user_id},
+                        {"$set": {"inventory": clean_inventory}}
+                    )
+                    removed_count = original_count - len(clean_inventory)
+                    cleaned_count += removed_count
+                    self.logger.info(f"Cleaned {removed_count} corrupted items from user {user_id}")
+            
+            if cleaned_count > 0:
+                self.logger.info(f"Total cleanup: removed {cleaned_count} corrupted inventory items")
+            
+            return cleaned_count
+            
+        except Exception as e:
+            self.logger.error(f"Error during inventory cleanup: {e}")
+            return 0
 
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""

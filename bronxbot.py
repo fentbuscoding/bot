@@ -64,11 +64,8 @@ MAIN_GUILD_IDS = [
 ]
 
 # setup
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-intents.guilds = True
-intents.reactions = True
+intents = discord.Intents.all()
+intents.message_content = True  # Enable message content intent
 
 class BronxBot(commands.AutoShardedBot):
     def __init__(self, *args, **kwargs):
@@ -375,6 +372,21 @@ async def on_ready():
         logging.info("Setup wizard loaded successfully")
     except Exception as e:
         logging.error(f"Failed to load additional cogs: {e}")
+
+    # Initialize database and clean up corrupted inventory data
+    try:
+        from utils.db import async_db
+        await async_db.ensure_connected()
+        logging.info("Database connection established")
+        
+        # Run inventory cleanup on startup to remove corrupted data
+        cleaned_count = await async_db.cleanup_corrupted_inventory()
+        if cleaned_count > 0:
+            logging.info(f"Cleaned up {cleaned_count} corrupted inventory items on startup")
+        else:
+            logging.info("No corrupted inventory items found during startup cleanup")
+    except Exception as e:
+        logging.error(f"Failed to initialize database or cleanup inventory: {e}")
 
     guild_cache_start = time.time()
     # Build guild cache

@@ -387,7 +387,7 @@ class AutoFishing(commands.Cog):
                         return await interaction.response.send_message("❌ This isn't your button!", ephemeral=True)
                     
                     # Check if user can afford it
-                    balance = await db.get_balance(ctx.author.id)
+                    balance = await db.get_wallet_balance(ctx.author.id)
                     if balance < next_cost:
                         return await interaction.response.send_message(
                             f"❌ You need {next_cost:,} {self.currency} but only have {balance:,} {self.currency}!", 
@@ -395,7 +395,7 @@ class AutoFishing(commands.Cog):
                         )
                     
                     # Buy the autofisher
-                    if await db.update_balance(ctx.author.id, -next_cost):
+                    if await db.update_wallet(ctx.author.id, -next_cost):
                         new_count = count + 1
                         await db.db.users.update_one(
                             {"_id": str(ctx.author.id)},
@@ -424,7 +424,7 @@ class AutoFishing(commands.Cog):
                         await interaction.response.send_message("❌ Failed to purchase autofisher!", ephemeral=True)
                 
                 buy_button = discord.ui.Button(
-                    label=f"Buy Autofisher #{count + 1:,} ({next_cost:,} {self.currency})", 
+                    label=f"Buy Autofisher #{count + 1:,}", 
                     style=discord.ButtonStyle.green,
                     emoji="🤖"
                 )
@@ -452,12 +452,12 @@ class AutoFishing(commands.Cog):
                 return await safe_reply(ctx, f"You've reached the max of {self.MAX_AUTOFISHERS} autofishers!")
                 
             cost = int(self.BASE_PRICE * (self.PRICE_MULTIPLIER ** current_count))
-            balance = await db.get_balance(ctx.author.id)
+            balance = await db.get_wallet_balance(ctx.author.id)
             
             if balance < cost:
                 return await safe_reply(ctx, f"Need {cost:,} {self.currency} (You have {balance:,})")
                 
-            if await db.update_balance(ctx.author.id, -cost):
+            if await db.update_wallet(ctx.author.id, -cost):
                 new_count = current_count + 1
                 await db.db.users.update_one(
                     {"_id": str(ctx.author.id)},
@@ -487,12 +487,12 @@ class AutoFishing(commands.Cog):
                 return await safe_reply(ctx, "❌ Buy an autofisher first!")
                 
             # Check user balance
-            balance = await db.get_balance(ctx.author.id)
+            balance = await db.get_wallet_balance(ctx.author.id)
             if balance < amount:
                 return await safe_reply(ctx, f"❌ You only have {balance:,} {self.currency}")
                 
             # Attempt to update balance
-            balance_updated = await db.update_balance(ctx.author.id, -amount)
+            balance_updated = await db.update_wallet(ctx.author.id, -amount)
             if not balance_updated:
                 return await safe_reply(ctx, "❌ Failed to deduct money from your wallet!")
             
@@ -527,14 +527,14 @@ class AutoFishing(commands.Cog):
                 await safe_reply(ctx, embed=embed)
             else:
                 # Refund if autofisher update failed
-                await db.update_balance(ctx.author.id, amount)
+                await db.update_wallet(ctx.author.id, amount)
                 await safe_reply(ctx, "❌ Failed to update autofisher balance! Money refunded.")
                 
         except Exception as e:
             print(f"Error depositing to autofisher: {e}")
             # Try to refund on error
             try:
-                await db.update_balance(ctx.author.id, amount)
+                await db.update_wallet(ctx.author.id, amount)
             except:
                 pass
             await safe_reply(ctx, "❌ Error depositing money! Please try again.")
@@ -563,7 +563,7 @@ class AutoFishing(commands.Cog):
             )
             
             if result.modified_count > 0:
-                if await db.update_balance(ctx.author.id, total_value):
+                if await db.update_wallet(ctx.author.id, total_value):
                     embed = discord.Embed(
                         title="🤖 Auto-Fish Collection",
                         description=f"Sold {len(auto_fish):,} auto-caught fish for **{total_value:,}** {self.currency}",

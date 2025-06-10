@@ -111,6 +111,28 @@ class Admin(commands.Cog):
         }
 
         self.load_shop_data()
+        
+        # Buff types for global buff system
+        self.buff_types = {
+            "economy": {
+                "name": "Economy Boost",
+                "description": "1.5x multiplier for all economy commands",
+                "commands": ["work", "beg", "crime", "rob", "gamble"]
+            },
+            "fishing": {
+                "name": "Fishing Boost", 
+                "description": "1.5x catch rates and fish values",
+                "commands": ["fish", "cast"]
+            },
+            "xp": {
+                "name": "XP Boost",
+                "description": "1.5x experience gain",
+                "commands": ["all"]
+            }
+        }
+        
+        # Track last global buff to avoid repetition
+        self.last_global_buff = None
 
     def load_shop_data(self) -> None:
         """Load shop data from file"""
@@ -671,20 +693,402 @@ class Admin(commands.Cog):
             self.logger.error(f"Failed to reset user {user.id}: {e}")
             await ctx.reply(f"❌ Error resetting user: {e}")
 
-async def setup(bot):
-    """Initialize the Admin cog with proper error handling"""
-    try:
-        data_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
-        os.makedirs(data_dir, exist_ok=True)
+    @commands.command(name="servers", aliases=["serverlist", "guilds"])
+    @commands.is_owner()
+    async def servers(self, ctx):
+        """View all servers the bot is in with pagination and remote leave functionality"""
+        guilds = list(self.bot.guilds)
         
-        if not hasattr(bot, 'session'):
-            bot.session = aiohttp.ClientSession()
+        if not guilds:
+            embed = discord.Embed(
+                title="No Servers", 
+                description="The bot is not in any servers.",
+                color=discord.Color.red()
+            )
+            return await ctx.reply(embed=embed)
+        
+        # Sort guilds by member count (descending)
+        guilds.sort(key=lambda g: g.member_count, reverse=True)
+        
+        view = ServerManagerView(guilds, ctx.author, self.bot)
+        embed = view.get_server_embed(0)
+        
+        message = await ctx.reply(embed=embed, view=view)
+        view.message = message
+
+class ServerManagerView(discord.ui.View):
+    def __init__(self, guilds: List[discord.Guild], author: discord.User, bot):
+        super().__init__(timeout=300)
+        self.guilds = guilds
+        self.author = author
+        self.bot = bot
+        self.current_page = 0
+        self.message = None
+        
+        # Update button states
+        self.update_buttons()
     
-        await db.ensure_connected()
-        await bot.add_cog(Admin(bot))
-        return True
+    def update_buttons(self):
+        """Update button states based on current page"""
+        self.previous_button.disabled = (self.current_page == 0)
+        self.next_button.disabled = (self.current_page >= len(self.guilds) - 1)
         
-    except Exception as e:
-        tb = traceback.format_exc()
-        logger.error(f"Failed to load Admin cog:\n{tb}")
-        raise RuntimeError(f"Admin cog setup failed: {str(e)}") from e
+        # Update page info button
+        self.page_info.label = f"{self.current_page + 1}/{len(self.guilds)}"
+    
+    def get_server_embed(self, page: int) -> discord.Embed:
+        """Generate embed for a specific server"""
+        if page >= len(self.guilds):
+            page = len(self.guilds) - 1
+        if page < 0:
+            page = 0
+            
+        guild = self.guilds[page]
+        
+        # Get member status counts
+        online_count = sum(1 for member in guild.members if member.status != discord.Status.offline and not member.bot)
+        idle_count = sum(1 for member in guild.members if member.status == discord.Status.idle and not member.bot)
+        dnd_count = sum(1 for member in guild.members if member.status == discord.Status.dnd and not member.bot)
+        offline_count = sum(1 for member in guild.members if member.status == discord.Status.offline and not member.bot)
+        bot_count = sum(1 for member in guild.members if member.bot)
+        
+        embed = discord.Embed(
+            title=f"🔍 Server {page + 1}/{len(self.guilds)}",
+            color=0x2b2d31
+        )
+        
+        # Server basic info
+        embed.add_field(
+            name="📊 Server Info",
+            value=(
+                f"**Name:** {guild.name}\n"
+                f"**ID:** `{guild.id}`\n"
+                f"**Owner:** {guild.owner.mention if guild.owner else 'Unknown'} (`{guild.owner.id if guild.owner else 'Unknown'}`)\n"
+                f"**Created:** <t:{int(guild.created_at.timestamp())}:R>\n"
+                f"**Region:** {guild.preferred_locale or 'Unknown'}"
+            ),
+            inline=False
+        )
+        
+        # Member statistics
+        total_humans = guild.member_count - bot_count
+        embed.add_field(
+            name="👥 Member Statistics",
+            value=(
+                f"**Total Members:** {guild.member_count:,}\n"
+                f"**Humans:** {total_humans:,} | **Bots:** {bot_count:,}\n\n"
+                f"**Status Breakdown (Humans):**\n"
+                f"🟢 Online: {online_count:,}\n"
+                f"🟡 Idle: {idle_count:,}\n"
+                f"🔴 DND: {dnd_count:,}\n"
+                f"⚫ Offline: {offline_count:,}"
+            ),
+            inline=True
+        )
+        
+        # Server features
+        features_text = []
+        if guild.premium_tier > 0:
+            features_text.append(f"💎 Boost Level {guild.premium_tier} ({guild.premium_subscription_count} boosts)")
+        if guild.verification_level != discord.VerificationLevel.none:
+            features_text.append(f"🛡️ Verification: {guild.verification_level.name.title()}")
+        if guild.features:
+            notable_features = [f for f in guild.features if f in ['COMMUNITY', 'PARTNERED', 'VERIFIED', 'DISCOVERABLE']]
+            if notable_features:
+                features_text.extend([f"✨ {f.title()}" for f in notable_features])
+        
+        embed.add_field(
+            name="⚙️ Server Features",
+            value=(
+                f"**Channels:** {len(guild.channels):,} total\n"
+                f"📝 Text: {len(guild.text_channels):,} | 🔊 Voice: {len(guild.voice_channels):,}\n"
+                f"**Roles:** {len(guild.roles):,}\n"
+                f"**Emojis:** {len(guild.emojis):,}/{guild.emoji_limit}\n\n"
+                + ("\n".join(features_text) if features_text else "No special features")
+            ),
+            inline=True
+        )
+        
+        # Activity indicator
+        activity_ratio = (online_count + idle_count + dnd_count) / max(total_humans, 1)
+        if activity_ratio > 0.3:
+            activity_status = "🟢 Active"
+        elif activity_ratio > 0.1:
+            activity_status = "🟡 Moderate"
+        elif activity_ratio > 0.05:
+            activity_status = "🟠 Low Activity"
+        else:
+            activity_status = "🔴 Dead/Inactive"
+            
+        embed.add_field(
+            name="📈 Activity Status",
+            value=(
+                f"{activity_status}\n"
+                f"**Active Ratio:** {activity_ratio:.1%}\n"
+                f"**Last Interaction:** Bot joined <t:{int(guild.me.joined_at.timestamp())}:R>"
+            ),
+            inline=False
+        )
+        
+        # Set thumbnail
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+            
+        # Footer with navigation info
+        embed.set_footer(text=f"Use the buttons below to navigate or leave this server")
+        
+        return embed
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only the command author can use these buttons"""
+        if interaction.user != self.author:
+            await interaction.response.send_message(
+                "❌ Only the command author can use these buttons!", 
+                ephemeral=True
+            )
+            return False
+        return True
+    
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary, disabled=True)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to previous server"""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = self.get_server_embed(self.current_page)
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="1/1", style=discord.ButtonStyle.secondary, disabled=True)
+    async def page_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Page info button (disabled)"""
+        await interaction.response.defer()
+    
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to next server"""
+        if self.current_page < len(self.guilds) - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = self.get_server_embed(self.current_page)
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🚪 Leave Server", style=discord.ButtonStyle.danger)
+    async def leave_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Leave the current server"""
+        guild = self.guilds[self.current_page]
+        
+        # Create confirmation view
+        confirm_view = LeaveConfirmView(guild, self, self.author)
+        
+        embed = discord.Embed(
+            title="⚠️ Confirm Server Leave",
+            description=(
+                f"Are you sure you want to leave **{guild.name}**?\n\n"
+                f"**Server Info:**\n"
+                f"• ID: `{guild.id}`\n"
+                f"• Members: {guild.member_count:,}\n"
+                f"• Owner: {guild.owner.mention if guild.owner else 'Unknown'}\n\n"
+                "**This action cannot be undone!**"
+            ),
+            color=discord.Color.red()
+        )
+        
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+            
+        await interaction.response.edit_message(embed=embed, view=confirm_view)
+    
+    @discord.ui.button(label="📊 Summary", style=discord.ButtonStyle.primary)
+    async def summary_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show server summary statistics"""
+        total_members = sum(guild.member_count for guild in self.guilds)
+        total_humans = 0
+        total_bots = 0
+        active_servers = 0
+        dead_servers = 0
+        
+        for guild in self.guilds:
+            bot_count = sum(1 for member in guild.members if member.bot)
+            human_count = guild.member_count - bot_count
+            total_humans += human_count
+            total_bots += bot_count
+            
+            # Calculate activity
+            online_count = sum(1 for member in guild.members if member.status != discord.Status.offline and not member.bot)
+            idle_count = sum(1 for member in guild.members if member.status == discord.Status.idle and not member.bot)
+            dnd_count = sum(1 for member in guild.members if member.status == discord.Status.dnd and not member.bot)
+            
+            activity_ratio = (online_count + idle_count + dnd_count) / max(human_count, 1)
+            if activity_ratio > 0.05:
+                active_servers += 1
+            else:
+                dead_servers += 1
+        
+        embed = discord.Embed(
+            title="📊 Bot Server Summary",
+            color=0x2b2d31
+        )
+        
+        embed.add_field(
+            name="🌐 Overview",
+            value=(
+                f"**Total Servers:** {len(self.guilds):,}\n"
+                f"**Total Members:** {total_members:,}\n"
+                f"**Average per Server:** {total_members // len(self.guilds):,}\n"
+            ),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👥 Member Breakdown",
+            value=(
+                f"**Humans:** {total_humans:,}\n"
+                f"**Bots:** {total_bots:,}\n"
+                f"**Bot Ratio:** {(total_bots/total_members*100):.1f}%\n"
+            ),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📈 Activity Analysis",
+            value=(
+                f"**Active Servers:** {active_servers:,}\n"
+                f"**Dead/Inactive:** {dead_servers:,}\n"
+                f"**Health Score:** {(active_servers/len(self.guilds)*100):.1f}%\n"
+            ),
+            inline=True
+        )
+        
+        # Top servers by member count
+        top_servers = sorted(self.guilds, key=lambda g: g.member_count, reverse=True)[:5]
+        top_list = []
+        for i, guild in enumerate(top_servers, 1):
+            bot_count = sum(1 for member in guild.members if member.bot)
+            human_count = guild.member_count - bot_count
+            top_list.append(f"{i}. **{guild.name}** - {guild.member_count:,} ({human_count:,} humans)")
+        
+        embed.add_field(
+            name="🏆 Top 5 Servers by Members",
+            value="\n".join(top_list),
+            inline=False
+        )
+        
+        # Add button to go back to server browser
+        back_view = SummaryBackView(self)
+        await interaction.response.edit_message(embed=embed, view=back_view)
+    
+    async def on_timeout(self):
+        """Disable all buttons when view times out"""
+        for item in self.children:
+            item.disabled = True
+        
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except:
+                pass
+
+class LeaveConfirmView(discord.ui.View):
+    def __init__(self, guild: discord.Guild, parent_view: ServerManagerView, author: discord.User):
+        super().__init__(timeout=60)
+        self.guild = guild
+        self.parent_view = parent_view
+        self.author = author
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only the command author can use these buttons"""
+        if interaction.user != self.author:
+            await interaction.response.send_message(
+                "❌ Only the command author can use these buttons!", 
+                ephemeral=True
+            )
+            return False
+        return True
+    
+    @discord.ui.button(label="✅ Yes, Leave", style=discord.ButtonStyle.danger)
+    async def confirm_leave(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Confirm leaving the server"""
+        try:
+            guild_name = self.guild.name
+            guild_id = self.guild.id
+            member_count = self.guild.member_count
+            
+            # Leave the server
+            await self.guild.leave()
+            
+            # Remove from parent view's guild list
+            self.parent_view.guilds.remove(self.guild)
+            
+            # Adjust current page if necessary
+            if self.parent_view.current_page >= len(self.parent_view.guilds):
+                self.parent_view.current_page = max(0, len(self.parent_view.guilds) - 1)
+            
+            # Create success embed
+            embed = discord.Embed(
+                title="✅ Successfully Left Server",
+                description=(
+                    f"**Left:** {guild_name}\n"
+                    f"**ID:** `{guild_id}`\n"
+                    f"**Members:** {member_count:,}\n\n"
+                    f"Remaining servers: {len(self.parent_view.guilds):,}"
+                ),
+                color=discord.Color.green()
+            )
+            
+            if len(self.parent_view.guilds) > 0:
+                # Update parent view and go back to server browser
+                self.parent_view.update_buttons()
+                back_view = SummaryBackView(self.parent_view)
+                await interaction.response.edit_message(embed=embed, view=back_view)
+            else:
+                # No servers left
+                embed.description += "\n\n🎉 Bot is no longer in any servers!"
+                await interaction.response.edit_message(embed=embed, view=None)
+            
+        except discord.HTTPException as e:
+            embed = discord.Embed(
+                title="❌ Failed to Leave Server",
+                description=f"Error: {e}",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+    
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel_leave(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Cancel leaving the server"""
+        embed = self.parent_view.get_server_embed(self.parent_view.current_page)
+        self.parent_view.update_buttons()
+        await interaction.response.edit_message(embed=embed, view=self.parent_view)
+
+class SummaryBackView(discord.ui.View):
+    def __init__(self, parent_view: ServerManagerView):
+        super().__init__(timeout=300)
+        self.parent_view = parent_view
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only the command author can use these buttons"""
+        if interaction.user != self.parent_view.author:
+            await interaction.response.send_message(
+                "❌ Only the command author can use these buttons!", 
+                ephemeral=True
+            )
+            return False
+        return True
+    
+    @discord.ui.button(label="🔙 Back to Server Browser", style=discord.ButtonStyle.primary)
+    async def back_to_browser(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go back to the server browser"""
+        if len(self.parent_view.guilds) > 0:
+            embed = self.parent_view.get_server_embed(self.parent_view.current_page)
+            self.parent_view.update_buttons()
+            await interaction.response.edit_message(embed=embed, view=self.parent_view)
+        else:
+            embed = discord.Embed(
+                title="No Servers Left",
+                description="The bot is no longer in any servers.",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+
+async def setup(bot):
+    await bot.add_cog(Admin(bot))
