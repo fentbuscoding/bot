@@ -527,16 +527,79 @@ class AsyncDatabase:
         
         # Process main inventory array
         inventory = user.get("inventory", [])
-        for item in inventory:
-            # Skip invalid items (strings or non-dict objects)
-            if not isinstance(item, dict):
-                self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
-                continue
-                
-            item_key = item.get("id", item.get("name", "unknown"))
-            item_counts[item_key] += item.get("quantity", 1)  # Add quantity if exists, default to 1
-            if item_key not in item_data:
-                item_data[item_key] = item.copy()
+        
+        # Check if inventory is the new object structure
+        if isinstance(inventory, dict):
+            # Process nested potions from inventory.potions
+            potions = inventory.get("potions", {})
+            for potion_id, quantity in potions.items():
+                if quantity > 0:
+                    # Load potion data from shop files
+                    try:
+                        import os
+                        import json
+                        potion_file = os.path.join(os.getcwd(), "data", "shop", "potions.json")
+                        with open(potion_file, 'r') as f:
+                            potion_data = json.load(f)
+                            
+                        if potion_id in potion_data:
+                            shop_potion = potion_data[potion_id]
+                            potion_item = {
+                                "id": potion_id,
+                                "name": shop_potion.get("name", potion_id),
+                                "description": shop_potion.get("description", ""),
+                                "type": "potion",
+                                "price": shop_potion.get("price", 0),
+                                "value": shop_potion.get("price", 0),
+                                "quantity": quantity
+                            }
+                            item_counts[potion_id] += quantity
+                            if potion_id not in item_data:
+                                item_data[potion_id] = potion_item
+                    except Exception as e:
+                        self.logger.error(f"Error loading potion data for inventory: {e}")
+            
+            # Process nested upgrades from inventory.upgrades
+            upgrades = inventory.get("upgrades", {})
+            for upgrade_id, quantity in upgrades.items():
+                if quantity > 0:
+                    # Load upgrade data from shop files
+                    try:
+                        import os
+                        import json
+                        upgrade_file = os.path.join(os.getcwd(), "data", "shop", "upgrades.json")
+                        with open(upgrade_file, 'r') as f:
+                            upgrade_data = json.load(f)
+                            
+                        if upgrade_id in upgrade_data:
+                            shop_upgrade = upgrade_data[upgrade_id]
+                            upgrade_item = {
+                                "id": upgrade_id,
+                                "name": shop_upgrade.get("name", upgrade_id),
+                                "description": shop_upgrade.get("description", ""),
+                                "type": "upgrade",
+                                "price": shop_upgrade.get("price", 0),
+                                "value": shop_upgrade.get("price", 0),
+                                "quantity": quantity
+                            }
+                            item_counts[upgrade_id] += quantity
+                            if upgrade_id not in item_data:
+                                item_data[upgrade_id] = upgrade_item
+                    except Exception as e:
+                        self.logger.error(f"Error loading upgrade data for inventory: {e}")
+                        
+        elif isinstance(inventory, list):
+            # Process legacy array inventory
+            for item in inventory:
+                # Skip invalid items (strings or non-dict objects)
+                if not isinstance(item, dict):
+                    self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
+                    continue
+                    
+                item_key = item.get("id", item.get("name", "unknown"))
+                item_counts[item_key] += item.get("quantity", 1)  # Add quantity if exists, default to 1
+                if item_key not in item_data:
+                    item_data[item_key] = item.copy()
         
         # Process legacy potions array for backward compatibility
         potions = user.get("potions", [])
@@ -772,31 +835,84 @@ class AsyncDatabase:
         if not user:
             return False
         
-        # First, try to remove from main inventory array
-        inventory = user.get("inventory", [])
-        items_to_keep = []
         remaining_to_remove = quantity
+        inventory = user.get("inventory", [])
         
-        # Filter items to keep/remove from main inventory
-        for item in inventory:
-            # Skip invalid items (strings or non-dict objects)
-            if not isinstance(item, dict):
-                self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
-                continue
-                
-            if (item.get("id") == item_id or item.get("name") == item_id) and remaining_to_remove > 0:
-                item_quantity = item.get("quantity", 1)
-                if item_quantity > remaining_to_remove:
-                    # Keep the item but reduce its quantity
-                    new_item = item.copy()
-                    new_item["quantity"] = item_quantity - remaining_to_remove
-                    items_to_keep.append(new_item)
-                    remaining_to_remove = 0
+        # Check if inventory is the new object structure
+        if isinstance(inventory, dict):
+            # Try to remove from nested potions structure
+            potions = inventory.get("potions", {})
+            if item_id in potions:
+                current_qty = potions[item_id]
+                if current_qty >= remaining_to_remove:
+                    new_qty = current_qty - remaining_to_remove
+                    if new_qty <= 0:
+                        # Remove the potion entirely
+                        result = await self.db.users.update_one(
+                            {"_id": str(user_id)},
+                            {"$unset": {f"inventory.potions.{item_id}": ""}}
+                        )
+                    else:
+                        # Decrease the quantity
+                        result = await self.db.users.update_one(
+                            {"_id": str(user_id)},
+                            {"$set": {f"inventory.potions.{item_id}": new_qty}}
+                        )
+                    return result.modified_count > 0
+            
+            # Try to remove from nested upgrades structure
+            upgrades = inventory.get("upgrades", {})
+            if item_id in upgrades:
+                current_qty = upgrades[item_id]
+                if current_qty >= remaining_to_remove:
+                    new_qty = current_qty - remaining_to_remove
+                    if new_qty <= 0:
+                        # Remove the upgrade entirely
+                        result = await self.db.users.update_one(
+                            {"_id": str(user_id)},
+                            {"$unset": {f"inventory.upgrades.{item_id}": ""}}
+                        )
+                    else:
+                        # Decrease the quantity
+                        result = await self.db.users.update_one(
+                            {"_id": str(user_id)},
+                            {"$set": {f"inventory.upgrades.{item_id}": new_qty}}
+                        )
+                    return result.modified_count > 0
+                    
+        elif isinstance(inventory, list):
+            # Handle legacy array inventory
+            items_to_keep = []
+            
+            # Filter items to keep/remove from main inventory
+            for item in inventory:
+                # Skip invalid items (strings or non-dict objects)
+                if not isinstance(item, dict):
+                    self.logger.warning(f"Found invalid inventory item for user {user_id}: {type(item)} - {item}")
+                    continue
+                    
+                if (item.get("id") == item_id or item.get("name") == item_id) and remaining_to_remove > 0:
+                    item_quantity = item.get("quantity", 1)
+                    if item_quantity > remaining_to_remove:
+                        # Keep the item but reduce its quantity
+                        new_item = item.copy()
+                        new_item["quantity"] = item_quantity - remaining_to_remove
+                        items_to_keep.append(new_item)
+                        remaining_to_remove = 0
+                    else:
+                        # Remove the entire item (or reduce quantity to 0)
+                        remaining_to_remove -= item_quantity
                 else:
-                    # Remove the entire item (or reduce quantity to 0)
-                    remaining_to_remove -= item_quantity
-            else:
-                items_to_keep.append(item.copy())
+                    items_to_keep.append(item.copy())
+            
+            # Update the main inventory if we modified it
+            if len(items_to_keep) != len(inventory):
+                result = await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$set": {"inventory": items_to_keep}}
+                )
+                if result.modified_count > 0 and remaining_to_remove == 0:
+                    return True
         
         # If we still need to remove items, check legacy potions array
         if remaining_to_remove > 0:
@@ -830,17 +946,8 @@ class AsyncDatabase:
                     {"$set": {"potions": potions_to_keep}}
                 )
         
-        # Update the main inventory if we modified it
-        if len(items_to_keep) != len(inventory):
-            result = await self.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$set": {"inventory": items_to_keep}}
-            )
-        else:
-            result = type('Result', (), {'modified_count': 1})()  # Fake successful result
-        
         # Return True if we successfully removed the requested quantity
-        return remaining_to_remove == 0 and (result.modified_count > 0 or len(items_to_keep) != len(inventory))
+        return remaining_to_remove == 0
 
     async def add_fishing_item(self, user_id: int, item: dict, item_type: str) -> bool:
         """Add a fishing item (rod or bait) to user's inventory"""

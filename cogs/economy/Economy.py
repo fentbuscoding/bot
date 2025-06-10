@@ -1170,8 +1170,18 @@ class Economy(commands.Cog):
         await ctx.reply(embed=embed)
     
     async def _find_item_in_inventory(self, inventory, item_name):
-        """Find an item in inventory by name or partial match"""
+        """Find an item in inventory by name, partial match, or alias"""
         item_name = item_name.lower().strip()
+        
+        # Load potion data for alias matching
+        try:
+            import os
+            import json
+            potion_file = os.path.join(os.getcwd(), "data", "shop", "potions.json")
+            with open(potion_file, 'r') as f:
+                potion_data = json.load(f)
+        except Exception:
+            potion_data = {}
         
         # Exact name match first
         for item in inventory:
@@ -1179,6 +1189,16 @@ class Economy(commands.Cog):
                 continue
             if item.get('name', '').lower() == item_name:
                 return item
+        
+        # Alias match for potions
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get('id', '')
+            if item_id in potion_data:
+                aliases = potion_data[item_id].get('aliases', [])
+                if item_name in [alias.lower() for alias in aliases]:
+                    return item
         
         # Partial name match
         for item in inventory:
