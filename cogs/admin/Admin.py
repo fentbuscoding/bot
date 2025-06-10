@@ -852,7 +852,7 @@ class Admin(commands.Cog):
             self.logger.error(f"Failed to reset user {user.id}: {e}")
             await ctx.reply(f"❌ Error resetting user: {e}")
 
-    @commands.command(name="rnb", aliases=["rodandbait"])
+    @commands.command(name="rnb", aliases=["rodandbait"], hidden=True)
     @commands.is_owner()
     async def give_all_rods_and_bait(self, ctx, user: discord.Member = None, bait_amount: int = 10, rod_amount: int = 1):
         """Give a user every rod and every bait for testing purposes
@@ -870,6 +870,59 @@ class Admin(commands.Cog):
             total_bait_given = 0
             failed_items = []
             
+            # First, ensure the user has proper inventory structure
+            user_doc = await db.db.users.find_one({"_id": str(target_user.id)})
+            
+            # If user doesn't exist or has broken inventory, fix it first
+            if not user_doc or not isinstance(user_doc.get("inventory"), dict):
+                await db.db.users.update_one(
+                    {"_id": str(target_user.id)},
+                    {
+                        "$set": {
+                            "inventory": {
+                                "rod": {},
+                                "bait": {},
+                                "potions": {},
+                                "upgrades": {}
+                            }
+                        },
+                        "$setOnInsert": {"wallet": 0}
+                    },
+                    upsert=True
+                )
+            elif isinstance(user_doc.get("inventory"), list):
+                # Convert old list format to nested dict
+                new_inventory = {"rod": {}, "bait": {}, "potions": {}, "upgrades": {}}
+                
+                # Migrate existing items if any
+                for item in user_doc["inventory"]:
+                    if isinstance(item, dict) and "type" in item:
+                        item_type = item["type"]
+                        item_id = item.get("id", item.get("_id", "unknown"))
+                        quantity = item.get("quantity", item.get("amount", 1))
+                        
+                        if item_type in new_inventory:
+                            new_inventory[item_type][item_id] = quantity
+                
+                await db.db.users.update_one(
+                    {"_id": str(target_user.id)},
+                    {"$set": {"inventory": new_inventory}}
+                )
+            else:
+                # Ensure all required sections exist
+                inventory = user_doc.get("inventory", {})
+                updates = {}
+                
+                for section in ["rod", "bait", "potions", "upgrades"]:
+                    if section not in inventory:
+                        updates[f"inventory.{section}"] = {}
+                
+                if updates:
+                    await db.db.users.update_one(
+                        {"_id": str(target_user.id)},
+                        {"$set": updates}
+                    )
+            
             # Give all rods
             rods_file = "data/shop/rods.json"
             if os.path.exists(rods_file):
@@ -878,21 +931,22 @@ class Admin(commands.Cog):
                 
                 for rod_id in rods_data.keys():
                     try:
-                        # Use the Shop cog's inventory system
+                        # Use $set instead of $inc to avoid path conflicts
+                        # First check current amount, then set the new amount
+                        user_doc = await db.db.users.find_one({"_id": str(target_user.id)})
+                        current_amount = user_doc.get("inventory", {}).get("rod", {}).get(rod_id, 0)
+                        new_amount = current_amount + rod_amount
+                        
                         result = await db.db.users.update_one(
                             {"_id": str(target_user.id)},
-                            {
-                                "$inc": {f"inventory.rod.{rod_id}": rod_amount},
-                                "$setOnInsert": {"inventory": {}, "wallet": 0}
-                            },
-                            upsert=True
+                            {"$set": {f"inventory.rod.{rod_id}": new_amount}}
                         )
-                        if result.modified_count > 0 or result.upserted_id:
+                        if result.modified_count > 0:
                             total_rods_given += 1
                         else:
                             failed_items.append(f"rod: {rod_id}")
                     except Exception as e:
-                        failed_items.append(f"rod: {rod_id} (error: {str(e)[:20]})")
+                        failed_items.append(f"rod: {rod_id} (error: {str(e)[:30]})")
             
             # Give all bait
             bait_file = "data/shop/bait.json"
@@ -902,21 +956,22 @@ class Admin(commands.Cog):
                 
                 for bait_id in bait_data.keys():
                     try:
-                        # Use the Shop cog's inventory system
+                        # Use $set instead of $inc to avoid path conflicts
+                        # First check current amount, then set the new amount
+                        user_doc = await db.db.users.find_one({"_id": str(target_user.id)})
+                        current_amount = user_doc.get("inventory", {}).get("bait", {}).get(bait_id, 0)
+                        new_amount = current_amount + bait_amount
+                        
                         result = await db.db.users.update_one(
                             {"_id": str(target_user.id)},
-                            {
-                                "$inc": {f"inventory.bait.{bait_id}": bait_amount},
-                                "$setOnInsert": {"inventory": {}, "wallet": 0}
-                            },
-                            upsert=True
+                            {"$set": {f"inventory.bait.{bait_id}": new_amount}}
                         )
-                        if result.modified_count > 0 or result.upserted_id:
+                        if result.modified_count > 0:
                             total_bait_given += 1
                         else:
                             failed_items.append(f"bait: {bait_id}")
                     except Exception as e:
-                        failed_items.append(f"bait: {bait_id} (error: {str(e)[:20]})")
+                        failed_items.append(f"bait: {bait_id} (error: {str(e)[:30]})")
             
             # Create success embed
             embed = discord.Embed(
