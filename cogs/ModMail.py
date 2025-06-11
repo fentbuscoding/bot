@@ -114,8 +114,14 @@ class ModMail(commands.Cog, ErrorHandler):
             # Ensure required structures exist
             if "stats" not in data:
                 data["stats"] = {}
+            
+            # Handle guilds structure - could be list (old format) or dict (new format)
             if "guilds" not in data:
-                data["guilds"] = []
+                data["guilds"] = {"count": 0, "list": []}
+            elif isinstance(data["guilds"], list):
+                # Convert old list format to new dict format
+                guild_list = data["guilds"]
+                data["guilds"] = {"count": len(guild_list), "list": guild_list}
             
             # Initialize guild stats if not exists
             guild_id = str(message.guild.id)
@@ -130,9 +136,12 @@ class ModMail(commands.Cog, ErrorHandler):
             data["stats"][guild_id]["messages"] += 1
             data["stats"][guild_id]["last_message"] = datetime.datetime.now().isoformat()
             
-            # Ensure guild is in guilds list
-            if guild_id not in data["guilds"]:
-                data["guilds"].append(guild_id)
+            # Ensure guild is in guilds list (handle both formats)
+            guild_list = data["guilds"]["list"] if isinstance(data["guilds"], dict) else data["guilds"]
+            if guild_id not in guild_list:
+                guild_list.append(guild_id)
+                if isinstance(data["guilds"], dict):
+                    data["guilds"]["count"] = len(guild_list)
             
             # Save the updated data
             with open(stats_file, "w") as f:

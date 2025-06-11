@@ -105,51 +105,91 @@ class BronxBot(commands.AutoShardedBot):
 
     @tasks.loop(seconds=30)
     async def update_stats(self):
-        """Update bot stats"""
-        # Remove web interface stats update
+        """Update bot stats and send to dashboard"""
         try:
+            # Calculate uptime
+            current_time = time.time()
+            uptime_seconds = int(current_time - self.start_time)
+            uptime_days = uptime_seconds // 86400
+            uptime_hours = (uptime_seconds % 86400) // 3600
+            uptime_minutes = (uptime_seconds % 3600) // 60
+            
+            # Get command metrics from tracker if available
+            command_stats = {}
+            daily_commands = 0
+            total_commands = 0
+            
+            try:
+                # Try to get command stats from tracker
+                if hasattr(usage_tracker, 'get_daily_stats'):
+                    daily_commands = usage_tracker.get_daily_stats()
+                if hasattr(usage_tracker, 'get_total_commands'):
+                    total_commands = usage_tracker.get_total_commands()
+                if hasattr(usage_tracker, 'get_command_breakdown'):
+                    command_stats = usage_tracker.get_command_breakdown()
+            except:
+                pass
+            
             stats = {
-                'server_count': len(self.guilds),
-                'user_count': sum((g.member_count or 0) for g in self.guilds),
-                'uptime': int(time.time() - self.start_time),
-                'latency': round(self.latency * 1000, 2),
-                'guilds': [str(g.id) for g in self.guilds],
-                'shard_count': self.shard_count,
-                'shard_stats': {
-                    str(shard_id): {
-                        'status': 'online',
-                        'latency': shard.latency * 1000,
-                        'guild_count': len([g for g in self.guilds if (g.id >> 22) % self.shard_count == shard_id]),
-                        'uptime': int(time.time() - self.start_time)
-                    }
-                    for shard_id, shard in enumerate(self.shards.values())
-                }
+                'uptime': {
+                    'days': uptime_days,
+                    'hours': uptime_hours,
+                    'minutes': uptime_minutes,
+                    'total_seconds': uptime_seconds,
+                    'start_time': self.start_time
+                },
+                'guilds': {
+                    'count': len(self.guilds),
+                    'list': [str(g.id) for g in self.guilds]
+                },
+                'commands': {
+                    'daily_count': daily_commands,
+                    'total_executed': total_commands,
+                    'command_types': command_stats
+                },
+                'performance': {
+                    'latency': round(self.latency * 1000, 2),
+                    'user_count': sum((g.member_count or 0) for g in self.guilds),
+                    'shard_count': self.shard_count or 1
+                },
+                'timestamp': current_time
             }
+            
             # Store stats locally
             with open('data/stats.json', 'w') as f:
                 json.dump(stats, f, indent=2)
             
-            # Send stats to both prod and dev environments
+            # Send stats to dashboard endpoints
             async with aiohttp.ClientSession() as session:
-                endpoints = {
-                    'prod': 'https://bronxbot.onrender.com/api/stats',
-                    #'dev': 'http://localhost:5000/api/stats'
-                }
+                # Determine the dashboard URL based on environment
+                dashboard_urls = []
                 
-                for env, url in endpoints.items():
+                # Always try to update production dashboard
+                dashboard_urls.append('https://bronxbot.onrender.com/api/stats/update')
+                
+                # Also try localhost if in development
+                if dev:
+                    dashboard_urls.append('http://localhost:5000/api/stats/update')
+                
+                for url in dashboard_urls:
                     try:
-                        async with session.post(url, json=stats) as resp:
-                            result = await resp.text()
+                        async with session.post(url, json=stats, timeout=10) as resp:
                             if resp.status == 200:
-                                #logging.info(f"[{env.upper()}] Stats updated successfully: {result}")
-                                pass
+                                result = await resp.json()
+                                logging.info(f"Stats updated successfully to {url}")
                             else:
-                                logging.error(f"[{env.upper()}] Failed to update stats: {resp.status} - {result}")
+                                error_text = await resp.text()
+                                logging.warning(f"Failed to update stats to {url}: {resp.status} - {error_text}")
                                 
+                    except asyncio.TimeoutError:
+                        logging.warning(f"Timeout updating stats to {url}")
                     except Exception as e:
-                        logging.error(f"[{env.upper()}] Failed to update stats: {e}")
+                        logging.error(f"Error updating stats to {url}: {e}")
+                        
         except Exception as e:
-            logging.error(f"Error updating stats: {e}")
+            logging.error(f"Error in update_stats loop: {e}")
+            import traceback
+            traceback.print_exc()
 
     @update_stats.before_loop
     async def before_update_stats(self):
@@ -631,7 +671,7 @@ if __name__ == "__main__":
         system("clear" if os.name == "posix" else "cls")
         if os.name == "posix":
             sys.stdout.write("\x1b]2;BronxBot (DEV)\x07")
-        bot.run(config['DEV_TOKEN'], log_handler=None)  # Disable default discord.py logging
+        bot.run(config['TOKEN'], log_handler=None)  # Disable default discord.py logging
     else:
         try:
             system("clear" if os.name == "posix" else "cls")
