@@ -26,7 +26,7 @@ class FishInventoryPaginator(discord.ui.View):
         self.prev_button.disabled = self.total_pages <= 1
         self.next_button.disabled = self.total_pages <= 1
     
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -44,7 +44,7 @@ class FishInventoryPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -192,7 +192,7 @@ class GlobalFishPaginator(discord.ui.View):
         self.prev_button.disabled = self.total_pages <= 1
         self.next_button.disabled = self.total_pages <= 1
     
-    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.total_pages <= 1:
             return
@@ -206,8 +206,8 @@ class GlobalFishPaginator(discord.ui.View):
         self.update_buttons()
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.total_pages <= 1:
             return
@@ -266,16 +266,27 @@ class RodPaginator(discord.ui.View):
         self.total_pages = math.ceil(len(user_rods) / 3) if user_rods else 1
         self.message = None
         self.update_buttons()
-        
-        # Add rod select dropdown
-        self.add_item(RodSelect(user_rods, active_rod_id, fishing_cog))
     
     def update_buttons(self):
         """Update button states - buttons are never disabled for wrap-around navigation"""
         self.prev_button.disabled = self.total_pages <= 1
         self.next_button.disabled = self.total_pages <= 1
-    
-    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+        
+        # Clear items and re-add with proper row assignment
+        self.clear_items()
+        
+        # Row 0: Navigation buttons
+        self.prev_button.row = 0
+        self.next_button.row = 0
+        self.add_item(self.prev_button)
+        self.add_item(self.next_button)
+        
+        # Row 1: Rod select dropdown
+        rod_select = RodSelect(self.user_rods, self.active_rod_id, self.fishing_cog)
+        rod_select.row = 1
+        self.add_item(rod_select)
+
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -292,8 +303,8 @@ class RodPaginator(discord.ui.View):
         self.update_buttons()
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -397,16 +408,27 @@ class BaitPaginator(discord.ui.View):
         self.total_pages = math.ceil(len(user_bait) / 3) if user_bait else 1
         self.message = None
         self.update_buttons()
-        
-        # Add bait select dropdown
-        self.add_item(BaitSelect(user_bait, active_bait_id))
     
     def update_buttons(self):
         """Update button states - buttons are never disabled for wrap-around navigation"""
         self.prev_button.disabled = self.total_pages <= 1
         self.next_button.disabled = self.total_pages <= 1
+        
+        # Clear items and re-add with proper row assignment
+        self.clear_items()
+        
+        # Row 0: Navigation buttons
+        self.prev_button.row = 0
+        self.next_button.row = 0
+        self.add_item(self.prev_button)
+        self.add_item(self.next_button)
+        
+        # Row 1: Bait select dropdown
+        bait_select = BaitSelect(self.user_bait, self.active_bait_id)
+        bait_select.row = 1
+        self.add_item(bait_select)
     
-    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -424,7 +446,7 @@ class BaitPaginator(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
@@ -530,7 +552,7 @@ class InteractiveFishSeller(discord.ui.View):
         self.currency = currency
         self.selling_cog = selling_cog
         self.current_page = 1
-        self.items_per_page = 3  # Reduced to 3 to prevent Discord UI overflow
+        self.items_per_page = 5  # Increased from 3 to 5 since we have better layout
         self.total_pages = math.ceil(len(user_fish) / self.items_per_page) if user_fish else 1
         self.message = None
         self.update_buttons()
@@ -545,17 +567,17 @@ class InteractiveFishSeller(discord.ui.View):
         end_idx = start_idx + self.items_per_page
         page_fish = self.user_fish[start_idx:end_idx]
         
-        # Remove old sell buttons
+        # Remove old items
         self.clear_items()
         
-        # Row 0: Navigation buttons (max 5 per row)
+        # Row 0: Navigation buttons only
         self.prev_button.row = 0
         self.next_button.row = 0
         self.add_item(self.prev_button)
         self.add_item(self.next_button)
         
-        # Row 1: Sell buttons for current page fish (max 3 to leave room for navigation)
-        for i, fish in enumerate(page_fish[:3]):  # Limit to 3 fish per page to avoid overflow
+        # Row 1: Individual fish sell buttons (up to 5 per page now)
+        for i, fish in enumerate(page_fish[:5]):  # Increased to 5 since we have full row
             button = discord.ui.Button(
                 label=f"Sell #{start_idx + i + 1}",
                 style=discord.ButtonStyle.red,
@@ -572,14 +594,25 @@ class InteractiveFishSeller(discord.ui.View):
                 label="💸 Sell All Fish",
                 style=discord.ButtonStyle.danger,
                 emoji="🐟",
-                row=3
+                row=2
             )
             sell_all_button.callback = self.sell_all_fish
             self.add_item(sell_all_button)
+            
+            # Refresh button to update rarity dropdown
+            refresh_button = discord.ui.Button(
+                label="🔄 Refresh",
+                style=discord.ButtonStyle.secondary,
+                emoji="🔄",
+                row=2
+            )
+            refresh_button.callback = self.refresh_view
+            self.add_item(refresh_button)
         
-        # Row 2: Rarity select dropdown (defined in RaritySelect constructor)
+        # Row 3: Rarity select dropdown (on its own row for clarity)
         if len(self.user_fish) > 0:
             rarity_select = RaritySelect(self.user_id, self.user_fish, self.currency, self.selling_cog)
+            rarity_select.row = 3
             self.add_item(rarity_select)
     
     def create_sell_callback(self, fish):
@@ -623,7 +656,7 @@ class InteractiveFishSeller(discord.ui.View):
         
         return sell_callback
     
-    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your fish!", ephemeral=True)
@@ -641,7 +674,7 @@ class InteractiveFishSeller(discord.ui.View):
         embed = await self.create_embed()
         await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your fish!", ephemeral=True)
@@ -667,7 +700,7 @@ class InteractiveFishSeller(discord.ui.View):
         
         embed = discord.Embed(
             title="💰 Interactive Fish Seller",
-            description="• Click **Sell** buttons to sell individual fish\n• Use **💸 Sell All Fish** to sell everything\n• Use the dropdown to sell by rarity\n• Navigate with ◀️ ▶️ buttons",
+            description="• Click **Sell** buttons to sell individual fish\n• Use **💸 Sell All Fish** to sell everything\n• Use the dropdown to sell by rarity\n• Use **🔄 Refresh** to update the rarity dropdown\n• Navigate with ⬅️ ➡️ buttons",
             color=0x2b2d31
         )
         
@@ -748,6 +781,16 @@ class InteractiveFishSeller(discord.ui.View):
                 
         except Exception as e:
             await interaction.response.send_message("❌ An error occurred while selling fish!", ephemeral=True)
+    
+    async def refresh_view(self, interaction: discord.Interaction):
+        """Refresh the view to update rarity dropdown and buttons"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your fish market!", ephemeral=True)
+        
+        # Update buttons to refresh rarity dropdown with current fish
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class RaritySelect(discord.ui.Select):
     """Dropdown for selecting rarity to sell"""
@@ -839,9 +882,9 @@ class RaritySelect(discord.ui.Select):
                     if parent_view.current_page > parent_view.total_pages:
                         parent_view.current_page = max(1, parent_view.total_pages)
                     
-                    # Update the parent view
+                    # Update the parent view with refreshed dropdown
                     if parent_view.user_fish:
-                        parent_view.update_buttons()
+                        parent_view.update_buttons()  # This will create a new RaritySelect with updated fish
                         parent_embed = await parent_view.create_embed()
                         await interaction.edit_original_response(embed=parent_embed, view=parent_view)
                     else:

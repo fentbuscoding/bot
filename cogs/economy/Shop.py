@@ -255,55 +255,30 @@ class Shop(commands.Cog):
 
     async def add_item_to_inventory(self, user_id: int, item_id: str, item_type: str, amount: int = 1) -> bool:
         """Add an item to user's inventory"""
-        if item_type in ["rod", "bait", "potion", "upgrade"]:
-            # For structured items (rods, bait, potions, upgrades), use nested inventory structure
-            # First ensure the user document exists with proper inventory structure
-            await db.db.users.update_one(
-                {"_id": str(user_id)},
-                {
-                    "$setOnInsert": {
-                        "inventory": {},
-                        "wallet": 0
-                    }
-                },
-                upsert=True
-            )
-            
-            # Ensure the inventory is an object, not an array (fix existing broken inventories)
-            user_doc = await db.db.users.find_one({"_id": str(user_id)})
-            if user_doc and isinstance(user_doc.get("inventory"), list):
-                # Convert array inventory to object structure
-                await db.db.users.update_one(
-                    {"_id": str(user_id)},
-                    {"$set": {"inventory": {}}}
-                )
-            
-            # Use proper nested structure for each item type
-            if item_type == "potion":
-                inventory_field = f"inventory.potions.{item_id}"
-            elif item_type == "upgrade":
-                inventory_field = f"inventory.upgrades.{item_id}"
-            else:
-                inventory_field = f"inventory.{item_type}.{item_id}"
-            
-            result = await db.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$inc": {inventory_field: amount}},
-                upsert=True
-            )
-            return result.modified_count > 0 or result.upserted_id is not None
-            
-        else:
-            # For general items, use the old method to maintain compatibility
-            if item_type == "item":
-                item_type = "items"  # Adjust for legacy compatibility
-            
-            result = await db.db.users.update_one(
-                {"_id": str(user_id)},
-                {"$push": {item_type: {"id": item_id, "amount": amount}}},
-                upsert=True
-            )
-            return result.modified_count > 0 or result.upserted_id is not None
+        # Get the actual item data to pass to the database function
+        item = self.get_item(item_id, item_type)
+        if not item:
+            return False
+        
+        # Create item dict for database
+        item_dict = {
+            "id": item_id,
+            "name": item.get("name", item_id.replace("_", " ").title()),
+            "description": item.get("description", ""),
+            "price": item.get("price", 0),
+            "value": item.get("value", item.get("price", 0)),
+            "type": item_type
+        }
+        
+        # Add any specific fields for different item types
+        if item_type == "upgrade":
+            if "upgrade_type" in item:
+                item_dict["upgrade_type"] = item["upgrade_type"]
+            if "amount" in item:
+                item_dict["amount"] = item["amount"]
+        
+        # Use the proper database function
+        return await db.add_to_inventory(user_id, None, item_dict, amount)
 
     async def process_purchase(self, user_id: int, item_id: str, amount: int, item_type: str) -> bool:
         """Process a purchase transaction"""

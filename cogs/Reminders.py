@@ -240,9 +240,9 @@ class Reminders(commands.Cog, ErrorHandler):
                     "• `s` = seconds\n\n"
                     "**Examples:**\n"
                     "• `.remind 1h 30m Check the oven`\n"
-                    "• `.remind 2 days Call mom`\n"
+                    "• `.remind 2 days 4 hours Call mom`\n"
                     "• `.remind 1Y 6M Renew passport`\n"
-                    "• `.remind 14d5M Meeting`\n\n"
+                    "• `.remind 14d5M Meeting with boss`\n\n"
                     "**Important:** Capital `M` = months, lowercase `m` = minutes!"
                 ),
                 color=0x2b2d31
@@ -388,7 +388,7 @@ class Reminders(commands.Cog, ErrorHandler):
             
             embed = discord.Embed(
                 title="⏰ Your Active Reminders",
-                description=f"You have {len(reminders)} active reminder{'s' if len(reminders) != 1 else ''}",
+                description=f"You have {len(reminders)} active reminder{'s' if len(reminders) != 1 else ''}\n\n*Use the reminder numbers with `.editreminder` or `.cancelreminder`*",
                 color=0x2b2d31
             )
             
@@ -409,7 +409,7 @@ class Reminders(commands.Cog, ErrorHandler):
                     message = message[:97] + "..."
                 
                 embed.add_field(
-                    name=f"#{i}",
+                    name=f"Reminder #{i}",
                     value=f"**{message}**\n{due_str}",
                     inline=False
                 )
@@ -544,6 +544,189 @@ class Reminders(commands.Cog, ErrorHandler):
             )
             await ctx.reply(embed=embed)
     
+    @commands.command(aliases=['editreminder', 'modifyreminder'])
+    async def edit_reminder(self, ctx, reminder_number: int = None, *, new_args: str = None):
+        """
+        Edit an existing reminder by number.
+        
+        **Usage:** `.editreminder <number> <new_time> <new_message>`
+        
+        **Examples:**
+        • `.editreminder 1 2h 30m Updated reminder message`
+        • `.editreminder 2 1d Call mom instead of dad`
+        
+        Use `.myreminders` to see your reminder numbers.
+        """
+        if reminder_number is None or new_args is None:
+            embed = discord.Embed(
+                title="⏰ Edit Reminder Help",
+                description=(
+                    "**Usage:** `.editreminder <number> <new_time> <new_message>`\n\n"
+                    "**Examples:**\n"
+                    "• `.editreminder 1 2h 30m Updated message`\n"
+                    "• `.editreminder 2 1d Call mom instead`\n\n"
+                    "Use `.myreminders` to see your reminder numbers."
+                ),
+                color=0x2b2d31
+            )
+            return await ctx.reply(embed=embed)
+        
+        try:
+            if not await db.ensure_connected():
+                embed = discord.Embed(
+                    description="❌ Database connection failed!",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Get user's reminders sorted by due time
+            reminders = await db.db.reminders.find({
+                "user_id": ctx.author.id
+            }).sort("due_time", 1).to_list(None)
+            
+            if not reminders:
+                embed = discord.Embed(
+                    description="❌ You don't have any active reminders!",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            if reminder_number < 1 or reminder_number > len(reminders):
+                embed = discord.Embed(
+                    description=f"❌ Invalid reminder number! You have {len(reminders)} reminder{'s' if len(reminders) != 1 else ''}.",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Get the reminder to edit
+            reminder_to_edit = reminders[reminder_number - 1]
+            old_message = reminder_to_edit["message"]
+            
+            # Parse new time and message (same logic as remind command)
+            words = new_args.split()
+            time_parts = []
+            message_parts = []
+            
+            # Look for time patterns at the beginning
+            for i, word in enumerate(words):
+                # Check if this word looks like a time specification
+                if re.match(r'^\d+[a-zA-Z]+$', word) or re.match(r'^\d+$', word):
+                    time_parts.append(word)
+                elif word.lower() in ['year', 'years', 'month', 'months', 'day', 'days', 
+                                    'hour', 'hours', 'minute', 'minutes', 'second', 'seconds']:
+                    time_parts.append(word)
+                else:
+                    # This doesn't look like time, rest is message
+                    message_parts = words[i:]
+                    break
+            
+            if not time_parts:
+                embed = discord.Embed(
+                    description="❌ Please specify a time! Example: `.editreminder 1 1h 30m New message`",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            time_str = " ".join(time_parts)
+            new_message = " ".join(message_parts) if message_parts else "You asked me to remind you, but didn't give me a reason."
+            
+            # Parse the time
+            seconds = self.parse_time_string(time_str)
+            if seconds is None:
+                embed = discord.Embed(
+                    title="❌ Invalid Time Format",
+                    description=(
+                        "Please use valid time units:\n"
+                        "• `Y` = years, `M` = months (capital M), `d` = days\n"
+                        "• `h` = hours, `m` = minutes (lowercase m), `s` = seconds\n\n"
+                        "**Examples:**\n"
+                        "• `1h 30m` • `2 days` • `1Y 6M` • `14d5M`\n\n"
+                        "**Remember:** Capital `M` = months, lowercase `m` = minutes!"
+                    ),
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Check limits
+            if seconds <= 0:
+                embed = discord.Embed(
+                    description="❌ Time must be positive!",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Maximum 2 years
+            max_seconds = 2 * 365 * 24 * 3600  # 2 years
+            if seconds > max_seconds:
+                embed = discord.Embed(
+                    description="❌ Maximum reminder time is 2 years!",
+                    color=discord.Color.red()
+                )
+                return await ctx.reply(embed=embed)
+            
+            # Calculate new due time
+            new_due_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+            
+            # Update reminder in database
+            result = await db.db.reminders.update_one(
+                {"_id": reminder_to_edit["_id"]},
+                {
+                    "$set": {
+                        "message": new_message,
+                        "due_time": new_due_time,
+                        "original_time": time_str,
+                        "edited_at": datetime.datetime.now()
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                formatted_duration = self.format_time_duration(seconds)
+                
+                embed = discord.Embed(
+                    title="✅ Reminder Updated",
+                    description=f"Updated reminder #{reminder_number}",
+                    color=discord.Color.green(),
+                    timestamp=new_due_time
+                )
+                
+                embed.add_field(
+                    name="📝 Old Message",
+                    value=f"`{old_message[:200]}{'...' if len(old_message) > 200 else ''}`",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="📝 New Message",
+                    value=f"`{new_message[:200]}{'...' if len(new_message) > 200 else ''}`",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="⏰ New Schedule",
+                    value=f"Due in **{formatted_duration}**",
+                    inline=False
+                )
+                
+                embed.set_footer(text="New reminder scheduled for")
+                
+                await ctx.reply(embed=embed)
+                self.logger.info(f"Updated reminder #{reminder_number} for user {ctx.author.id}: '{old_message}' -> '{new_message}' in {formatted_duration}")
+            else:
+                embed = discord.Embed(
+                    description="❌ Failed to update reminder!",
+                    color=discord.Color.red()
+                )
+                await ctx.reply(embed=embed)
+                
+        except Exception as e:
+            self.logger.error(f"Error editing reminder: {e}")
+            embed = discord.Embed(
+                description="❌ An error occurred while editing the reminder!",
+                color=discord.Color.red()
+            )
+            await ctx.reply(embed=embed)
+
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if ctx.command and ctx.command.cog_name == self.__class__.__name__:

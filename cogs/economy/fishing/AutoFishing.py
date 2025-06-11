@@ -412,9 +412,6 @@ class AutoFishing(commands.Cog):
                             }},
                             upsert=True
                         )
-                        await interaction.response.send_message(
-                            f"✅ Successfully purchased autofisher #{new_count:,}!", ephemeral=True
-                        )
                         
                         # Update the original embed
                         embed.set_field_at(0, name="Autofishers", value=f"{new_count:,}/{self.MAX_AUTOFISHERS}", inline=True)
@@ -426,7 +423,10 @@ class AutoFishing(commands.Cog):
                             embed.set_field_at(-1, name="Status", value="Maximum autofishers reached!", inline=False)
                             view.clear_items()
                         
-                        await interaction.edit_original_response(embed=embed, view=view)
+                        # Add success message to embed description
+                        embed.description = f"✅ Successfully purchased autofisher #{new_count:,}!"
+                        
+                        await interaction.response.edit_message(embed=embed, view=view)
                     else:
                         await interaction.response.send_message("❌ Failed to purchase autofisher!", ephemeral=True)
                 

@@ -789,7 +789,7 @@ class Bazaar(commands.Cog):
         
         # Add item to inventory
         clean_item = {
-            "id": item["id"],
+            "id": item.get("id", item["id"] if "id" in item else item["name"].lower().replace(" ", "_")),
             "name": item["name"],
             "description": item.get("description", ""),
             "price": price,
@@ -798,7 +798,7 @@ class Bazaar(commands.Cog):
             "secret_item": True
         }
         
-        success = await db.add_to_inventory(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None, clean_item)
+        success = await db.add_to_inventory(ctx.author.id, ctx.guild.id if hasattr(ctx, 'guild') else None, clean_item, 1)
         
         if not success:
             # Refund if failed

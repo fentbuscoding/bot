@@ -356,11 +356,11 @@ class TradeConfirmationView(discord.ui.View):
                 # Add to target
                 if not await db.add_to_inventory(self.trade_offer.target_id, 
                                             self.trade_offer.guild_id, 
-                                            item):
+                                            item, 1):
                     # If adding fails, try to return item to initiator
                     await db.add_to_inventory(self.trade_offer.initiator_id, 
                                         self.trade_offer.guild_id, 
-                                        item)
+                                        item, 1)
                     return False
             
             # Remove items from target, add to initiator
@@ -374,11 +374,11 @@ class TradeConfirmationView(discord.ui.View):
                 # Add to initiator
                 if not await db.add_to_inventory(self.trade_offer.initiator_id, 
                                             self.trade_offer.guild_id, 
-                                            item):
+                                            item, 1):
                     # If adding fails, try to return item to target
                     await db.add_to_inventory(self.trade_offer.target_id, 
                                         self.trade_offer.guild_id, 
-                                        item)
+                                        item, 1)
                     return False
             
             # Exchange currency

@@ -81,7 +81,7 @@ class FishingInventory(commands.Cog, name="FishingInventory"):
         try:
             result = await db.db.users.update_one(
                 {"_id": str(user_id)},
-                {"$set": {"active_fishing_gear.rod": rod_id}},
+                {"$set": {"active_fishing.rod": rod_id}},
                 upsert=True
             )
             return result.modified_count > 0 or result.upserted_id is not None

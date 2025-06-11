@@ -30,7 +30,7 @@ class HelpPaginator(discord.ui.View):
         if len(self.pages) > 1:
             self.page_info.label = f"{self.current_page + 1}/{len(self.pages)}"
     
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, custom_id="prev")
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary, custom_id="prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.author:
             return await interaction.response.send_message("This isn't your help menu!", ephemeral=True)
@@ -43,7 +43,7 @@ class HelpPaginator(discord.ui.View):
     async def page_info(self, interaction: discord.Interaction, button: discord.ui.Button):
         pass  # This button is just for display
     
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, custom_id="next")
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary, custom_id="next")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.author:
             return await interaction.response.send_message("This isn't your help menu!", ephemeral=True)
