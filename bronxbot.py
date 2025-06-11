@@ -501,7 +501,8 @@ async def on_command(ctx):
         'tos', 'terms', 'termsofservice', 'tosinfo', 'tosdetails',  # TOS related
         'help', 'h', 'commands',  # Help command and aliases
         'support', 'invite',  # Support commands
-        'ping', 'pong'  # Basic utility
+        'ping', 'pong',  # Basic utility
+        'balance', 'bal', 'cash', 'bb'  # Balance commands - don't require ToS
     ]
     
     if ctx.command.name not in exempt_commands:
@@ -569,6 +570,20 @@ async def on_message_edit(before, after):
     # Only process if the edited message starts with a command prefix
     if not after.content.startswith(bot.command_prefix):
         return
+    
+    # Add rate limiting to prevent spam processing
+    current_time = time.time()
+    user_id = after.author.id
+    
+    # Check if user has processed a command edit recently (within 2 seconds)
+    if not hasattr(bot, 'last_edit_times'):
+        bot.last_edit_times = {}
+    
+    if user_id in bot.last_edit_times:
+        if current_time - bot.last_edit_times[user_id] < 2.0:
+            return  # Skip if too recent
+    
+    bot.last_edit_times[user_id] = current_time
     
     # Check if the message is in a main guild and restricted channel
     if after.guild and after.guild.id in bot.MAIN_GUILD_IDS:

@@ -718,10 +718,18 @@ class AsyncDatabase:
                                 pass
                                 
                         elif item_type == "item":
-                            # Add to inventory
+                            # Add to inventory using dictionary structure
+                            item_id = item.get("id", item.get("name", "unknown").lower().replace(" ", "_"))
+                            # Determine the correct inventory category
+                            category = "items"  # Default category for general items
+                            if item.get("type") == "potion":
+                                category = "potions"
+                            elif item.get("type") == "upgrade":
+                                category = "upgrades"
+                            
                             result = await self.db.users.update_one(
                                 {"_id": str(user_id)},
-                                {"$push": {"inventory": item}},
+                                {"$inc": {f"inventory.{category}.{item_id}": 1}},
                                 upsert=True
                             )
                             if result.modified_count == 0 and not result.upserted_id:
@@ -798,9 +806,18 @@ class AsyncDatabase:
                     "type": item.get("type", "item")
                 }
                 
+                # Add to inventory using dictionary structure
+                item_id = clean_item.get("id", clean_item.get("name", "unknown").lower().replace(" ", "_"))
+                # Determine the correct inventory category
+                category = "items"  # Default category for general items
+                if clean_item.get("type") == "potion":
+                    category = "potions"
+                elif clean_item.get("type") == "upgrade":
+                    category = "upgrades"
+                
                 result = await self.db.users.update_one(
                     {"_id": str(user_id)},
-                    {"$push": {"inventory": clean_item}},
+                    {"$inc": {f"inventory.{category}.{item_id}": 1}},
                     upsert=True
                 )
                 success = result.modified_count > 0 or result.upserted_id is not None
@@ -1357,9 +1374,10 @@ class AsyncDatabase:
                         "description": "Required to upgrade interest rate beyond level 20",
                         "type": "special"
                     }
-                    await self.db.users.update_one(
+                    # Add to inventory using dictionary structure
+                    result = await self.db.users.update_one(
                         {"_id": str(user_id)},
-                        {"$push": {"inventory": token_item}},
+                        {"$inc": {f"inventory.items.{token_item['id']}": 1}},
                         upsert=True
                     )
                 return False, "Failed to upgrade interest level"
@@ -1401,6 +1419,9 @@ class AsyncDatabase:
             return False
         
         try:
+            # First, ensure the user's inventory structure is correct
+            await self.migrate_inventory_structure(user_id)
+            
             # Create a clean item without unwanted fields
             clean_item = {
                 "id": item.get("id", item.get("_id", str(ObjectId()))),
@@ -1418,9 +1439,18 @@ class AsyncDatabase:
             if "amount" in item:
                 clean_item["amount"] = item["amount"]
             
+            # Add to inventory using dictionary structure
+            item_id = clean_item.get("id", clean_item.get("name", "unknown").lower().replace(" ", "_"))
+            # Determine the correct inventory category
+            category = "items"  # Default category for general items
+            if clean_item.get("type") == "potion":
+                category = "potions"
+            elif clean_item.get("type") == "upgrade":
+                category = "upgrades"
+            
             result = await self.db.users.update_one(
                 {"_id": str(user_id)},
-                {"$push": {"inventory": clean_item}},
+                {"$inc": {f"inventory.{category}.{item_id}": quantity}},
                 upsert=True
             )
             
@@ -1469,6 +1499,68 @@ class AsyncDatabase:
         except Exception as e:
             self.logger.error(f"Error during inventory cleanup: {e}")
             return 0
+
+    async def migrate_inventory_structure(self, user_id: int) -> bool:
+        """Migrate user's inventory from array to dictionary structure"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            user = await self.db.users.find_one({"_id": str(user_id)})
+            if not user or "inventory" not in user:
+                return True  # No inventory to migrate
+            
+            inventory = user["inventory"]
+            
+            # If inventory is already a dictionary, nothing to do
+            if isinstance(inventory, dict):
+                return True
+            
+            # If inventory is an array, migrate to dictionary structure
+            if isinstance(inventory, list):
+                new_inventory = {
+                    "potions": {},
+                    "upgrades": {},
+                    "items": {}
+                }
+                
+                # Convert each item in the array to the new structure
+                for item in inventory:
+                    if not isinstance(item, dict):
+                        continue
+                    
+                    item_id = item.get("id", item.get("name", "unknown").lower().replace(" ", "_"))
+                    quantity = item.get("quantity", 1)
+                    item_type = item.get("type", "item")
+                    
+                    # Determine category
+                    if item_type == "potion":
+                        category = "potions"
+                    elif item_type == "upgrade":
+                        category = "upgrades"
+                    else:
+                        category = "items"
+                    
+                    # Add to new structure (sum quantities if duplicate IDs)
+                    if item_id in new_inventory[category]:
+                        new_inventory[category][item_id] += quantity
+                    else:
+                        new_inventory[category][item_id] = quantity
+                
+                # Update the user's inventory
+                result = await self.db.users.update_one(
+                    {"_id": str(user_id)},
+                    {"$set": {"inventory": new_inventory}}
+                )
+                
+                return result.modified_count > 0
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error migrating inventory structure for user {user_id}: {e}")
+            return False
+        
 
     # Reminder Management Functions
     async def add_reminder(self, user_id: int, message: str, due_time: datetime.datetime, 

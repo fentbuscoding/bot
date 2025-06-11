@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
+import discord
 import json
 import datetime
 import random
@@ -749,7 +750,7 @@ class Admin(commands.Cog):
             await ctx.send(f"❌ Error: {type(e).__name__}: {e}")
             raise e
 
-    @commands.command()
+    @commands.command(aliases=["resetecon"], hidden=True)
     @commands.is_owner()
     async def reset_economy(self, ctx, *, confirmation: Optional[str] = None):
         """Reset everyone's balance, inventory, and economic data (Bot Owner Only)
@@ -1265,169 +1266,7 @@ class Admin(commands.Cog):
                 color=discord.Color.red()
             )
             await ctx.reply(embed=embed)
-
-    @commands.command(name="repair_all")
-    @commands.is_owner()
-    async def repair_all_users(self, ctx, limit: int = 50):
-        """Repair all users with broken data (Bot Owner Only)
-        Usage: .repair_all [limit]
-        Default limit: 50 users"""
-        
-        if limit <= 0 or limit > 500:
-            return await ctx.reply("❌ Limit must be between 1 and 500!")
-        
-        try:
-            # Get all users
-            users_cursor = self.db.db.users.find({}).limit(limit)
-            users = await users_cursor.to_list(length=limit)
-            
-            if not users:
-                return await ctx.reply("No users found in database!")
-            
-            embed = discord.Embed(
-                title="🔧 Bulk User Data Repair",
-                description=f"Checking {len(users)} users for data issues...",
-                color=discord.Color.blue()
-            )
-            message = await ctx.reply(embed=embed)
-            
-            repaired_count = 0
-            total_repairs = []
-            failed_users = []
-            
-            for user_doc in users:
-                user_id = user_doc["_id"]
-                
-                try:
-                    repairs_made = []
-                    updates = {}
-                    
-                    # Same repair logic as single user repair
-                    # Fix wallet/bank
-                    if "wallet" not in user_doc or not isinstance(user_doc.get("wallet"), (int, float)):
-                        updates["wallet"] = 0
-                        repairs_made.append("wallet")
-                    
-                    if "bank" not in user_doc or not isinstance(user_doc.get("bank"), (int, float)):
-                        updates["bank"] = 0
-                        repairs_made.append("bank")
-                    
-                    # Fix inventory structure
-                    inventory = user_doc.get("inventory", [])
-                    
-                    if isinstance(inventory, list):
-                        new_inventory = {"rod": {}, "bait": {}, "potions": {}, "upgrades": {}}
-                        
-                        for item in inventory:
-                            if isinstance(item, dict) and "type" in item:
-                                item_type = item["type"]
-                                item_id = item.get("id", item.get("_id", "unknown"))
-                                quantity = item.get("quantity", item.get("amount", 1))
-                                
-                                if item_type == "potion":
-                                    new_inventory["potions"][item_id] = quantity
-                                elif item_type == "upgrade":
-                                    new_inventory["upgrades"][item_id] = quantity
-                                elif item_type == "rod":
-                                    new_inventory["rod"][item_id] = quantity
-                                elif item_type == "bait":
-                                    new_inventory["bait"][item_id] = quantity
-                        
-                        updates["inventory"] = new_inventory
-                        repairs_made.append("inventory_structure")
-                    
-                    elif isinstance(inventory, dict):
-                        required_sections = ["rod", "bait", "potions", "upgrades"]
-                        missing_sections = []
-                        
-                        for section in required_sections:
-                            if section not in inventory:
-                                if "inventory" not in updates:
-                                    updates["inventory"] = inventory.copy()
-                                updates["inventory"][section] = {}
-                                missing_sections.append(section)
-                        
-                        if missing_sections:
-                            repairs_made.append("inventory_sections")
-                    
-                    # Fix fishing data
-                    if "fishing" not in user_doc or not isinstance(user_doc.get("fishing"), dict):
-                        updates["fishing"] = {
-                            "selected_rod": None,
-                            "selected_bait": None,
-                            "fish_caught": {}
-                        }
-                        repairs_made.append("fishing_data")
-                    
-                    # Fix active effects
-                    if "active_effects" not in user_doc or not isinstance(user_doc.get("active_effects"), dict):
-                        updates["active_effects"] = {}
-                        repairs_made.append("active_effects")
-                    
-                    # Apply updates if needed
-                    if updates:
-                        await self.db.db.users.update_one(
-                            {"_id": user_id},
-                            {"$set": updates}
-                        )
-                        repaired_count += 1
-                        total_repairs.extend(repairs_made)
-                
-                except Exception as e:
-                    failed_users.append(f"{user_id}: {str(e)[:50]}")
-            
-            # Update embed with results
-            embed = discord.Embed(
-                title="✅ Bulk Repair Complete",
-                description=f"Processed {len(users)} users",
-                color=discord.Color.green()
-            )
-            
-            embed.add_field(
-                name="📊 Results",
-                value=(
-                    f"✅ Users Repaired: {repaired_count}\n"
-                    f"⚠️ Failed Repairs: {len(failed_users)}\n"
-                    f"🔧 Total Fixes: {len(total_repairs)}"
-                ),
-                inline=False
-            )
-            
-            if total_repairs:
-                repair_counts = {}
-                for repair in total_repairs:
-                    repair_counts[repair] = repair_counts.get(repair, 0) + 1
-                
-                repair_summary = "\n".join([f"• {repair}: {count}" for repair, count in repair_counts.items()])
-                embed.add_field(
-                    name="🔧 Repairs Made",
-                    value=repair_summary,
-                    inline=False
-                )
-            
-            if failed_users:
-                embed.add_field(
-                    name="❌ Failed Users",
-                    value="\n".join(failed_users[:5]) + ("..." if len(failed_users) > 5 else ""),
-                    inline=False
-                )
-            
-            await message.edit(embed=embed)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to repair all users: {e}")
-            embed = discord.Embed(
-                title="❌ Bulk Repair Failed",
-                description=f"An error occurred during bulk repair:\n```{str(e)}```",
-                color=discord.Color.red()
-            )
-            await ctx.reply(embed=embed)
-
-    @commands.command()
-    @commands.is_owner()
-    async def test(self, ctx):
-        """Test command for debugging"""
-        await ctx.reply("Admin cog is working!")
-
+                         
 async def setup(bot):
+    """Load the Admin cog"""
     await bot.add_cog(Admin(bot))

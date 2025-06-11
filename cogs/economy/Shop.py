@@ -260,6 +260,16 @@ class Shop(commands.Cog):
         if not item:
             return False
         
+        # Use specific database functions for fishing items
+        if item_type == "rod":
+            return await db.add_fishing_rod(user_id, item_id, amount)
+        elif item_type == "bait":
+            # For bait, the JSON stores total amount, so we need to calculate per-unit
+            bait_amount = item.get("amount", 1)  # Amount per purchase
+            total_amount = bait_amount * amount  # Total bait units to add
+            return await db.add_fishing_bait(user_id, item_id, total_amount)
+        
+        # For other item types, use generic inventory function
         # Create item dict for database
         item_dict = {
             "id": item_id,
@@ -433,11 +443,21 @@ class Shop(commands.Cog):
                     "mythical": "🔴"
                 }.get(item.get('rarity', 'common'), "⚪")
                 
-                embed = discord.Embed(
-                    title="Purchase Successful!",
-                    description=f"You bought {amount}x {rarity_emoji} **{item['name']}** for {total_price}{self.currency}",
-                    color=discord.Color.green()
-                )
+                # For bait, show the actual amount of bait units they get
+                if item_type == "bait":
+                    bait_units = item.get("amount", 1) * amount
+                    embed = discord.Embed(
+                        title="Purchase Successful!",
+                        description=f"You bought {amount}x {rarity_emoji} **{item['name']}** for {total_price}{self.currency}\n"
+                                  f"Received {bait_units} bait units",
+                        color=discord.Color.green()
+                    )
+                else:
+                    embed = discord.Embed(
+                        title="Purchase Successful!",
+                        description=f"You bought {amount}x {rarity_emoji} **{item['name']}** for {total_price}{self.currency}",
+                        color=discord.Color.green()
+                    )
                 await ctx.send(embed=embed)
             else:
                 embed = discord.Embed(

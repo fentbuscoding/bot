@@ -1047,7 +1047,8 @@ class ModerationMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x2ecc71
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class CryptoMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1111,7 +1112,8 @@ class CryptoMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xf39c12
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class RedditMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1183,7 +1185,8 @@ class RedditMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xff4500
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class SimpMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1198,6 +1201,10 @@ class SimpMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         success = random.randint(1, 10) == 1  # 10% chance
         if success:
             await self.complete_work(interaction, "got noticed! Poki said your name!", 2.5)
@@ -1209,6 +1216,10 @@ class SimpMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "spammed 'QUEEN' 100 times in chat", 0.8)
 
     @discord.ui.button(label="Buy Merchandise", style=discord.ButtonStyle.success, emoji="👕")
@@ -1216,6 +1227,10 @@ class SimpMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "bought overpriced merch you'll never wear", 1.0)
 
     @discord.ui.button(label="Defend Honor", style=discord.ButtonStyle.primary, emoji="⚔️")
@@ -1223,6 +1238,10 @@ class SimpMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "fought the haters in Twitter replies", 1.2)
 
     async def complete_work(self, interaction, action, multiplier):
@@ -1243,7 +1262,8 @@ class SimpMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xff69b4
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class MemeMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1258,6 +1278,10 @@ class MemeMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "posted a Drake pointing meme", 0.7)
 
     @discord.ui.button(label="Create OC", style=discord.ButtonStyle.secondary, emoji="🎨")
@@ -1265,6 +1289,10 @@ class MemeMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         viral = random.randint(1, 20) == 1  # 5% chance to go viral
         if viral:
             await self.complete_work(interaction, "created OC that went viral! 🔥", 3.0)
@@ -1276,6 +1304,10 @@ class MemeMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "reposted a 2012 meme for easy karma", 0.9)
 
     @discord.ui.button(label="Deep Fry Meme", style=discord.ButtonStyle.primary, emoji="🍟")
@@ -1283,6 +1315,10 @@ class MemeMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "deep fried a meme until it was unrecognizable", 1.4)
 
     async def complete_work(self, interaction, action, multiplier):
@@ -1303,7 +1339,8 @@ class MemeMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x00ff00
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class NFTMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1318,6 +1355,10 @@ class NFTMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         caught = random.randint(1, 5) == 1  # 20% chance to get caught
         if caught:
             await self.complete_work(interaction, "got sued for right-clicking", 0.0)
@@ -1329,6 +1370,10 @@ class NFTMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "minted 10,000 procedurally generated apes", 2.2)
 
     @discord.ui.button(label="Pump & Dump", style=discord.ButtonStyle.success, emoji="📈")
@@ -1336,6 +1381,10 @@ class NFTMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         success = random.choice([True, False])
         if success:
             await self.complete_work(interaction, "successfully pumped and dumped", 4.0)
@@ -1347,6 +1396,10 @@ class NFTMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "wash traded with your alt accounts", 1.5)
 
     async def complete_work(self, interaction, action, multiplier):
@@ -1367,7 +1420,8 @@ class NFTMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x9932cc
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class TwitterMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1382,6 +1436,10 @@ class TwitterMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         backfire = random.randint(1, 3) == 1  # 33% chance to backfire
         if backfire:
             await self.complete_work(interaction, "got ratio'd for your bad take", 0.2)
@@ -1393,6 +1451,10 @@ class TwitterMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "got someone fired over a 2009 tweet", 1.1)
 
     @discord.ui.button(label="Thread Rant", style=discord.ButtonStyle.success, emoji="🧵")
@@ -1400,6 +1462,10 @@ class TwitterMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "wrote a 47-tweet thread about cereal", 0.8)
 
     @discord.ui.button(label="Virtue Signal", style=discord.ButtonStyle.primary, emoji="😇")
@@ -1407,6 +1473,10 @@ class TwitterMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "posted about current thing for clout", 0.9)
 
     async def complete_work(self, interaction, action, multiplier):
@@ -1427,7 +1497,8 @@ class TwitterMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x1da1f2
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class StreamingMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1442,6 +1513,10 @@ class StreamingMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "sat in front of camera doing nothing", 0.6)
 
     @discord.ui.button(label="React to Videos", style=discord.ButtonStyle.secondary, emoji="📺")
@@ -1449,6 +1524,10 @@ class StreamingMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         dmca = random.randint(1, 10) == 1  # 10% chance
         if dmca:
             await self.complete_work(interaction, "got DMCA'd mid-stream", 0.1)
@@ -1460,6 +1539,10 @@ class StreamingMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "guilt-tripped viewers into subscribing", 1.1)
 
     @discord.ui.button(label="Accidental Stream", style=discord.ButtonStyle.primary, emoji="😱")
@@ -1467,6 +1550,10 @@ class StreamingMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         viral = random.randint(1, 50) == 1  # 2% chance to go viral
         if viral:
             await self.complete_work(interaction, "accidentally went viral on LSF", 5.0)
@@ -1491,7 +1578,8 @@ class StreamingMinigame(discord.ui.View):
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x9146ff
         )
-        await interaction.response.send_message(embed=embed, view=self)
+        embed.add_field(name="💰 Earnings", value=f"+{final_wage:,} {self.work_cog.currency}", inline=True)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class DefaultMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
