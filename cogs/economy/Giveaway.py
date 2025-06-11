@@ -9,6 +9,7 @@ from discord.utils import utcnow
 from cogs.logging.logger import CogLogger
 from utils.db import async_db
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
+from utils.amount_parser import parse_amount
 
 class Giveaway(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -92,7 +93,8 @@ class Giveaway(commands.Cog):
             value=(
                 "`.giveaway donate <amount>` - Donate to server balance\n"
                 "`.giveaway balance` - Check server balance\n"
-                "`.giveaway list` - View active giveaways"
+                "`.giveaway list` - View active giveaways\n"
+                "*Supports: 1k, 1.5m, 2b, 50%, all, half*"
             ),
             inline=False
         )
@@ -108,6 +110,8 @@ class Giveaway(commands.Cog):
             name="**Examples**",
             value=(
                 "`.giveaway donate 1000` - Donate 1000 coins\n"
+                "`.giveaway donate 1.5m` - Donate 1.5 million\n"
+                "`.giveaway donate 2b` - Donate 2 billion\n"
                 "`.giveaway create 5000 1h Epic Giveaway!` - Create 1 hour giveaway"
             ),
             inline=False
@@ -115,13 +119,20 @@ class Giveaway(commands.Cog):
         await ctx.send(embed=embed)
 
     @giveaway_group.command(name='donate')
-    async def donate_to_server(self, ctx: commands.Context, amount: int):
+    async def donate_to_server(self, ctx: commands.Context, *, amount_str: str):
         """Donate money to the server giveaway balance"""
+        wallet_balance = await async_db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        
+        # Parse the amount using the enhanced parser
+        amount, error = parse_amount(amount_str, wallet_balance, context="wallet")
+        if error:
+            await ctx.reply(f"❌ {error}")
+            return
+        
         if amount <= 0:
             await ctx.reply("❌ Amount must be positive!")
             return
 
-        wallet_balance = await async_db.get_wallet_balance(ctx.author.id, ctx.guild.id)
         if wallet_balance < amount:
             await ctx.reply(f"❌ Insufficient funds! You have {wallet_balance:,} coins but need {amount:,}.")
             return

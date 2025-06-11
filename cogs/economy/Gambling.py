@@ -1570,7 +1570,7 @@ class Gambling(commands.Cog):
         await channel.send(embed=result_embed)
 
     async def _parse_bet(self, bet_str: str, wallet: int) -> int:
-        """Parse bet amount from string (supports all, half, %, k, m suffixes) with 250M cap"""
+        """Parse bet amount from string (supports all, half, %, k, m, b suffixes) with 250M cap"""
         try:
             bet_str = bet_str.lower().strip()
             MAX_BET = 250_000_000  # 250 million cap
@@ -1593,6 +1593,9 @@ class Gambling(commands.Cog):
                 return min(calculated_bet, MAX_BET)
             elif bet_str.endswith('m'):
                 calculated_bet = int(float(bet_str[:-1]) * 1000000)
+                return min(calculated_bet, MAX_BET)
+            elif bet_str.endswith('b'):
+                calculated_bet = int(float(bet_str[:-1]) * 1000000000)
                 return min(calculated_bet, MAX_BET)
             else:
                 calculated_bet = int(bet_str)

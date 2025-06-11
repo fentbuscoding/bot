@@ -8,7 +8,7 @@ def parse_amount(amount_str: str, balance: int, max_amount: int = None, context:
     Supports:
     - Regular numbers: 100, 400, 1000
     - Percentages: 50%, 100%, 5.5%
-    - K/M notation: 1k, 1.5k, 100k, 1m, 2.5m
+    - K/M/B notation: 1k, 1.5k, 100k, 1m, 2.5m, 1b, 5.5b
     - Scientific notation: 1e3, 1.5e3, 1e6
     - Special keywords: all, max, half
     
@@ -40,13 +40,16 @@ def parse_amount(amount_str: str, balance: int, max_amount: int = None, context:
             except ValueError:
                 return None, "Invalid percentage format!"
         
-        # Handle k/m notation and scientific notation
+        # Handle k/m/b notation and scientific notation
         multiplier = 1
         if amount_str.endswith('k'):
             multiplier = 1000
             amount_str = amount_str[:-1]
         elif amount_str.endswith('m'):
             multiplier = 1000000
+            amount_str = amount_str[:-1]
+        elif amount_str.endswith('b'):
+            multiplier = 1000000000
             amount_str = amount_str[:-1]
         
         # Convert scientific notation and decimals
@@ -83,5 +86,6 @@ def get_amount_help_text(command_name: str, balance_type: str = "wallet") -> str
 `.{command_name} half` - Use half of {balance_type}
 `.{command_name} 1k` - Use 1,000
 `.{command_name} 1.5m` - Use 1,500,000
+`.{command_name} 2b` - Use 2,000,000,000
 `.{command_name} 1e3` - Use 1,000 (scientific notation)
 `.{command_name} 2.5e5` - Use 250,000 (scientific notation)"""

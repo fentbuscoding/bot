@@ -229,6 +229,7 @@ class Economy(commands.Cog):
                         "`.deposit all` - Deposit maximum amount\n"
                         "`.deposit 1k` - Deposit 1,000\n"
                         "`.deposit 1.5m` - Deposit 1,500,000\n"
+                        "`.deposit 2b` - Deposit 2,000,000,000\n"
                         "`.deposit 1e3` - Deposit 1,000 (scientific notation)\n"
                         "`.deposit 2.5e5` - Deposit 250,000 (scientific notation)"
                     ),
@@ -289,6 +290,7 @@ class Economy(commands.Cog):
                         "`.withdraw all` - Withdraw everything\n"
                         "`.withdraw 1k` - Withdraw 1,000\n"
                         "`.withdraw 1.5m` - Withdraw 1,500,000\n"
+                        "`.withdraw 2b` - Withdraw 2,000,000,000\n"
                         "`.withdraw 1e3` - Withdraw 1,000 (scientific notation)\n"
                         "`.withdraw 2.5e5` - Withdraw 250,000 (scientific notation)"
                     ),
@@ -339,6 +341,7 @@ class Economy(commands.Cog):
                     f"`.pay @user half` - Send half of wallet\n"
                     f"`.pay @user 1k` - Send 1,000\n"
                     f"`.pay @user 1.5m` - Send 1,500,000\n"
+                    f"`.pay @user 2b` - Send 2,000,000,000\n"
                     f"`.pay @user 1e3` - Send 1,000 (scientific notation)\n"
                     f"`.pay @user 2.5e5` - Send 250,000 (scientific notation)"
                 ),

@@ -17,6 +17,8 @@ It's mainly written by one dude, but with all the [contributors on github](https
 - `1.5k` - 1,500 (K suffix with decimals)
 - `2m` - 2,000,000 (M suffix) 
 - `2.5m` - 2,500,000 (M suffix with decimals)
+- `1b` - 1,000,000,000 (B suffix)
+- `5.5b` - 5,500,000,000 (B suffix with decimals)
 
 **Scientific Notation:**
 - `1e3` - 1,000
