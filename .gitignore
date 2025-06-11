@@ -18,3 +18,5 @@ dashboard/bronxbot-web.service
 test.py
 logs
 user_timezone.json
+fishing_simulation_results.json
+fishing_simulation_combined_data.json

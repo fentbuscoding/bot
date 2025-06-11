@@ -317,6 +317,362 @@ class GlobalFishPaginator(discord.ui.View):
             except:
                 pass  # Message might be deleted
 
+class RodPaginator(discord.ui.View):
+    """Paginator for rod inventory with equip functionality"""
+    
+    def __init__(self, user_id: int, user_rods: list, active_rod_id: str, fishing_cog, timeout=300):
+        super().__init__(timeout=timeout)
+        self.user_id = user_id
+        self.user_rods = user_rods
+        self.active_rod_id = active_rod_id
+        self.fishing_cog = fishing_cog
+        self.current_page = 0
+        self.items_per_page = 5
+        self.total_pages = math.ceil(len(user_rods) / self.items_per_page) if user_rods else 1
+        self.message = None
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states and add rod selection dropdown"""
+        # Clear all items first
+        self.clear_items()
+        
+        # Previous page button
+        prev_button = discord.ui.Button(
+            label="◀️ Previous",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page == 0
+        )
+        prev_button.callback = self.previous_page
+        self.add_item(prev_button)
+        
+        # Page info button (not clickable)
+        page_button = discord.ui.Button(
+            label=f"Page {self.current_page + 1}/{self.total_pages}",
+            style=discord.ButtonStyle.primary,
+            disabled=True
+        )
+        self.add_item(page_button)
+        
+        # Next page button
+        next_button = discord.ui.Button(
+            label="Next ▶️",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page >= self.total_pages - 1
+        )
+        next_button.callback = self.next_page
+        self.add_item(next_button)
+        
+        # Add rod selection dropdown
+        if self.user_rods:
+            rod_select = RodSelect(self.user_id, self.user_rods, self.active_rod_id, self.fishing_cog)
+            self.add_item(rod_select)
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        if not self.user_rods:
+            embed = discord.Embed(
+                title="🎣 Rod Inventory",
+                description="❌ You don't have any rods!",
+                color=0xff0000
+            )
+            return embed
+        
+        # Calculate page rods
+        start_idx = self.current_page * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        page_rods = self.user_rods[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🎣 Rod Inventory",
+            description=f"**Total Rods:** {len(self.user_rods)} | Select a rod from the dropdown to equip it",
+            color=0x2b2d31
+        )
+        
+        # Add rods to embed
+        for i, rod in enumerate(page_rods, start=start_idx + 1):
+            rod_id = rod.get('_id', 'unknown')
+            is_active = rod_id == self.active_rod_id
+            active_indicator = "🟢 **EQUIPPED**" if is_active else "⚪ Available"
+            
+            rod_info = (
+                f"**{active_indicator}**\n"
+                f"**Multiplier:** {rod.get('multiplier', 1.0)}x\n"
+                f"**Power:** {rod.get('power', 1)}\n"
+                f"**Durability:** {(rod.get('durability', 0.95)*100):.1f}%\n"
+                f"**Max Weight:** {rod.get('max_fish_weight', 0):,.0f}kg\n"
+                f"**Quantity:** {rod.get('quantity', 1)}"
+            )
+            
+            embed.add_field(
+                name=f"#{i} • {rod.get('name', 'Unknown Rod')}",
+                value=rod_info,
+                inline=False
+            )
+        
+        embed.add_field(
+            name="💡 How to Use",
+            value="• Use the dropdown below to select and equip a rod\n• Navigate with ◀️ ▶️ buttons\n• Currently equipped rod shows 🟢",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages} • Use the dropdown to equip rods")
+        
+        return embed
+    
+    async def previous_page(self, interaction):
+        """Go to previous page"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your rod inventory!", ephemeral=True)
+        
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def next_page(self, interaction):
+        """Go to next page"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your rod inventory!", ephemeral=True)
+        
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if self.message:
+            try:
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
+                await self.message.edit(view=self)
+            except:
+                pass
+
+
+class RodSelect(discord.ui.Select):
+    """Dropdown for selecting rod to equip"""
+    
+    def __init__(self, user_id: int, user_rods: list, active_rod_id: str, fishing_cog):
+        self.user_id = user_id
+        self.user_rods = user_rods
+        self.active_rod_id = active_rod_id
+        self.fishing_cog = fishing_cog
+        
+        # Create options for each rod
+        options = []
+        for rod in user_rods[:25]:  # Discord limit of 25 options
+            rod_id = rod.get('_id', 'unknown')
+            is_active = rod_id == active_rod_id
+            
+            # Create option
+            option = discord.SelectOption(
+                label=f"{'✅ ' if is_active else ''}{rod.get('name', 'Unknown Rod')}",
+                value=rod_id,
+                description=f"x{rod.get('multiplier', 1.0)} • {rod.get('power', 1)} power • {(rod.get('durability', 0.95)*100):.1f}% dur.",
+                emoji="🎣"
+            )
+            options.append(option)
+        
+        super().__init__(
+            placeholder="Select a rod to equip...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction):
+        """Handle rod selection"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your rod inventory!", ephemeral=True)
+        
+        selected_rod_id = self.values[0]
+        
+        # Find the selected rod
+        selected_rod = next((rod for rod in self.user_rods if rod.get('_id') == selected_rod_id), None)
+        
+        if not selected_rod:
+            return await interaction.response.send_message("❌ Rod not found!", ephemeral=True)
+        
+        # Check if already equipped
+        if selected_rod_id == self.active_rod_id:
+            return await interaction.response.send_message(f"✅ **{selected_rod['name']}** is already equipped!", ephemeral=True)
+        
+        # Equip the rod
+        if await self.fishing_cog.set_active_rod_manual(self.user_id, selected_rod_id):
+            embed = discord.Embed(
+                title="🎣 Rod Equipped!",
+                description=f"You equipped **{selected_rod['name']}**",
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="📊 Stats",
+                value=f"**Multiplier:** {selected_rod.get('multiplier', 1.0)}x\n"
+                      f"**Durability:** {(selected_rod.get('durability', 0.95)*100):.1f}%\n"
+                      f"**Power Level:** {selected_rod.get('power', 1)}",
+                inline=False
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            # Update the parent view to show new active rod
+            parent_view = self.view
+            if isinstance(parent_view, RodPaginator):
+                parent_view.active_rod_id = selected_rod_id
+                parent_view.update_buttons()
+                parent_embed = await parent_view.create_embed()
+                await interaction.edit_original_response(embed=parent_embed, view=parent_view)
+        else:
+            await interaction.response.send_message("❌ Failed to equip rod!", ephemeral=True)
+
+
+class BaitPaginator(discord.ui.View):
+    """Paginator for bait inventory with equip functionality"""
+    
+    def __init__(self, user_id: int, user_bait: list, active_bait_id: str, fishing_cog, timeout=300):
+        super().__init__(timeout=timeout)
+        self.user_id = user_id
+        self.user_bait = user_bait
+        self.active_bait_id = active_bait_id
+        self.fishing_cog = fishing_cog
+        self.current_page = 0
+        self.items_per_page = 5
+        self.total_pages = math.ceil(len(user_bait) / self.items_per_page) if user_bait else 1
+        self.message = None
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        """Update button states and add bait selection dropdown"""
+        # Clear all items first
+        self.clear_items()
+        
+        # Previous page button
+        prev_button = discord.ui.Button(
+            label="◀️ Previous",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page == 0
+        )
+        prev_button.callback = self.previous_page
+        self.add_item(prev_button)
+        
+        # Page info button (not clickable)
+        page_button = discord.ui.Button(
+            label=f"Page {self.current_page + 1}/{self.total_pages}",
+            style=discord.ButtonStyle.primary,
+            disabled=True
+        )
+        self.add_item(page_button)
+        
+        # Next page button
+        next_button = discord.ui.Button(
+            label="Next ▶️",
+            style=discord.ButtonStyle.secondary,
+            disabled=self.current_page >= self.total_pages - 1
+        )
+        next_button.callback = self.next_page
+        self.add_item(next_button)
+        
+        # Add bait selection dropdown
+        if self.user_bait:
+            bait_select = BaitSelect(self.user_id, self.user_bait, self.active_bait_id, self.fishing_cog)
+            self.add_item(bait_select)
+    
+    async def create_embed(self):
+        """Create embed for current page"""
+        if not self.user_bait:
+            embed = discord.Embed(
+                title="🪱 Bait Inventory",
+                description="❌ You don't have any bait!",
+                color=0xff0000
+            )
+            return embed
+        
+        # Calculate page bait
+        start_idx = self.current_page * self.items_per_page
+        end_idx = start_idx + self.items_per_page
+        page_bait = self.user_bait[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🪱 Bait Inventory",
+            description=f"**Total Bait Types:** {len(self.user_bait)} | Select bait from the dropdown to equip it",
+            color=0x2b2d31
+        )
+        
+        # Add bait to embed
+        for i, bait in enumerate(page_bait, start=start_idx + 1):
+            bait_id = bait.get('_id', 'unknown')
+            is_active = bait_id == self.active_bait_id
+            active_indicator = "🟢 **EQUIPPED**" if is_active else "⚪ Available"
+            
+            # Get best catch rates for display
+            catch_rates = bait.get('catch_rates', {})
+            best_rarities = sorted(catch_rates.items(), key=lambda x: x[1], reverse=True)[:3]
+            best_rates_text = ", ".join([f"{rarity.title()}: {rate*100:.1f}%" for rarity, rate in best_rarities if rate > 0])
+            
+            bait_info = (
+                f"**{active_indicator}**\n"
+                f"**Amount:** {bait.get('amount', 1)}\n"
+                f"**Description:** {bait.get('description', 'No description')}\n"
+                f"**Best for:** {best_rates_text or 'Unknown'}"
+            )
+            
+            embed.add_field(
+                name=f"#{i} • {bait.get('name', 'Unknown Bait')}",
+                value=bait_info,
+                inline=False
+            )
+        
+        embed.add_field(
+            name="💡 How to Use",
+            value="• Use the dropdown below to select and equip bait\n• Navigate with ◀️ ▶️ buttons\n• Currently equipped bait shows 🟢",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages} • Use the dropdown to equip bait")
+        
+        return embed
+    
+    async def previous_page(self, interaction):
+        """Go to previous page"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your bait inventory!", ephemeral=True)
+        
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def next_page(self, interaction):
+        """Go to next page"""
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ This isn't your bait inventory!", ephemeral=True)
+        
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = await self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def on_timeout(self):
+        """Called when the view times out"""
+        if self.message:
+            try:
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
+                await self.message.edit(view=self)
+            except:
+                pass
+
 class Fishing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -1265,6 +1621,19 @@ class Fishing(commands.Cog):
             self.logger.error(f"Error setting active rod: {e}")
             return False
 
+    async def set_active_bait(self, user_id: int, bait_id: str) -> bool:
+        """Set user's active fishing bait manually"""
+        try:
+            result = await db.db.users.update_one(
+                {"_id": str(user_id)},
+                {"$set": {"active_fishing.bait": bait_id}},
+                upsert=True
+            )
+            return result.modified_count > 0 or result.upserted_id is not None
+        except Exception as e:
+            self.logger.error(f"Error setting active bait: {e}")
+            return False
+
     async def check_rod_durability(self, durability: float) -> bool:
         """Check if rod survives this fishing attempt"""
         return random.random() < durability
@@ -1580,30 +1949,7 @@ class Fishing(commands.Cog):
             
             if await db.add_fish(ctx.author.id, fish):
                 # Define rarity colors and emojis
-                rarity_config = {
-                    "junk": {"color": 0x8b4513, "emoji": "🗑️"},  # Brown
-                    "tiny": {"color": 0x808080, "emoji": "🐟"},  # Gray
-                    "small": {"color": 0x90EE90, "emoji": "🐠"},  # Light Green
-                    "common": {"color": 0x00ff00, "emoji": "🐟"},  # Green
-                    "uncommon": {"color": 0x1e90ff, "emoji": "🐠"},  # Blue
-                    "rare": {"color": 0x9932cc, "emoji": "🐟"},  # Purple
-                    "epic": {"color": 0xff69b4, "emoji": "🎣"},  # Pink
-                    "legendary": {"color": 0xffa500, "emoji": "🌟"},  # Orange
-                    "mythical": {"color": 0xff0000, "emoji": "⭐"},  # Red
-                    "ancient": {"color": 0x8b0000, "emoji": "🏺"},  # Dark Red
-                    "divine": {"color": 0xffd700, "emoji": "✨"},  # Gold
-                    "cosmic": {"color": 0x4b0082, "emoji": "🌌"},  # Indigo
-                    "transcendent": {"color": 0xdda0dd, "emoji": "💫"},  # Plum
-                    "void": {"color": 0x2f4f4f, "emoji": "🕳️"},  # Dark Slate Gray
-                    "celestial": {"color": 0x87ceeb, "emoji": "🌠"},  # Sky Blue
-                    "mutated": {"color": 0x32cd32, "emoji": "☢️"},  # Lime Green
-                    "crystalline": {"color": 0x40e0d0, "emoji": "💎"},  # Turquoise
-                    "subatomic": {"color": 0xff1493, "emoji": "⚛️"},  # Deep Pink
-                    "super": {"color": 0x00ffff, "emoji": "🦸"},  # Cyan
-                    "dev": {"color": 0xff69b4, "emoji": "👑"}  # Pink
-                }
-                
-                # Get rarity config or default
+                rarity_config = self._get_rarity_config()
                 config = rarity_config.get(caught_rarity, {"color": 0x2b2d31, "emoji": "🐟"})
                 
                 # Check how many of this fish the user already has
@@ -2032,14 +2378,10 @@ class Fishing(commands.Cog):
                         inline=False
                     )
                 
-                # Calculate total pages (gear page + fish pages)
-                fish_pages = math.ceil(len(user_fish) / 5) if user_fish else 0
-                total_pages = 1 + fish_pages
-                
-                embed.set_footer(text=f"Page 1/{total_pages} • Use buttons to view your fish collection")
+                embed.set_footer(text=f"Page 1/{self.total_pages} • Use buttons to view your fish collection")
                 
                 # Create pagination view
-                view = FishInventoryPaginator(ctx.author.id, user_fish, 1, total_pages, self.currency, self.rod_data, self.bait_data, self.get_user_bait)
+                view = FishInventoryPaginator(ctx.author.id, user_fish, 1, self.total_pages, self.currency, self.rod_data, self.bait_data, self.get_user_bait)
                 message = await ctx.reply(embed=embed, view=view)
                 view.message = message
                 return
@@ -2069,7 +2411,7 @@ class Fishing(commands.Cog):
             # Create fish display embed
             total_value = sum(fish.get("value", 0) for fish in user_fish)
             embed = discord.Embed(
-                title="Your Fish Collection",
+                title="🐟 Your Fish Collection",
                 description=f"**Total Fish:** {len(user_fish):,} | **Total Value:** {total_value:,} {self.currency}",
                 color=0x2b2d31
             )
@@ -2089,7 +2431,6 @@ class Fishing(commands.Cog):
                     inline=False
                 )
             
-            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
             embed.set_footer(text=f"Page {page}/{total_pages} • Use buttons to navigate")
             
             # Create pagination view
@@ -2266,29 +2607,23 @@ class Fishing(commands.Cog):
     async def rod(self, ctx, *, rod_name: str = None):
         """Equip a fishing rod from your inventory"""
         try:
+            user_rods = await self.get_user_rods(ctx.author.id)
+            if not user_rods:
+                return await ctx.reply("❌ You don't have any fishing rods! Buy one from `.shop rod`")
+            
+            # Get active gear to show which rod is currently equipped
+            active_gear = await db.get_active_fishing_gear(ctx.author.id)
+            active_rod_id = active_gear.get("rod") if active_gear else None
+            
             if not rod_name:
-                # Show available rods
-                user_rods = await self.get_user_rods(ctx.author.id)
-                if not user_rods:
-                    return await ctx.reply("❌ You don't have any fishing rods! Buy one from `.shop rod`")
-                
-                embed = discord.Embed(
-                    title="Your Fishing Rods",
-                    description="Use `.rod <rod_name>` to equip a rod",
-                    color=0x2b2d31
-                )
-                
-                for rod in user_rods[:10]:  # Show first 10 rods
-                    embed.add_field(
-                        name=f"{rod['name']}",
-                        value=f"**Multiplier:** {rod.get('multiplier', 1.0)}x\n**Quantity:** {rod.get('quantity', 1)}",
-                        inline=True
-                    )
-                
-                return await ctx.reply(embed=embed)
+                # Show paginated rod inventory
+                view = RodPaginator(ctx.author.id, user_rods, active_rod_id, self)
+                embed = await view.create_embed()
+                message = await ctx.reply(embed=embed, view=view)
+                view.message = message
+                return
             
             # Find rod by name, ID, or alias
-            user_rods = await self.get_user_rods(ctx.author.id)
             target_rod = None
             
             # First try to resolve alias
@@ -2307,9 +2642,14 @@ class Fishing(commands.Cog):
             
             if not target_rod:
                 embed = discord.Embed(
-                    title="Rod Not Found",
+                    title="❌ Rod Not Found",
                     description=f"Rod '{rod_name}' not found in your inventory!",
-                    color=0x2b2d31
+                    color=0xff0000
+                )
+                embed.add_field(
+                    name="💡 Tip",
+                    value="Use `.rod` without arguments to see all your rods with a dropdown selector!",
+                    inline=False
                 )
                 embed.add_field(
                     name="Available Aliases",
@@ -2321,24 +2661,16 @@ class Fishing(commands.Cog):
             # Equip the rod
             if await self.set_active_rod_manual(ctx.author.id, target_rod['_id']):
                 embed = discord.Embed(
-                    title="Rod Equipped",
+                    title="🎣 Rod Equipped",
                     description=f"You equipped **{target_rod['name']}**",
-                    color=0x2b2d31
+                    color=0x00ff00
                 )
                 embed.add_field(
-                    name="Multiplier",
-                    value=f"{target_rod.get('multiplier', 1.0)}x",
-                    inline=True
-                )
-                embed.add_field(
-                    name="Durability",
-                    value=f"{((target_rod.get('durability', 0.95))*100):.1f}%",
-                    inline=True
-                )
-                embed.add_field(
-                    name="Power Level",
-                    value=f"{target_rod.get('power', 1)}",
-                    inline=True
+                    name="📊 Stats",
+                    value=f"**Multiplier:** {target_rod.get('multiplier', 1.0)}x\n"
+                          f"**Durability:** {((target_rod.get('durability', 0.95))*100):.1f}%\n"
+                          f"**Power Level:** {target_rod.get('power', 1)}",
+                    inline=False
                 )
                 await ctx.reply(embed=embed)
             else:
@@ -2352,34 +2684,23 @@ class Fishing(commands.Cog):
     async def bait(self, ctx, *, bait_name: str = None):
         """Equip bait from your inventory"""
         try:
+            user_bait = await self.get_user_bait(ctx.author.id)
+            if not user_bait:
+                return await ctx.reply("❌ You don't have any bait! Buy some from `.shop bait`")
+            
+            # Get active gear to show which bait is currently equipped
+            active_gear = await db.get_active_fishing_gear(ctx.author.id)
+            active_bait_id = active_gear.get("bait") if active_gear else None
+            
             if not bait_name:
-                # Show available bait
-                user_bait = await self.get_user_bait(ctx.author.id)
-                if not user_bait:
-                    return await ctx.reply("❌ You don't have any bait! Buy some from `.shop bait`")
-                
-                # Debug logging
-                self.logger.info(f"User {ctx.author.id} bait inventory for listing:")
-                for bait in user_bait:
-                    self.logger.info(f"  - ID: '{bait.get('_id', 'unknown')}', Name: '{bait.get('name', 'unknown')}', Amount: {bait.get('amount', 0)}")
-                
-                embed = discord.Embed(
-                    title="Your Bait Collection",
-                    description="Use `.bait <bait_name>` to equip bait",
-                    color=0x2b2d31
-                )
-                
-                for bait in user_bait[:10]:  # Show first 10 bait types
-                    embed.add_field(
-                        name=f"🪱 {bait['name']}",
-                        value=f"**Amount:** {bait.get('amount', 1)}\n**ID:** `{bait.get('_id', 'unknown')}`\n**Description:** {bait.get('description', 'N/A')[:30]}...",
-                        inline=True
-                    )
-                
-                return await ctx.reply(embed=embed)
+                # Show paginated bait inventory
+                view = BaitPaginator(ctx.author.id, user_bait, active_bait_id, self)
+                embed = await view.create_embed()
+                message = await ctx.reply(embed=embed, view=view)
+                view.message = message
+                return
             
             # Find bait by name, ID, or alias - IMPROVED matching with aliases
-            user_bait = await self.get_user_bait(ctx.author.id)
             target_bait = None
             
             # First try to resolve alias
@@ -2418,33 +2739,21 @@ class Fishing(commands.Cog):
                 for bait in user_bait:
                     self.logger.info(f"  - ID: '{bait.get('_id', 'unknown')}', Name: '{bait.get('name', 'unknown')}'")
                 
-                available_bait = [f"`{b.get('_id', 'unknown')}`" for b in user_bait[:5]]
                 embed = discord.Embed(
-                    title="Bait Not Found",
+                    title="❌ Bait Not Found",
                     description=f"Bait '{bait_name}' not found in your inventory!",
-                    color=0x2b2d31
+                    color=0xff0000
+                )
+                embed.add_field(
+                    name="💡 Tip",
+                    value="Use `.bait` without arguments to see all your bait with a dropdown selector!",
+                    inline=False
                 )
                 embed.add_field(
                     name="Available Aliases",
                     value="quantum, void, crystal, divine, basic, pro, etc.",
                     inline=False
                 )
-                if available_bait:
-                    embed.add_field(
-                        name="Available bait IDs",
-                        value=", ".join(available_bait),
-                        inline=False
-                    )
-                
-                # Also show names for easier identification
-                if user_bait:
-                    available_names = [f"`{b.get('name', 'unknown')}`" for b in user_bait[:5]]
-                    embed.add_field(
-                        name="Available bait names",
-                        value=", ".join(available_names),
-                        inline=False
-                    )
-                
                 return await ctx.reply(embed=embed)
             
             # Equip the bait - IMPROVED error handling
@@ -2457,41 +2766,15 @@ class Fishing(commands.Cog):
                 
             if await db.set_active_bait(ctx.author.id, bait_id):
                 embed = discord.Embed(
-                    title="Bait Equipped",
+                    title="🪱 Bait Equipped",
                     description=f"You equipped **{target_bait['name']}**",
-                    color=0x2b2d31
-                )
-                embed.add_field(
-                    name="Amount Available",
-                    value=f"{target_bait.get('amount', 1)}",
-                    inline=True
-                )
-                embed.add_field(
-                    name="Bait ID",
-                    value=f"`{bait_id}`",
-                    inline=True
+                    color=0x00ff00
                 )
                 embed.add_field(
                     name="Description",
                     value=target_bait.get('description', 'No description available'),
                     inline=False
                 )
-                
-                # Show some catch rate info
-                catch_rates = target_bait.get('catch_rates', {})
-                if catch_rates:
-                    high_rate_rarities = []
-                    for rarity, rate in catch_rates.items():
-                        if rate > 0.05:  # 5% or higher
-                            high_rate_rarities.append(f"{rarity.title()}: {rate*100:.1f}%")
-                    
-                    if high_rate_rarities:
-                        embed.add_field(
-                            name="Best For",
-                            value="\n".join(high_rate_rarities[:5]),
-                            inline=False
-                        )
-                
                 await ctx.reply(embed=embed)
             else:
                 self.logger.error(f"Failed to equip bait '{bait_id}' for user {ctx.author.id}")
@@ -2749,10 +3032,8 @@ class InteractiveFishSeller(discord.ui.View):
         self.fishing_cog = fishing_cog
         self.current_page = 0
         self.items_per_page = 5
-        self.message = None
-        
-        # Calculate total pages
         self.total_pages = math.ceil(len(fish_list) / self.items_per_page) if fish_list else 1
+        self.message = None
         
         # Update button states
         self.update_buttons()
@@ -2774,7 +3055,7 @@ class InteractiveFishSeller(discord.ui.View):
         # Page info button (not clickable)
         page_button = discord.ui.Button(
             label=f"Page {self.current_page + 1}/{self.total_pages}",
-            style=discord.ButtonStyle.secondary,
+            style=discord.ButtonStyle.primary,
             disabled=True
         )
         self.add_item(page_button)
@@ -3002,7 +3283,7 @@ class InteractiveFishSeller(discord.ui.View):
                     item.disabled = True
                 await self.message.edit(view=self)
             except:
-                pass  # Message might be deleted
+                pass
 
 
 class RaritySelect(discord.ui.Select):
@@ -3041,7 +3322,7 @@ class RaritySelect(discord.ui.Select):
             min_values=1,
             max_values=1
         )
-
+    
     async def callback(self, interaction):
         """Handle rarity selection"""
         if interaction.user.id != self.user_id:
@@ -3083,15 +3364,9 @@ class RaritySelect(discord.ui.Select):
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 
-                # Update the parent view's fish list by removing sold fish
-                # Find the parent view (InteractiveFishSeller)
-                parent_view = None
-                for view in interaction.client._connection._view_store._views:
-                    if isinstance(view, InteractiveFishSeller) and view.user_id == self.user_id:
-                        parent_view = view
-                        break
-                
-                if parent_view:
+                # Update the parent view to show new active rod
+                parent_view = self.view
+                if isinstance(parent_view, InteractiveFishSeller):
                     # Remove sold fish from parent's fish list
                     parent_view.fish_list = [f for f in parent_view.fish_list if f.get("type", "").lower() != selected_rarity.lower()]
                     

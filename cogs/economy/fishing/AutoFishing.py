@@ -180,7 +180,14 @@ class AutoFishing(commands.Cog):
             
             # Count fish that were auto-caught
             fish_list = user_data.get("fish", [])
-            auto_fish_count = sum(1 for fish in fish_list if fish.get("auto_caught", False))
+            auto_fish_count = 0
+            for fish in fish_list:
+                # Handle both dict and list formats safely
+                if isinstance(fish, dict) and fish.get("auto_caught", False):
+                    auto_fish_count += 1
+                elif isinstance(fish, list):
+                    # Skip malformed entries
+                    continue
             return auto_fish_count
         except Exception as e:
             print(f"Error getting fish count: {e}")

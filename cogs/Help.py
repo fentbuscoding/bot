@@ -177,8 +177,12 @@ class Help(commands.Cog, ErrorHandler):
         cog_page_map = {}
         page_index = 1  # Start at 1 because overview is at 0
         
+        # Group fishing-related cogs
+        fishing_commands = []
+        autofishing_commands = []
+        
         for cog_name, cog in sorted(self.bot.cogs.items(), key=lambda x: x[0].lower()):
-            if cog_name.lower() in ['help', 'jishaku', 'dev', 'moderation', 'votebans', 'stats', 'welcoming', 'performance']:
+            if cog_name.lower() in ['help', 'jishaku', 'dev', 'moderation', 'votebans', 'stats', 'welcoming', 'performance', 'fishingmain']:
                 continue
 
             if isinstance(ctx_or_interaction, (discord.Interaction, commands.Context)):
@@ -190,6 +194,15 @@ class Help(commands.Cog, ErrorHandler):
             if not commands_list:
                 continue
 
+            # Handle fishing modules specially
+            if cog_name.lower() == 'autofishing':
+                autofishing_commands.extend(commands_list)
+                continue
+            elif cog_name.lower() in ['fishingcore', 'fishinginventory', 'fishingselling', 'fishingstats'] or (hasattr(cog, '__module__') and 'fishing' in cog.__module__ and cog_name.lower() != 'autofishing'):
+                fishing_commands.extend(commands_list)
+                continue
+
+            # Regular cog processing
             cog_page_map[cog_name] = page_index
             page_index += 1
 
@@ -207,6 +220,48 @@ class Help(commands.Cog, ErrorHandler):
                 total_commands += 1
             
             embed.set_footer(text=f"{len(commands_list)} commands")
+            pages.append(embed)
+        
+        # Create Fishing page if we have fishing commands
+        if fishing_commands:
+            cog_page_map["Fishing"] = page_index
+            page_index += 1
+            
+            embed = discord.Embed(
+                description=f"**fishing**\n\n",
+                color=self._get_color(ctx_or_interaction)
+            )
+            
+            for cmd in sorted(fishing_commands, key=lambda x: x.name):
+                usage = f"/{cmd.name} {cmd.signature}".strip()
+                description = cmd.help or "no description"
+                if len(description) > 80:
+                    description = description[:77] + "..."
+                embed.description += f"`{usage}`\n{description}\n\n"
+                total_commands += 1
+            
+            embed.set_footer(text=f"{len(fishing_commands)} commands")
+            pages.append(embed)
+        
+        # Create AutoFishing page if we have autofishing commands
+        if autofishing_commands:
+            cog_page_map["AutoFishing"] = page_index
+            page_index += 1
+            
+            embed = discord.Embed(
+                description=f"**autofishing**\n\n",
+                color=self._get_color(ctx_or_interaction)
+            )
+            
+            for cmd in sorted(autofishing_commands, key=lambda x: x.name):
+                usage = f"/{cmd.name} {cmd.signature}".strip()
+                description = cmd.help or "no description"
+                if len(description) > 80:
+                    description = description[:77] + "..."
+                embed.description += f"`{usage}`\n{description}\n\n"
+                total_commands += 1
+            
+            embed.set_footer(text=f"{len(autofishing_commands)} commands")
             pages.append(embed)
 
         # Overview page
