@@ -474,7 +474,7 @@ class InteractiveFishSeller(discord.ui.View):
         self.currency = currency
         self.selling_cog = selling_cog
         self.current_page = 1
-        self.items_per_page = 5
+        self.items_per_page = 3  # Reduced to 3 to prevent Discord UI overflow
         self.total_pages = math.ceil(len(user_fish) / self.items_per_page) if user_fish else 1
         self.message = None
         self.update_buttons()
@@ -492,38 +492,39 @@ class InteractiveFishSeller(discord.ui.View):
         # Remove old sell buttons
         self.clear_items()
         
-        # Add navigation buttons
+        # Row 0: Navigation buttons (max 5 per row)
+        self.prev_button.row = 0
+        self.next_button.row = 0
         self.add_item(self.prev_button)
         self.add_item(self.next_button)
         
-        # Add sell buttons for current page fish
-        for i, fish in enumerate(page_fish):
+        # Row 1: Sell buttons for current page fish (max 3 to leave room for navigation)
+        for i, fish in enumerate(page_fish[:3]):  # Limit to 3 fish per page to avoid overflow
             button = discord.ui.Button(
                 label=f"Sell #{start_idx + i + 1}",
                 style=discord.ButtonStyle.red,
-                custom_id=f"sell_{fish.get('id', 'unknown')}"
+                custom_id=f"sell_{fish.get('id', 'unknown')}",
+                row=1
             )
             button.callback = self.create_sell_callback(fish)
             self.add_item(button)
         
-        # Add bulk action buttons if we have fish
+        # Row 2: Bulk action buttons if we have fish
         if len(self.user_fish) > 0:
             # Sell all button
             sell_all_button = discord.ui.Button(
                 label="💸 Sell All Fish",
                 style=discord.ButtonStyle.danger,
                 emoji="🐟",
-                row=1
+                row=3
             )
             sell_all_button.callback = self.sell_all_fish
             self.add_item(sell_all_button)
-            
-            # Sell by rarity dropdown
+        
+        # Row 2: Rarity select dropdown (defined in RaritySelect constructor)
+        if len(self.user_fish) > 0:
             rarity_select = RaritySelect(self.user_id, self.user_fish, self.currency, self.selling_cog)
             self.add_item(rarity_select)
-        
-        # Add rarity select dropdown
-        self.add_item(RaritySelect(self.user_id, self.user_fish, self.currency, self.selling_cog))
     
     def create_sell_callback(self, fish):
         """Create callback for sell button"""

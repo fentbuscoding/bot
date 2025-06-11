@@ -5,6 +5,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.amount_parser import parse_amount
 import discord
 from .fishing_ui import InteractiveFishSeller
 
@@ -54,6 +55,16 @@ class FishingSelling(commands.Cog, name="FishingSelling"):
         .sf < <value> - Sell fish with value less than specified amount
         .sf >= <value> - Sell fish with value greater than or equal to specified amount  
         .sf <= <value> - Sell fish with value less than or equal to specified amount
+        
+        Value formats supported:
+        • Numbers: 100000, 2000000
+        • Scientific notation: 2e5 (200,000), 1.5e6 (1,500,000)
+        • Multipliers: 200k, 2m, 1.5m
+        
+        Examples:
+        .sf > 2e5 - Sell fish worth more than 200,000
+        .sf < 1m - Sell fish worth less than 1,000,000
+        .sf >= 500k - Sell fish worth 500,000 or more
         """
         try:
             user_fish = await db.get_fish(ctx.author.id)
@@ -69,11 +80,12 @@ class FishingSelling(commands.Cog, name="FishingSelling"):
             
             # Handle value-based filtering
             if arg1 in ['>', '<', '>=', '<='] and len(args) > 1:
-                try:
-                    value_threshold = int(args[1])
-                    return await self._sell_fish_by_value(ctx, user_fish, arg1, value_threshold)
-                except ValueError:
-                    return await ctx.reply("❌ Invalid value! Please use a number.")
+                # Use amount parser to handle various formats (2e5, 2m, 2k, etc.)
+                value_threshold, error = parse_amount(args[1], 999999999999)  # Use large number as we don't care about balance for filtering
+                if error:
+                    return await ctx.reply(f"❌ Invalid value format! {error}\n\n**Supported formats:**\n• Numbers: `100000`, `2000000`\n• Scientific: `2e5`, `1.5e6`\n• Multipliers: `200k`, `2m`, `1.5m`")
+                
+                return await self._sell_fish_by_value(ctx, user_fish, arg1, value_threshold)
             
             # Handle specific fish ID
             elif len(arg1) > 8:  # Fish IDs are usually longer
