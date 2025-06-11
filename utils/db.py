@@ -1169,7 +1169,8 @@ class AsyncDatabase:
             "rods",  # Unified rods collection
             "bait",   # Unified bait collection
             "active_potions",
-            "active_buffs"
+            "active_buffs",
+            "reminders"  # Persistent reminders
         ]
         
         for coll_name in collections:
@@ -1183,6 +1184,8 @@ class AsyncDatabase:
         await self.db.active_buffs.create_index("expires_at", expireAfterSeconds=0)  # TTL index
         await self.db.rods.create_index("_id")  # Rod ID index
         await self.db.bait.create_index("_id")  # Bait ID index
+        await self.db.reminders.create_index("due_time")  # Reminder due time index
+        await self.db.reminders.create_index("user_id")  # Reminder user index
         
         # Initialize user defaults with new inventory structure
         await self.db.users.update_many(
@@ -1465,6 +1468,98 @@ class AsyncDatabase:
             
         except Exception as e:
             self.logger.error(f"Error during inventory cleanup: {e}")
+            return 0
+
+    # Reminder Management Functions
+    async def add_reminder(self, user_id: int, message: str, due_time: datetime.datetime, 
+                          channel_id: int = None, original_time: str = None) -> bool:
+        """Add a reminder to the database"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            reminder_data = {
+                "user_id": user_id,
+                "channel_id": channel_id,
+                "message": message,
+                "due_time": due_time,
+                "created_at": datetime.datetime.now(),
+                "original_time": original_time
+            }
+            
+            result = await self.db.reminders.insert_one(reminder_data)
+            return result.inserted_id is not None
+            
+        except Exception as e:
+            self.logger.error(f"Error adding reminder: {e}")
+            return False
+    
+    async def get_user_reminders(self, user_id: int) -> list:
+        """Get all reminders for a user"""
+        if not await self.ensure_connected():
+            return []
+        
+        try:
+            reminders = await self.db.reminders.find({
+                "user_id": user_id
+            }).sort("due_time", 1).to_list(None)
+            return reminders
+        except Exception as e:
+            self.logger.error(f"Error getting user reminders: {e}")
+            return []
+    
+    async def get_due_reminders(self) -> list:
+        """Get all reminders that are due"""
+        if not await self.ensure_connected():
+            return []
+        
+        try:
+            current_time = datetime.datetime.now()
+            reminders = await self.db.reminders.find({
+                "due_time": {"$lte": current_time}
+            }).to_list(None)
+            return reminders
+        except Exception as e:
+            self.logger.error(f"Error getting due reminders: {e}")
+            return []
+    
+    async def delete_reminder(self, reminder_id) -> bool:
+        """Delete a specific reminder"""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            result = await self.db.reminders.delete_one({"_id": reminder_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            self.logger.error(f"Error deleting reminder: {e}")
+            return False
+    
+    async def delete_user_reminders(self, user_id: int) -> int:
+        """Delete all reminders for a user, returns count deleted"""
+        if not await self.ensure_connected():
+            return 0
+        
+        try:
+            result = await self.db.reminders.delete_many({"user_id": user_id})
+            return result.deleted_count
+        except Exception as e:
+            self.logger.error(f"Error deleting user reminders: {e}")
+            return 0
+    
+    async def cleanup_old_reminders(self, days_old: int = 30) -> int:
+        """Clean up old reminders that are past due by specified days"""
+        if not await self.ensure_connected():
+            return 0
+        
+        try:
+            cutoff_time = datetime.datetime.now() - datetime.timedelta(days=days_old)
+            result = await self.db.reminders.delete_many({
+                "due_time": {"$lt": cutoff_time}
+            })
+            return result.deleted_count
+        except Exception as e:
+            self.logger.error(f"Error cleaning up old reminders: {e}")
             return 0
 
 class SyncDatabase:

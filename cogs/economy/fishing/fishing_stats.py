@@ -5,6 +5,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.weight_formatter import format_weight
 import discord
 import math
 from .fishing_ui import GlobalFishPaginator
@@ -133,7 +134,7 @@ class FishingStats(commands.Cog, name="FishingStats"):
                 name="📊 Overview",
                 value=f"**Total Fish:** {total_fish:,}\n"
                       f"**Total Value:** {total_value:,} {self.currency}\n"
-                      f"**Total Weight:** {total_weight:.2f} kg\n"
+                      f"**Total Weight:** {format_weight(total_weight)}\n"
                       f"**Average Value:** {(total_value / total_fish):,.0f} {self.currency}",
                 inline=True
             )
@@ -144,7 +145,7 @@ class FishingStats(commands.Cog, name="FishingStats"):
                     name="🏆 Best Catch",
                     value=f"**{best_catch['name']}**\n"
                           f"Value: {best_catch['value']:,} {self.currency}\n"
-                          f"Weight: {best_catch['weight']:.2f} kg\n"
+                          f"Weight: {format_weight(best_catch['weight'])}\n"
                           f"Rarity: {best_catch['type'].title()}",
                     inline=True
                 )

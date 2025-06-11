@@ -840,12 +840,13 @@ class Economy(commands.Cog):
             view = discord.ui.View(timeout=180)
             
             if can_afford_combined:
-                # Single upgrade buttons
+                # Row 0: Single upgrade buttons
                 if can_afford_bank:
                     bank_button = discord.ui.Button(
                         label="Upgrade (Bank)", 
                         style=discord.ButtonStyle.primary,
-                        emoji="🏦"
+                        emoji="🏦",
+                        row=0
                     )
                     bank_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "bank")
                     view.add_item(bank_button)
@@ -854,7 +855,8 @@ class Economy(commands.Cog):
                     wallet_button = discord.ui.Button(
                         label="Upgrade (Wallet)", 
                         style=discord.ButtonStyle.secondary,
-                        emoji="💵"
+                        emoji="💵",
+                        row=0
                     )
                     wallet_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "wallet")
                     view.add_item(wallet_button)
@@ -863,18 +865,20 @@ class Economy(commands.Cog):
                     combined_button = discord.ui.Button(
                         label="Upgrade (Combined)", 
                         style=discord.ButtonStyle.primary,
-                        emoji="🔄"
+                        emoji="🔄",
+                        row=0
                     )
                     combined_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, 1, "combined")
                     view.add_item(combined_button)
                 
-                # Max upgrade buttons (if more than 1 possible)
+                # Row 1: Max upgrade buttons (if more than 1 possible)
                 if max_combined > 1:
                     if max_from_bank > 1 and can_afford_bank:
                         max_bank_button = discord.ui.Button(
                             label=f"Max {max_from_bank} (Bank)", 
                             style=discord.ButtonStyle.success,
-                            emoji="🏦"
+                            emoji="🏦",
+                            row=1
                         )
                         max_bank_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_from_bank, "bank")
                         view.add_item(max_bank_button)
@@ -883,7 +887,8 @@ class Economy(commands.Cog):
                         max_wallet_button = discord.ui.Button(
                             label=f"Max {max_from_wallet} (Wallet)", 
                             style=discord.ButtonStyle.success,
-                            emoji="💵"
+                            emoji="💵",
+                            row=1
                         )
                         max_wallet_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_from_wallet, "wallet")
                         view.add_item(max_wallet_button)
@@ -892,13 +897,14 @@ class Economy(commands.Cog):
                         max_combined_button = discord.ui.Button(
                             label=f"Max {max_combined} (Combined)", 
                             style=discord.ButtonStyle.success,
-                            emoji="🔄"
+                            emoji="🔄",
+                            row=1
                         )
                         max_combined_button.callback = lambda i: self._handle_upgrade(i, ctx, user_id, guild_id, max_combined, "combined")
                         view.add_item(max_combined_button)
             
-            # Close button
-            close_button = discord.ui.Button(label="Close", style=discord.ButtonStyle.red, emoji="❌")
+            # Row 2: Close button
+            close_button = discord.ui.Button(label="Close", style=discord.ButtonStyle.red, emoji="❌", row=2)
             close_button.callback = lambda i: self._handle_close(i, ctx)
             view.add_item(close_button)
             

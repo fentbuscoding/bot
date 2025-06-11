@@ -281,48 +281,26 @@ class Utility(commands.Cog, ErrorHandler):
             self.logger.error(f"Failed to fetch first message: {e}")
             await ctx.reply("```Failed to fetch first message```")
 
-    @commands.command(aliases=['remindme', 'remind'])
-    async def reminder(self, ctx, time: str=None, *, message: str="You asked me to remind you, but didnt give me a reason."):
-        """Set a reminder. Example: .remindme 10m Take a break!"""
-        units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-        try:
-            seconds = int(time[:-1]) * units[time[-1]]
-        except Exception:
-            return await ctx.reply(embed=discord.Embed(
-                description="Format: `.remindme 10m Take a break!` (s/m/h/d)",
-                color=discord.Color.red()
-            ))
-        if not time or not message:
-            return await ctx.reply(embed=discord.Embed(
-                description="Format: `.remindme 10m Take a break!` (s/m/h/d)",
-                color=discord.Color.red()
-            ))
-        if seconds <= 0:
-            return await ctx.reply(embed=discord.Embed(
-                description="Time must be positive!",
-                color=discord.Color.red()
-            ))
-        if seconds > 604800:  # 1 week
-            return await ctx.reply(embed=discord.Embed(
-                description="Time must be less than 1 week!",
-                color=discord.Color.red()
-            ))
-        
-        await ctx.reply(embed=discord.Embed(
-            description=f"⏰ I'll remind you in {time}: `{message}`",
-            color=discord.Color.green()
-        ))
-        await asyncio.sleep(seconds)
-        try:
-            await ctx.author.send(embed=discord.Embed(
-                description=f"⏰ Reminder: {message}",
-                color=discord.Color.blue()
-            ))
-        except Exception:
-            await ctx.send(embed=discord.Embed(
-                description=f"{ctx.author.mention} ⏰ Reminder: {message}",
-                color=discord.Color.blue()
-            ))
+    @commands.command(aliases=['remindme_old', 'remind_old'])
+    async def reminder_old(self, ctx, time: str=None, *, message: str="You asked me to remind you, but didnt give me a reason."):
+        """Legacy reminder command (use new .remind command for better features)"""
+        embed = discord.Embed(
+            title="⏰ Legacy Reminder Disabled",
+            description=(
+                "This legacy reminder command has been replaced with a better version!\n\n"
+                "**Use the new reminder system:**\n"
+                "• `.remind <time> <message>` - Set a reminder\n"
+                "• `.myreminders` - View your reminders\n"
+                "• `.cancelreminder <number>` - Cancel a reminder\n\n"
+                "**New features:**\n"
+                "• Persistent reminders (survive bot restarts)\n"
+                "• Up to 2 years duration\n"
+                "• Flexible time formats (1Y 6M 2d 5h 30m)\n"
+                "• Better time parsing"
+            ),
+            color=0x2b2d31
+        )
+        await ctx.reply(embed=embed)
 
     @commands.command()
     async def multipoll(self, ctx, question: str, *options):

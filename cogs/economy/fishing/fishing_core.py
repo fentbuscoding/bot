@@ -6,6 +6,7 @@ from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
+from utils.weight_formatter import format_weight
 import discord
 import random
 import uuid
@@ -345,7 +346,7 @@ class FishingCore(commands.Cog, name="FishingCore"):
                 
                 escape_embed = discord.Embed(
                     title="💔 The one that got away...",
-                    description=f"A **{fish_template['name']}** ({fish_weight:.2f}kg) broke free!",
+                    description=f"A **{fish_template['name']}** ({format_weight(fish_weight)}) broke free!",
                     color=config['color']
                 )
                 escape_embed.add_field(
@@ -418,7 +419,7 @@ class FishingCore(commands.Cog, name="FishingCore"):
                 
                 success_embed.add_field(
                     name="⚖️ Weight",
-                    value=f"{fish_weight:.2f} kg",
+                    value=format_weight(fish_weight),
                     inline=True
                 )
                 

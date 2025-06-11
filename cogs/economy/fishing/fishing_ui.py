@@ -22,31 +22,45 @@ class FishInventoryPaginator(discord.ui.View):
         self.update_buttons()
     
     def update_buttons(self):
-        """Update button states"""
-        self.prev_button.disabled = self.current_page <= 1
-        self.next_button.disabled = self.current_page >= self.total_pages
+        """Update button states - buttons are never disabled for wrap-around navigation"""
+        self.prev_button.disabled = self.total_pages <= 1
+        self.next_button.disabled = self.total_pages <= 1
     
-    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page > 1:
             self.current_page -= 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to last page
+            self.current_page = self.total_pages
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to first page
+            self.current_page = 1
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     async def create_embed(self):
         """Create embed for current page"""
@@ -174,25 +188,39 @@ class GlobalFishPaginator(discord.ui.View):
         self.update_buttons()
     
     def update_buttons(self):
-        """Update button states"""
-        self.prev_button.disabled = self.current_page <= 1
-        self.next_button.disabled = self.current_page >= self.total_pages
+        """Update button states - buttons are never disabled for wrap-around navigation"""
+        self.prev_button.disabled = self.total_pages <= 1
+        self.next_button.disabled = self.total_pages <= 1
     
     @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page > 1:
             self.current_page -= 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to last page
+            self.current_page = self.total_pages
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to first page
+            self.current_page = 1
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     async def create_embed(self):
         """Create embed for current page"""
@@ -243,31 +271,45 @@ class RodPaginator(discord.ui.View):
         self.add_item(RodSelect(user_rods, active_rod_id, fishing_cog))
     
     def update_buttons(self):
-        """Update button states"""
-        self.prev_button.disabled = self.current_page <= 1
-        self.next_button.disabled = self.current_page >= self.total_pages
+        """Update button states - buttons are never disabled for wrap-around navigation"""
+        self.prev_button.disabled = self.total_pages <= 1
+        self.next_button.disabled = self.total_pages <= 1
     
     @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page > 1:
             self.current_page -= 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to last page
+            self.current_page = self.total_pages
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to first page
+            self.current_page = 1
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     async def create_embed(self):
         """Create embed for current page"""
@@ -360,31 +402,45 @@ class BaitPaginator(discord.ui.View):
         self.add_item(BaitSelect(user_bait, active_bait_id))
     
     def update_buttons(self):
-        """Update button states"""
-        self.prev_button.disabled = self.current_page <= 1
-        self.next_button.disabled = self.current_page >= self.total_pages
+        """Update button states - buttons are never disabled for wrap-around navigation"""
+        self.prev_button.disabled = self.total_pages <= 1
+        self.next_button.disabled = self.total_pages <= 1
     
     @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page > 1:
             self.current_page -= 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to last page
+            self.current_page = self.total_pages
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your inventory!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to first page
+            self.current_page = 1
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     async def create_embed(self):
         """Create embed for current page"""
@@ -480,9 +536,9 @@ class InteractiveFishSeller(discord.ui.View):
         self.update_buttons()
     
     def update_buttons(self):
-        """Update button states"""
-        self.prev_button.disabled = self.current_page <= 1
-        self.next_button.disabled = self.current_page >= self.total_pages
+        """Update button states - buttons are never disabled for wrap-around navigation"""
+        self.prev_button.disabled = self.total_pages <= 1
+        self.next_button.disabled = self.total_pages <= 1
         
         # Update sell buttons for current page
         start_idx = (self.current_page - 1) * self.items_per_page
@@ -572,22 +628,36 @@ class InteractiveFishSeller(discord.ui.View):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your fish!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page > 1:
             self.current_page -= 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to last page
+            self.current_page = self.total_pages
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("❌ This isn't your fish!", ephemeral=True)
         
+        if self.total_pages <= 1:
+            return
+        
         if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_buttons()
-            embed = await self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            # Wrap to first page
+            self.current_page = 1
+        
+        self.update_buttons()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
     
     async def create_embed(self):
         """Create embed for current page"""

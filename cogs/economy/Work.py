@@ -21,6 +21,7 @@ class Work(commands.Cog):
         self.logger = CogLogger(self.__class__.__name__)
         self.currency = "<:bronkbuk:1377389238290747582>"
         self.pending_raises = {}  # Track raise requests for group bonuses
+        self.work_cooldowns = {}  # Track work cooldowns per user
         
         # Load job definitions
         self.jobs = {
@@ -107,6 +108,17 @@ class Work(commands.Cog):
         """Update user's job data in the database."""
         await db.db.users.update_one({"_id": str(user_id)}, {"$set": {"work": job_data}}, upsert=True)
 
+    async def can_work(self, user_id: int) -> tuple[bool, int]:
+        """Check if user can work and return cooldown remaining"""
+        last_work = self.work_cooldowns.get(user_id, 0)
+        current_time = time.time()
+        cooldown_remaining = max(0, 60 - (current_time - last_work))
+        return cooldown_remaining == 0, int(cooldown_remaining)
+
+    async def set_work_cooldown(self, user_id: int):
+        """Set work cooldown for user"""
+        self.work_cooldowns[user_id] = time.time()
+
     @discord.app_commands.command(name="job", description="Manage your job and career")
     async def job_slash(self, interaction: discord.Interaction):
         """Main job command with interactive menu"""
@@ -149,6 +161,17 @@ class Work(commands.Cog):
     @discord.app_commands.command(name="work", description="Work at your job to earn money")
     async def work_slash(self, interaction: discord.Interaction):
         """Work command with minigame"""
+        # Check work cooldown first
+        can_work, cooldown_remaining = await self.can_work(interaction.user.id)
+        if not can_work:
+            embed = discord.Embed(
+                title="⏰ Work Cooldown",
+                description=f"You need to wait **{cooldown_remaining}** seconds before working again.",
+                color=0xf39c12
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
         user_job = await self.get_user_job(interaction.user.id)
         if not user_job or "name" not in user_job:
             embed = discord.Embed(
@@ -242,6 +265,17 @@ class Work(commands.Cog):
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def work_text(self, ctx):
         """Traditional work command with minigame"""
+        # Check work cooldown first
+        can_work, cooldown_remaining = await self.can_work(ctx.author.id)
+        if not can_work:
+            embed = discord.Embed(
+                title="⏰ Work Cooldown",
+                description=f"You need to wait **{cooldown_remaining}** seconds before working again.",
+                color=0xf39c12
+            )
+            await ctx.reply(embed=embed)
+            return
+
         user_job = await self.get_user_job(ctx.author.id)
         if not user_job or "name" not in user_job:
             embed = discord.Embed(
@@ -960,12 +994,17 @@ class ModerationMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False  # Track if any button has been used
 
     @discord.ui.button(label="Ban Spam Bot", style=discord.ButtonStyle.danger, emoji="🔨")
     async def ban_bot(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "banned a spam bot", 1.2)
 
     @discord.ui.button(label="Delete NSFW", style=discord.ButtonStyle.secondary, emoji="🗑️")
@@ -973,6 +1012,10 @@ class ModerationMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "deleted inappropriate content", 1.0)
 
     @discord.ui.button(label="Ignore Report", style=discord.ButtonStyle.success, emoji="😴")
@@ -980,20 +1023,31 @@ class ModerationMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "ignored a user report", 0.8)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🔨 Moderation Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x2ecc71
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class CryptoMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1001,12 +1055,17 @@ class CryptoMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="HODL 💎🙌", style=discord.ButtonStyle.primary, emoji="💎")
     async def hodl(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         success = random.choice([True, False])
         multiplier = 2.0 if success else 0.1
         action = "diamond handed to the moon" if success else "paper handed like a noob"
@@ -1017,6 +1076,10 @@ class CryptoMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "bought the dip", 1.3)
 
     @discord.ui.button(label="Panic Sell", style=discord.ButtonStyle.danger, emoji="📈")
@@ -1024,20 +1087,31 @@ class CryptoMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "panic sold at a loss", 0.5)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="📈 Crypto Trading Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xf39c12
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class RedditMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1045,12 +1119,17 @@ class RedditMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Lock Thread", style=discord.ButtonStyle.danger, emoji="🔒")
     async def lock_thread(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "locked a controversial thread", 1.1)
 
     @discord.ui.button(label="Award Gold", style=discord.ButtonStyle.secondary, emoji="🏆")
@@ -1058,6 +1137,10 @@ class RedditMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "gave yourself Reddit Gold", 0.9)
 
     @discord.ui.button(label="Ban User", style=discord.ButtonStyle.success, emoji="🔨")
@@ -1065,6 +1148,10 @@ class RedditMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "banned someone for wrongthink", 1.3)
 
     @discord.ui.button(label="Edit Comment", style=discord.ButtonStyle.primary, emoji="✏️")
@@ -1072,20 +1159,31 @@ class RedditMinigame(discord.ui.View):
         if interaction.user.id != self.original_user_id:
             await interaction.response.send_message("You can't work someone else's job!", ephemeral=True)
             return
+        if self.used:
+            await interaction.response.send_message("You already completed this work session!", ephemeral=True)
+            return
+        self.used = True
         await self.complete_work(interaction, "secretly edited someone's comment", 1.5)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🤓 Reddit Admin Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xff4500
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class SimpMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1093,6 +1191,7 @@ class SimpMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Donate $1000", style=discord.ButtonStyle.danger, emoji="💸")
     async def big_donation(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1127,17 +1226,24 @@ class SimpMinigame(discord.ui.View):
         await self.complete_work(interaction, "fought the haters in Twitter replies", 1.2)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="💸 Simp Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0xff69b4
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class MemeMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1145,6 +1251,7 @@ class MemeMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Post Drake Meme", style=discord.ButtonStyle.danger, emoji="🎤")
     async def drake_meme(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1179,17 +1286,24 @@ class MemeMinigame(discord.ui.View):
         await self.complete_work(interaction, "deep fried a meme until it was unrecognizable", 1.4)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🗿 Meme Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x00ff00
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class NFTMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1197,6 +1311,7 @@ class NFTMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Right-Click Save", style=discord.ButtonStyle.danger, emoji="🖱️")
     async def right_click(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1235,17 +1350,24 @@ class NFTMinigame(discord.ui.View):
         await self.complete_work(interaction, "wash traded with your alt accounts", 1.5)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🖼️ NFT Trading Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x9932cc
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class TwitterMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1253,6 +1375,7 @@ class TwitterMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Quote Tweet Drama", style=discord.ButtonStyle.danger, emoji="🔥")
     async def quote_tweet(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1287,17 +1410,24 @@ class TwitterMinigame(discord.ui.View):
         await self.complete_work(interaction, "posted about current thing for clout", 0.9)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🐦 Twitter Warrior Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x1da1f2
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class StreamingMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1305,6 +1435,7 @@ class StreamingMinigame(discord.ui.View):
         self.work_cog = work_cog
         self.user_job = user_job
         self.original_user_id = original_user_id
+        self.used = False
 
     @discord.ui.button(label="Play Just Chatting", style=discord.ButtonStyle.danger, emoji="💬")
     async def just_chatting(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1343,17 +1474,24 @@ class StreamingMinigame(discord.ui.View):
             await self.complete_work(interaction, "leaked your DMs on accident", 0.3)
 
     async def complete_work(self, interaction, action, multiplier):
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         final_wage = int(base_wage * multiplier)
         
         await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
         
         embed = discord.Embed(
             title="🎮 Streaming Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {self.work_cog.currency}!",
             color=0x9146ff
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=self)
 
 class DefaultMinigame(discord.ui.View):
     def __init__(self, work_cog, user_job, original_user_id):
@@ -1369,6 +1507,7 @@ class DefaultMinigame(discord.ui.View):
         self.game_over = False
         self.won = False
         self.first_click = True
+        self.work_completed = False  # Track if work has been completed
         
         # Add buttons for the minesweeper grid
         for row in range(self.board_size):
@@ -1469,6 +1608,14 @@ class DefaultMinigame(discord.ui.View):
 
     async def complete_work(self, interaction, won):
         """Complete the work and calculate wages based on performance"""
+        if self.work_completed:
+            return  # Prevent multiple completions
+        
+        self.work_completed = True
+        
+        # Set cooldown
+        await self.work_cog.set_work_cooldown(interaction.user.id)
+        
         base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
         
         if won:
@@ -1504,6 +1651,7 @@ class MinesweeperButton(discord.ui.Button):
             emoji=game.get_cell_emoji(row, col),
             style=discord.ButtonStyle.secondary,
             row=row
+       
         )
 
     async def callback(self, interaction):

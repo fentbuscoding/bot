@@ -5,6 +5,7 @@ from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.db import async_db as db
 from utils.safe_reply import safe_reply
+from utils.weight_formatter import format_weight
 import discord
 import math
 from .fishing_ui import FishInventoryPaginator, RodPaginator, BaitPaginator
@@ -227,7 +228,7 @@ class FishingInventory(commands.Cog, name="FishingInventory"):
             for i, fish in enumerate(page_fish, start=start_idx + 1):
                 fish_info = (
                     f"**#{i}** • **{fish.get('value', 0):,}** {self.currency}\n"
-                    f"**Weight:** {fish.get('weight', 0):.2f} kg\n"
+                    f"**Weight:** {format_weight(fish.get('weight', 0))}\n"
                     f"**Rarity:** {fish.get('type', 'unknown').title()}\n"
                     f"**ID:** `{fish.get('id', 'unknown')[:8]}...`"
                 )

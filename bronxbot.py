@@ -232,7 +232,9 @@ COG_DATA = {
         "cogs.unique.SyncRoles": "success", 
         "cogs.Help": "success", 
         "cogs.ModMail": "success", 
+        "cogs.Reminders": "success",
         "cogs.Utility": "cog",
+        "cogs.Reminders": "success",  # Advanced reminder system
         # cogs.unique.economy is now split into multiple cogs
         "cogs.economy.Economy": "success",
         "cogs.economy.fishing": "success",
