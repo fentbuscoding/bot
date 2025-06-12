@@ -381,11 +381,12 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         embed.add_field(
             name="Commands",
             value=(
-                "`whitelist channel <channel> <command>` - Whitelist command in channel\n"
-                "`whitelist role <role> <command>` - Whitelist command for role\n"
-                "`whitelist remove channel <channel> <command>` - Remove whitelist\n"
-                "`whitelist remove role <role> <command>` - Remove role whitelist\n"
-                "`whitelist view` - View current whitelists"
+                "`whitelist channel <channel> <command|all>` - Whitelist command(s) in channel\n"
+                "`whitelist role <role> <command|all>` - Whitelist command(s) for role\n"
+                "`whitelist remove channel <channel> <command|all>` - Remove from whitelist\n"
+                "`whitelist remove role <role> <command|all>` - Remove from role whitelist\n"
+                "`whitelist view` - View current whitelists\n\n"
+                "💡 **Tip:** Use `all` to apply to all commands at once!"
             ),
             inline=False
         )
@@ -443,6 +444,10 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def whitelist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
         """Whitelist a command in a specific channel"""
+        # Validate command exists if not "all"
+        if command.lower() != "all" and not await self._validate_command(command):
+            return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
+        
         settings = await async_db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         channel_whitelist = whitelist.get('channels', {})
@@ -469,6 +474,10 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def whitelist_role(self, ctx, role: discord.Role, *, command: str):
         """Whitelist a command for a specific role"""
+        # Validate command exists if not "all"
+        if command.lower() != "all" and not await self._validate_command(command):
+            return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
+        
         settings = await async_db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         role_whitelist = whitelist.get('roles', {})
@@ -491,6 +500,81 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         else:
             await ctx.send(f"❌ Command `{command}` is already whitelisted for {role.mention}")
 
+    # Whitelist Remove Commands
+    @whitelist_settings.group(name='remove', invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def remove_whitelist(self, ctx):
+        """Remove command from whitelist"""
+        await ctx.send("❌ Please specify `channel` or `role`. Example: `whitelist remove channel #general ping`")
+
+    @remove_whitelist.command(name='channel')
+    @commands.has_permissions(manage_guild=True)
+    async def remove_whitelist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
+        """Remove command from channel whitelist"""
+        settings = await async_db.get_guild_settings(ctx.guild.id)
+        whitelist = settings.get('command_whitelist', {})
+        channel_whitelist = whitelist.get('channels', {})
+        
+        channel_id = str(channel.id)
+        if channel_id not in channel_whitelist or command not in channel_whitelist[channel_id]:
+            return await ctx.send(f"❌ Command `{command}` is not whitelisted in {channel.mention}!")
+        
+        # Handle "all" removal
+        if command.lower() == "all":
+            channel_whitelist[channel_id] = []
+            command_text = "all commands"
+        else:
+            channel_whitelist[channel_id].remove(command)
+            command_text = f"`{command}`"
+        
+        # Clean up empty entries
+        if not channel_whitelist[channel_id]:
+            del channel_whitelist[channel_id]
+        
+        whitelist['channels'] = channel_whitelist
+        await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+        
+        embed = discord.Embed(
+            title="✅ Whitelist Removed",
+            description=f"Removed {command_text} from whitelist in {channel.mention}",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
+
+    @remove_whitelist.command(name='role')
+    @commands.has_permissions(manage_guild=True)
+    async def remove_whitelist_role(self, ctx, role: discord.Role, *, command: str):
+        """Remove command from role whitelist"""
+        settings = await async_db.get_guild_settings(ctx.guild.id)
+        whitelist = settings.get('command_whitelist', {})
+        role_whitelist = whitelist.get('roles', {})
+        
+        role_id = str(role.id)
+        if role_id not in role_whitelist or command not in role_whitelist[role_id]:
+            return await ctx.send(f"❌ Command `{command}` is not whitelisted for {role.mention}!")
+        
+        # Handle "all" removal
+        if command.lower() == "all":
+            role_whitelist[role_id] = []
+            command_text = "all commands"
+        else:
+            role_whitelist[role_id].remove(command)
+            command_text = f"`{command}`"
+        
+        # Clean up empty entries
+        if not role_whitelist[role_id]:
+            del role_whitelist[role_id]
+        
+        whitelist['roles'] = role_whitelist
+        await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+        
+        embed = discord.Embed(
+            title="✅ Whitelist Removed",
+            description=f"Removed {command_text} from whitelist for {role.mention}",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
+
     # Command Blacklist Management  
     @general_settings.group(name='blacklist', invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
@@ -504,13 +588,14 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         embed.add_field(
             name="Commands",
             value=(
-                "`blacklist channel <channel> <command>` - Blacklist command in channel\n"
-                "`blacklist role <role> <command>` - Blacklist command for role\n"
-                "`blacklist user <user> <command>` - Blacklist command for user\n"
-                "`blacklist remove channel <channel> <command>` - Remove blacklist\n"
-                "`blacklist remove role <role> <command>` - Remove role blacklist\n"
-                "`blacklist remove user <user> <command>` - Remove user blacklist\n"
-                "`blacklist view` - View current blacklists"
+                "`blacklist channel <channel> <command|all>` - Blacklist command(s) in channel\n"
+                "`blacklist role <role> <command|all>` - Blacklist command(s) for role\n"
+                "`blacklist user <user> <command|all>` - Blacklist command(s) for user\n"
+                "`blacklist remove channel <channel> <command|all>` - Remove from blacklist\n"
+                "`blacklist remove role <role> <command|all>` - Remove from role blacklist\n"
+                "`blacklist remove user <user> <command|all>` - Remove from user blacklist\n"
+                "`blacklist view` - View current blacklists\n\n"
+                "💡 **Tip:** Use `all` to apply to all commands at once!"
             ),
             inline=False
         )
@@ -586,6 +671,10 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def blacklist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
         """Blacklist a command in a specific channel"""
+        # Validate command exists if not "all"
+        if command.lower() != "all" and not await self._validate_command(command):
+            return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
+        
         settings = await async_db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         channel_blacklist = blacklist.get('channels', {})
@@ -612,6 +701,10 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def blacklist_role(self, ctx, role: discord.Role, *, command: str):
         """Blacklist a command for a specific role"""
+        # Validate command exists if not "all"
+        if command.lower() != "all" and not await self._validate_command(command):
+            return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
+        
         settings = await async_db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         role_blacklist = blacklist.get('roles', {})
@@ -638,6 +731,10 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def blacklist_user(self, ctx, user: discord.Member, *, command: str):
         """Blacklist a command for a specific user"""
+        # Validate command exists if not "all"
+        if command.lower() != "all" and not await self._validate_command(command):
+            return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
+        
         settings = await async_db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         user_blacklist = blacklist.get('users', {})
@@ -659,6 +756,115 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             await ctx.send(embed=embed)
         else:
             await ctx.send(f"❌ Command `{command}` is already blacklisted for {user.mention}")
+
+    # Blacklist Remove Commands
+    @blacklist_settings.group(name='remove', invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def remove_blacklist(self, ctx):
+        """Remove command from blacklist"""
+        await ctx.send("❌ Please specify `channel`, `role`, or `user`. Example: `blacklist remove channel #general ping`")
+
+    @remove_blacklist.command(name='channel')
+    @commands.has_permissions(manage_guild=True)
+    async def remove_blacklist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
+        """Remove command from channel blacklist"""
+        settings = await async_db.get_guild_settings(ctx.guild.id)
+        blacklist = settings.get('command_blacklist', {})
+        channel_blacklist = blacklist.get('channels', {})
+        
+        channel_id = str(channel.id)
+        if channel_id not in channel_blacklist or command not in channel_blacklist[channel_id]:
+            return await ctx.send(f"❌ Command `{command}` is not blacklisted in {channel.mention}!")
+        
+        # Handle "all" removal
+        if command.lower() == "all":
+            channel_blacklist[channel_id] = []
+            command_text = "all commands"
+        else:
+            channel_blacklist[channel_id].remove(command)
+            command_text = f"`{command}`"
+        
+        # Clean up empty entries
+        if not channel_blacklist[channel_id]:
+            del channel_blacklist[channel_id]
+        
+        blacklist['channels'] = channel_blacklist
+        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        
+        embed = discord.Embed(
+            title="✅ Blacklist Removed",
+            description=f"Removed {command_text} from blacklist in {channel.mention}",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
+
+    @remove_blacklist.command(name='role')
+    @commands.has_permissions(manage_guild=True)
+    async def remove_blacklist_role(self, ctx, role: discord.Role, *, command: str):
+        """Remove command from role blacklist"""
+        settings = await async_db.get_guild_settings(ctx.guild.id)
+        blacklist = settings.get('command_blacklist', {})
+        role_blacklist = blacklist.get('roles', {})
+        
+        role_id = str(role.id)
+        if role_id not in role_blacklist or command not in role_blacklist[role_id]:
+            return await ctx.send(f"❌ Command `{command}` is not blacklisted for {role.mention}!")
+        
+        # Handle "all" removal
+        if command.lower() == "all":
+            role_blacklist[role_id] = []
+            command_text = "all commands"
+        else:
+            role_blacklist[role_id].remove(command)
+            command_text = f"`{command}`"
+        
+        # Clean up empty entries
+        if not role_blacklist[role_id]:
+            del role_blacklist[role_id]
+        
+        blacklist['roles'] = role_blacklist
+        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        
+        embed = discord.Embed(
+            title="✅ Blacklist Removed",
+            description=f"Removed {command_text} from blacklist for {role.mention}",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
+
+    @remove_blacklist.command(name='user')
+    @commands.has_permissions(manage_guild=True)
+    async def remove_blacklist_user(self, ctx, user: discord.Member, *, command: str):
+        """Remove command from user blacklist"""
+        settings = await async_db.get_guild_settings(ctx.guild.id)
+        blacklist = settings.get('command_blacklist', {})
+        user_blacklist = blacklist.get('users', {})
+        
+        user_id = str(user.id)
+        if user_id not in user_blacklist or command not in user_blacklist[user_id]:
+            return await ctx.send(f"❌ Command `{command}` is not blacklisted for {user.mention}!")
+        
+        # Handle "all" removal
+        if command.lower() == "all":
+            user_blacklist[user_id] = []
+            command_text = "all commands"
+        else:
+            user_blacklist[user_id].remove(command)
+            command_text = f"`{command}`"
+        
+        # Clean up empty entries
+        if not user_blacklist[user_id]:
+            del user_blacklist[user_id]
+        
+        blacklist['users'] = user_blacklist
+        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        
+        embed = discord.Embed(
+            title="✅ Blacklist Removed",
+            description=f"Removed {command_text} from blacklist for {user.mention}",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
 
     # Ignore Management
     @general_settings.group(name='ignore', invoke_without_command=True)
@@ -848,6 +1054,37 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             return True
         
         return False
+
+    async def _validate_command(self, command_name: str) -> bool:
+        """Validate that a command exists"""
+        if command_name.lower() == "all":
+            return True
+        
+        # Get all bot commands (both regular and slash commands)
+        all_commands = set()
+        
+        # Regular commands
+        for command in self.bot.commands:
+            all_commands.add(command.name)
+            # Add aliases
+            if hasattr(command, 'aliases'):
+                all_commands.update(command.aliases)
+            # Add qualified name for subcommands
+            if hasattr(command, 'qualified_name'):
+                all_commands.add(command.qualified_name)
+        
+        # Slash commands from the command tree
+        try:
+            for command in self.bot.tree.get_commands(type=discord.AppCommandType.chat_input):
+                all_commands.add(command.name)
+                # Add qualified names for slash command groups
+                if hasattr(command, 'qualified_name'):
+                    all_commands.add(command.qualified_name)
+        except:
+            pass  # In case slash commands aren't available
+        
+        # Check if the command exists
+        return command_name.lower() in {cmd.lower() for cmd in all_commands}
 
     async def is_command_allowed(self, ctx, command_name: str) -> bool:
         """Check if a command is allowed based on whitelist/blacklist settings"""

@@ -58,11 +58,9 @@ class CardGames(commands.Cog):
             await ctx.reply("❌ Gambling commands are not allowed in this channel!")
             return False
             
-        # Get or create user first
-        user_data = await db.get_user(ctx.author.id)
-        if not user_data:
-            await db.create_user(ctx.author.id, ctx.author.name)
-            user_data = await db.get_user(ctx.author.id)
+        # Ensure user exists in database by getting their wallet balance
+        # This will automatically create the user if they don't exist due to upsert=True
+        await db.get_wallet_balance(ctx.author.id)
         
         return True
     

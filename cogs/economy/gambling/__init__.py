@@ -65,11 +65,9 @@ class Gambling(commands.Cog):
     
     async def cog_check(self, ctx):
         """Global check for gambling commands"""
-        # Get or create user first
-        user_data = await db.get_user(ctx.author.id)
-        if not user_data:
-            await db.create_user(ctx.author.id, ctx.author.name)
-            user_data = await db.get_user(ctx.author.id)
+        # Ensure user exists in database by getting their wallet balance
+        # This will automatically create the user if they don't exist due to upsert=True
+        await db.get_wallet_balance(ctx.author.id)
         
         # Check cooldowns, ToS, etc here if needed
         return True
