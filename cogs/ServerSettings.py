@@ -6,6 +6,15 @@ from utils.error_handler import ErrorHandler
 
 logger = CogLogger('ServerSettings')
 
+# DEPRECATED: This file has been replaced by the modular settings system
+# The new system is located in cogs/settings/ with separate modules for:
+# - general.py (permissions, prefixes, command restrictions)
+# - moderation.py (auto-mod, warnings, punishment settings)
+# - economy.py (server economy configuration)
+# - music.py (music bot settings)
+# - welcome.py (welcome messages, auto-roles)
+# - logging.py (event logging configuration)
+
 class ServerSettings(commands.Cog, ErrorHandler):
     def __init__(self, bot):
         ErrorHandler.__init__(self)
@@ -14,19 +23,42 @@ class ServerSettings(commands.Cog, ErrorHandler):
     @commands.group(invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
     async def settings(self, ctx):
-        """View or modify server settings"""
+        """⚠️ DEPRECATED - Use the new modular settings system"""
+        embed = discord.Embed(
+            title="⚠️ Settings System Updated!",
+            description=(
+                "The server settings have been upgraded to a comprehensive modular system!\n\n"
+                "**New Settings Commands:**\n"
+                "🔧 `general` - General server configuration\n"
+                "🛡️ `moderation` - Auto-moderation settings\n" 
+                "💰 `economy` - Economy configuration\n"
+                "🎵 `music` - Music bot settings\n"
+                "👋 `welcome` - Welcome system setup\n"
+                "📝 `logging` - Event logging configuration\n\n"
+                "**Example:** `general view` or `welcome setup`"
+            ),
+            color=0xe74c3c
+        )
+        embed.set_footer(text="This old settings command will be removed in a future update.")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='oldsettings', hidden=True)
+    @commands.has_permissions(manage_guild=True)
+    async def old_settings_view(self, ctx):
+        """View legacy server settings (for migration purposes)"""
         settings = await db.get_guild_settings(ctx.guild.id)
         
         embed = discord.Embed(
-            title="Server Settings",
-            color=discord.Color.blue()
+            title="Legacy Server Settings (Read-Only)",
+            description="This shows your old settings. Use the new modular commands to configure.",
+            color=discord.Color.orange()
         )
         
         # Prefixes
         prefixes = settings.get("prefixes", ["."])
         embed.add_field(
             name="Prefixes",
-            value=", ".join(f"`{p}`" for p in prefixes),
+            value=", ".join(f"`{p}`" for p in prefixes) + "\n*Use: `general prefix` to manage*",
             inline=False
         )
         
@@ -36,7 +68,7 @@ class ServerSettings(commands.Cog, ErrorHandler):
         welcome_channel = f"<#{welcome['channel_id']}>" if welcome.get("channel_id") else "Not set"
         embed.add_field(
             name="Welcome System",
-            value=f"Status: {welcome_status}\nChannel: {welcome_channel}",
+            value=f"Status: {welcome_status}\nChannel: {welcome_channel}\n*Use: `welcome setup` to configure*",
             inline=False
         )
         
@@ -48,7 +80,7 @@ class ServerSettings(commands.Cog, ErrorHandler):
         
         embed.add_field(
             name="Moderation",
-            value=f"Log Channel: {log_channel}\nMute Role: {mute_role}\nJail Role: {jail_role}",
+            value=f"Log Channel: {log_channel}\nMute Role: {mute_role}\nJail Role: {jail_role}\n*Use: `moderation` and `logging` to configure*",
             inline=False
         )
         

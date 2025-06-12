@@ -293,8 +293,7 @@ COG_DATA = {
         "cogs.ModMail": "success", 
         "cogs.Reminders": "success",
         "cogs.Utility": "cog",
-        "cogs.Reminders": "success",  # Advanced reminder system
-        # cogs.unique.economy is now split into multiple cogs
+        "cogs.Reminders": "success",
         "cogs.economy.Economy": "success",
         "cogs.economy.fishing": "success",
         "cogs.economy.fishing.AutoFishing": "success",
@@ -304,9 +303,14 @@ COG_DATA = {
         "cogs.economy.Gambling": "success",
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
-        "cogs.Error": "success",  # Make sure Error cog is loaded
-        # Music system cogs
-        "cogs.music": "fun",                 # Music system (loads all music modules)
+        "cogs.settings.general": "success",
+        "cogs.settings.moderation": "success", 
+        "cogs.settings.economy": "success",
+        "cogs.settings.music": "success",
+        "cogs.settings.welcome": "success",
+        "cogs.settings.logging": "success",
+        "cogs.Error": "success",
+        "cogs.music": "fun",
         #"cogs.Security": "success", disabled for now
         #"cogs.LastFm": "disabled",  disabled for now
     },
