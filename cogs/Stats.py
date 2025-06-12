@@ -106,6 +106,51 @@ class Stats(commands.Cog):
             # Calculate total user count
             total_users = sum(guild.member_count or 0 for guild in self.bot.guilds)
             
+            # Get detailed guild information
+            guild_details = []
+            guild_basic_list = []
+            for guild in self.bot.guilds:
+                try:
+                    basic_info = {
+                        "id": str(guild.id),
+                        "name": guild.name,
+                        "member_count": guild.member_count or 0
+                    }
+                    guild_basic_list.append(basic_info)
+                    
+                    detailed_info = {
+                        "id": str(guild.id),
+                        "name": guild.name,
+                        "member_count": guild.member_count or 0,
+                        "owner_id": str(guild.owner_id) if guild.owner_id else None,
+                        "created_at": guild.created_at.isoformat() if guild.created_at else None,
+                        "features": list(guild.features) if guild.features else [],
+                        "verification_level": str(guild.verification_level) if guild.verification_level else "none",
+                        "premium_tier": guild.premium_tier if hasattr(guild, 'premium_tier') else 0,
+                        "premium_subscription_count": guild.premium_subscription_count if hasattr(guild, 'premium_subscription_count') else 0,
+                        "large": guild.large if hasattr(guild, 'large') else False,
+                        "icon": guild.icon.url if guild.icon else None,
+                        "banner": guild.banner.url if guild.banner else None,
+                        "description": guild.description,
+                        "region": str(guild.preferred_locale) if hasattr(guild, 'preferred_locale') else None,
+                        "channels_count": len(guild.channels) if guild.channels else 0,
+                        "roles_count": len(guild.roles) if guild.roles else 0,
+                        "emojis_count": len(guild.emojis) if guild.emojis else 0,
+                        "joined_at": guild.me.joined_at.isoformat() if guild.me and guild.me.joined_at else None,
+                        "permissions": guild.me.guild_permissions.value if guild.me else 0,
+                        "last_updated": datetime.now().isoformat()
+                    }
+                    guild_details.append(detailed_info)
+                except Exception as e:
+                    logging.warning(f"Error getting details for guild {guild.id}: {e}")
+                    basic_info = {
+                        "id": str(guild.id),
+                        "name": getattr(guild, 'name', 'Unknown'),
+                        "member_count": getattr(guild, 'member_count', 0) or 0
+                    }
+                    guild_basic_list.append(basic_info)
+                    guild_details.append(basic_info)
+            
             # Prepare comprehensive stats document
             stats_doc = {
                 "command_count": self.command_count,
@@ -122,9 +167,19 @@ class Stats(commands.Cog):
                 "cpu_usage": round(cpu_usage, 2),
                 "cached_users": len(self.bot.users),
                 
-                # Guild information
+                # Guild information - comprehensive
                 "guild_count": len(self.bot.guilds),
                 "guild_list": [str(guild.id) for guild in self.bot.guilds],
+                "guild_details": guild_details,  # Full detailed information
+                "guild_basic": guild_basic_list,  # Basic information for quick access
+                
+                # Guild statistics
+                "largest_guild": max(guild_details, key=lambda g: g.get('member_count', 0)) if guild_details else None,
+                "total_channels": sum(g.get('channels_count', 0) for g in guild_details),
+                "total_roles": sum(g.get('roles_count', 0) for g in guild_details),
+                "total_emojis": sum(g.get('emojis_count', 0) for g in guild_details),
+                "premium_guilds": len([g for g in guild_details if g.get('premium_tier', 0) > 0]),
+                "large_guilds": len([g for g in guild_details if g.get('large', False)]),
                 
                 # Uptime information
                 "uptime_start": self.start_time.timestamp(),
@@ -144,9 +199,37 @@ class Stats(commands.Cog):
                 upsert=True
             )
             
+            # Also save individual guild documents for detailed tracking
+            try:
+                for guild_info in guild_details:
+                    await self.db.db.guild_cache.update_one(
+                        {"_id": guild_info["id"]},
+                        {"$set": {
+                            **guild_info,
+                            "bot_joined_at": guild_info.get("joined_at"),
+                            "last_seen": datetime.now().isoformat(),
+                            "is_active": True
+                        }},
+                        upsert=True
+                    )
+                
+                # Mark guilds we're no longer in as inactive
+                current_guild_ids = [g["id"] for g in guild_details]
+                await self.db.db.guild_cache.update_many(
+                    {"_id": {"$nin": current_guild_ids}, "is_active": True},
+                    {"$set": {
+                        "is_active": False,
+                        "left_at": datetime.now().isoformat()
+                    }}
+                )
+                
+                logging.debug(f"Updated {len(guild_details)} guild cache entries")
+            except Exception as e:
+                logging.error(f"Error updating guild cache: {e}")
+            
             success = result.modified_count > 0 or result.upserted_id is not None
             if success:
-                logging.debug("Stats saved to MongoDB successfully")
+                logging.debug("Stats and guild data saved to MongoDB successfully")
             else:
                 logging.warning("Failed to save stats to MongoDB")
                 
@@ -545,6 +628,200 @@ class Stats(commands.Cog):
                 
         except TimeoutError:
             await ctx.send("⏰ Stats reset timed out.")
+
+    @commands.command(name='guildstats', aliases=['serverstats'])
+    @commands.is_owner()
+    async def guild_stats(self, ctx):
+        """Show comprehensive guild statistics"""
+        guild_count = len(self.bot.guilds)
+        total_users = sum(guild.member_count or 0 for guild in self.bot.guilds)
+        
+        # Calculate guild statistics
+        large_guilds = len([g for g in self.bot.guilds if getattr(g, 'large', False)])
+        premium_guilds = len([g for g in self.bot.guilds if getattr(g, 'premium_tier', 0) > 0])
+        
+        # Find largest and smallest guilds
+        guilds_with_members = [(g.name, g.member_count or 0) for g in self.bot.guilds if g.member_count]
+        largest_guild = max(guilds_with_members, key=lambda x: x[1]) if guilds_with_members else ("None", 0)
+        smallest_guild = min(guilds_with_members, key=lambda x: x[1]) if guilds_with_members else ("None", 0)
+        
+        embed = discord.Embed(
+            title="🏰 Guild Statistics",
+            color=discord.Color.gold()
+        )
+        
+        embed.add_field(
+            name="📊 Overview",
+            value=f"**Total Guilds:** {guild_count:,}\n"
+                  f"**Total Users:** {total_users:,}\n"
+                  f"**Average Users/Guild:** {total_users // guild_count if guild_count > 0 else 0:,}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🏆 Guild Types",
+            value=f"**Large Guilds:** {large_guilds:,}\n"
+                  f"**Premium Guilds:** {premium_guilds:,}\n"
+                  f"**Regular Guilds:** {guild_count - large_guilds - premium_guilds:,}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📈 Size Range",
+            value=f"**Largest:** {largest_guild[0][:20]}{'...' if len(largest_guild[0]) > 20 else ''} ({largest_guild[1]:,})\n"
+                  f"**Smallest:** {smallest_guild[0][:20]}{'...' if len(smallest_guild[0]) > 20 else ''} ({smallest_guild[1]:,})",
+            inline=False
+        )
+        
+        # Guild distribution by size
+        size_ranges = {
+            "Tiny (1-50)": len([g for g in self.bot.guilds if 1 <= (g.member_count or 0) <= 50]),
+            "Small (51-200)": len([g for g in self.bot.guilds if 51 <= (g.member_count or 0) <= 200]),
+            "Medium (201-1000)": len([g for g in self.bot.guilds if 201 <= (g.member_count or 0) <= 1000]),
+            "Large (1001+)": len([g for g in self.bot.guilds if (g.member_count or 0) > 1000])
+        }
+        
+        size_distribution = "\n".join([f"**{size}:** {count}" for size, count in size_ranges.items() if count > 0])
+        embed.add_field(
+            name="📏 Size Distribution",
+            value=size_distribution or "No data available",
+            inline=False
+        )
+        
+        embed.timestamp = datetime.utcnow()
+        await ctx.send(embed=embed)
+
+    @commands.command(name='guildlist', aliases=['serverlist'])
+    @commands.is_owner()
+    async def guild_list(self, ctx, page: int = 1):
+        """Show paginated list of guilds with details"""
+        guilds_per_page = 10
+        guild_list = sorted(self.bot.guilds, key=lambda g: g.member_count or 0, reverse=True)
+        total_pages = (len(guild_list) + guilds_per_page - 1) // guilds_per_page
+        
+        if page < 1 or page > total_pages:
+            await ctx.send(f"❌ Invalid page number. Pages available: 1-{total_pages}")
+            return
+        
+        start_idx = (page - 1) * guilds_per_page
+        end_idx = start_idx + guilds_per_page
+        page_guilds = guild_list[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title=f"🏰 Guild List (Page {page}/{total_pages})",
+            color=discord.Color.blue()
+        )
+        
+        for i, guild in enumerate(page_guilds, start=start_idx + 1):
+            premium_indicator = "👑" if getattr(guild, 'premium_tier', 0) > 0 else ""
+            large_indicator = "🏢" if getattr(guild, 'large', False) else ""
+            
+            embed.add_field(
+                name=f"{i}. {guild.name} {premium_indicator}{large_indicator}",
+                value=f"**ID:** `{guild.id}`\n"
+                      f"**Members:** {guild.member_count or 0:,}\n"
+                      f"**Owner:** <@{guild.owner_id}>" if guild.owner_id else "Unknown",
+                inline=True
+            )
+        
+        embed.set_footer(text=f"Total: {len(guild_list)} guilds • Use .guildlist <page> to navigate")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='guildinfo', aliases=['serverinfo'])
+    @commands.is_owner()
+    async def guild_info(self, ctx, *, guild_query: str):
+        """Get detailed information about a specific guild"""
+        # Try to find guild by ID first, then by name
+        guild = None
+        if guild_query.isdigit():
+            guild = self.bot.get_guild(int(guild_query))
+        
+        if not guild:
+            # Search by name (case insensitive)
+            guild = discord.utils.find(
+                lambda g: guild_query.lower() in g.name.lower(),
+                self.bot.guilds
+            )
+        
+        if not guild:
+            await ctx.send(f"❌ Guild not found: `{guild_query}`")
+            return
+        
+        embed = discord.Embed(
+            title=f"🏰 {guild.name}",
+            color=discord.Color.green()
+        )
+        
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        
+        embed.add_field(
+            name="📊 Basic Info",
+            value=f"**ID:** `{guild.id}`\n"
+                  f"**Owner:** <@{guild.owner_id}>\n"
+                  f"**Created:** <t:{int(guild.created_at.timestamp())}:R>\n"
+                  f"**Joined:** <t:{int(guild.me.joined_at.timestamp())}:R>" if guild.me.joined_at else "Unknown",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👥 Members & Channels",
+            value=f"**Members:** {guild.member_count or 0:,}\n"
+                  f"**Channels:** {len(guild.channels):,}\n"
+                  f"**Roles:** {len(guild.roles):,}\n"
+                  f"**Emojis:** {len(guild.emojis):,}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎯 Features",
+            value=f"**Verification:** {guild.verification_level}\n"
+                  f"**Premium Tier:** {guild.premium_tier if hasattr(guild, 'premium_tier') else 0}\n"
+                  f"**Large Guild:** {'Yes' if getattr(guild, 'large', False) else 'No'}\n"
+                  f"**Features:** {len(guild.features)} special",
+            inline=True
+        )
+        
+        if guild.description:
+            embed.add_field(
+                name="📝 Description",
+                value=guild.description[:500] + ("..." if len(guild.description) > 500 else ""),
+                inline=False
+            )
+        
+        if guild.features:
+            features_str = ", ".join(guild.features[:10])
+            if len(guild.features) > 10:
+                features_str += f" (+{len(guild.features) - 10} more)"
+            embed.add_field(
+                name="✨ Special Features",
+                value=f"`{features_str}`",
+                inline=False
+            )
+        
+        # Bot permissions in the guild
+        if guild.me:
+            perms = guild.me.guild_permissions
+            important_perms = []
+            if perms.administrator:
+                important_perms.append("Administrator")
+            if perms.manage_guild:
+                important_perms.append("Manage Server")
+            if perms.manage_channels:
+                important_perms.append("Manage Channels")
+            if perms.kick_members:
+                important_perms.append("Kick Members")
+            if perms.ban_members:
+                important_perms.append("Ban Members")
+            
+            embed.add_field(
+                name="🔐 Bot Permissions",
+                value=", ".join(important_perms[:5]) if important_perms else "Basic permissions",
+                inline=False
+            )
+        
+        embed.timestamp = datetime.utcnow()
+        await ctx.send(embed=embed)
 
     def get_stats_summary(self) -> Dict:
         """Get a summary of current stats"""
