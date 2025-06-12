@@ -102,7 +102,8 @@ class ModMail(commands.Cog, ErrorHandler):
         """Update message statistics"""
         try:
             os.makedirs("data", exist_ok=True)
-            stats_file = "data/stats.json"
+            # Use a separate stats file for ModMail to avoid conflicts with main bot stats
+            stats_file = "data/modmail_stats.json"
             
             # Load existing data or create new structure
             if os.path.exists(stats_file):
@@ -115,14 +116,24 @@ class ModMail(commands.Cog, ErrorHandler):
             if "stats" not in data:
                 data["stats"] = {}
             
-            # Handle guilds structure - could be list (old format) or dict (new format)
+            # Handle guilds structure - could be list (old format), dict (new format), or other types
             if "guilds" not in data:
                 data["guilds"] = {"count": 0, "list": []}
             elif isinstance(data["guilds"], list):
                 # Convert old list format to new dict format
                 guild_list = data["guilds"]
                 data["guilds"] = {"count": len(guild_list), "list": guild_list}
+            elif not isinstance(data["guilds"], dict):
+                # Handle cases where guilds might be an integer or other type
+                self.logger.warning(f"Unexpected guilds type: {type(data['guilds'])}, resetting to dict structure")
+                data["guilds"] = {"count": 0, "list": []}
             
+            # Ensure the guilds dict has the required structure
+            if "list" not in data["guilds"]:
+                data["guilds"]["list"] = []
+            if "count" not in data["guilds"]:
+                data["guilds"]["count"] = len(data["guilds"]["list"]) if isinstance(data["guilds"]["list"], list) else 0
+                
             # Initialize guild stats if not exists
             guild_id = str(message.guild.id)
             if guild_id not in data["stats"]:
@@ -136,12 +147,17 @@ class ModMail(commands.Cog, ErrorHandler):
             data["stats"][guild_id]["messages"] += 1
             data["stats"][guild_id]["last_message"] = datetime.datetime.now().isoformat()
             
-            # Ensure guild is in guilds list (handle both formats)
-            guild_list = data["guilds"]["list"] if isinstance(data["guilds"], dict) else data["guilds"]
+            # Ensure guild is in guilds list (with proper type checking)
+            guild_list = data["guilds"]["list"]
+            # Ensure guild_list is actually a list
+            if not isinstance(guild_list, list):
+                self.logger.warning(f"Guild list is not a list: {type(guild_list)}, resetting")
+                guild_list = []
+                data["guilds"]["list"] = guild_list
+                
             if guild_id not in guild_list:
                 guild_list.append(guild_id)
-                if isinstance(data["guilds"], dict):
-                    data["guilds"]["count"] = len(guild_list)
+                data["guilds"]["count"] = len(guild_list)
             
             # Save the updated data
             with open(stats_file, "w") as f:
@@ -149,6 +165,20 @@ class ModMail(commands.Cog, ErrorHandler):
                 
         except Exception as e:
             self.logger.error(f"Failed to update stats for guild {message.guild.id}: {e}")
+            # Add debug information for troubleshooting
+            import traceback
+            self.logger.debug(f"Full traceback: {traceback.format_exc()}")
+            try:
+                # Try to log the problematic data structure for debugging
+                if os.path.exists(stats_file):
+                    with open(stats_file, "r") as f:
+                        debug_data = json.load(f)
+                        guilds_type = type(debug_data.get("guilds", None))
+                        self.logger.debug(f"Current guilds field type: {guilds_type}")
+                        if isinstance(debug_data.get("guilds"), dict):
+                            self.logger.debug(f"Guilds dict keys: {list(debug_data['guilds'].keys())}")
+            except Exception as debug_e:
+                self.logger.debug(f"Failed to gather debug info: {debug_e}")
     
     async def can_use_modmail(self, user: discord.User) -> bool:
         """Check if user is in any of the allowed guilds"""
@@ -431,6 +461,75 @@ class ModMail(commands.Cog, ErrorHandler):
         except Exception as e:
             self.logger.error(f"Failed to close modmail: {e}")
             await ctx.send(f"Failed to close modmail: {e}")
+
+    @commands.command(name="modmailstats", aliases=["mstats"])
+    @commands.has_permissions(administrator=True)
+    async def modmail_stats(self, ctx):
+        """View ModMail statistics for this server"""
+        if ctx.guild.id not in self.allowed_guilds:
+            return await ctx.reply("❌ This command is only available in allowed guilds.")
+        
+        try:
+            stats_file = "data/modmail_stats.json"
+            if os.path.exists(stats_file):
+                with open(stats_file, "r") as f:
+                    data = json.load(f)
+                
+                guild_id = str(ctx.guild.id)
+                stats = data.get("stats", {}).get(guild_id, {})
+                
+                if not stats:
+                    return await ctx.reply("📊 No ModMail statistics found for this server.")
+                
+                embed = discord.Embed(
+                    title="📧 ModMail Statistics",
+                    description=f"**Server:** {ctx.guild.name}",
+                    color=discord.Color.blue()
+                )
+                
+                embed.add_field(
+                    name="📨 Messages Processed",
+                    value=f"`{stats.get('messages', 0):,}`",
+                    inline=True
+                )
+                
+                last_message = stats.get('last_message')
+                if last_message:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(last_message)
+                        formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                        embed.add_field(
+                            name="🕒 Last Message",
+                            value=f"`{formatted_time}`",
+                            inline=True
+                        )
+                    except:
+                        embed.add_field(
+                            name="🕒 Last Message",
+                            value=f"`{last_message}`",
+                            inline=True
+                        )
+                
+                # Add total stats across all guilds
+                total_messages = sum(guild_stats.get('messages', 0) for guild_stats in data.get("stats", {}).values())
+                total_guilds = len(data.get("stats", {}))
+                
+                embed.add_field(
+                    name="🌐 Total (All Servers)",
+                    value=f"Messages: `{total_messages:,}`\nServers: `{total_guilds}`",
+                    inline=False
+                )
+                
+                embed.set_footer(text="ModMail Statistics")
+                await ctx.reply(embed=embed)
+                
+            else:
+                await ctx.reply("📊 No ModMail statistics file found.")
+                
+        except Exception as e:
+            self.logger.error(f"Error retrieving modmail stats: {e}")
+            await ctx.reply("❌ An error occurred while retrieving statistics.")
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):

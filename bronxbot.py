@@ -9,16 +9,103 @@ import aiohttp
 import traceback
 import signal
 import atexit
+import requests
 from discord.ext import commands, tasks
 from typing import Dict, List, Tuple
 from os import system
 import logging
+from datetime import datetime
 from utils.command_tracker import usage_tracker
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from utils.scalability import initialize_scalability
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
+
+class StatsTracker:
+    def __init__(self, bot, dashboard_url):
+        self.bot = bot
+        self.dashboard_url = dashboard_url.rstrip('/')
+        self.start_time = datetime.now()
+        self.command_count = 0
+        self.daily_commands = 0
+        self.command_types = {}
+        
+    async def send_stats(self):
+        """Send comprehensive stats to dashboard"""
+        uptime = datetime.now() - self.start_time
+        
+        stats = {
+            "uptime": {
+                "days": uptime.days,
+                "hours": uptime.seconds // 3600,
+                "minutes": (uptime.seconds % 3600) // 60,
+                "total_seconds": uptime.total_seconds(),
+                "start_time": self.start_time.timestamp()
+            },
+            "guilds": {
+                "count": len(self.bot.guilds),
+                "list": [str(guild.id) for guild in self.bot.guilds],
+                "detailed": [
+                    {
+                        "id": str(guild.id),
+                        "name": guild.name,
+                        "member_count": guild.member_count
+                    } for guild in self.bot.guilds
+                ]
+            },
+            "performance": {
+                "user_count": sum(guild.member_count for guild in self.bot.guilds if guild.member_count),
+                "latency": round(self.bot.latency * 1000, 2),
+                "shard_count": self.bot.shard_count or 1
+            },
+            "commands": {
+                "total_executed": self.command_count,
+                "daily_count": self.daily_commands,
+                "command_types": self.command_types.copy()
+            }
+        }
+        
+        try:
+            # Use aiohttp for async HTTP requests
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.dashboard_url}/api/stats",
+                    json=stats,
+                    timeout=10
+                ) as response:
+                    if response.status == 200:
+                        logging.debug("✅ Stats sent to dashboard successfully")
+                    else:
+                        logging.warning(f"❌ Failed to send stats: {response.status}")
+        except Exception as e:
+            logging.error(f"❌ Error sending stats: {e}")
+    
+    async def send_command_update(self, command_name):
+        """Send real-time command execution update"""
+        self.command_count += 1
+        self.daily_commands += 1
+        self.command_types[command_name] = self.command_types.get(command_name, 0) + 1
+        
+        update = {
+            "type": "command_executed",
+            "command": command_name,
+            "total_commands": self.command_count,
+            "timestamp": time.time()
+        }
+        
+        try:
+            # Use aiohttp for async HTTP requests
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.dashboard_url}/api/stats/realtime",
+                    json=update,
+                    timeout=5
+                ) as response:
+                    if response.status != 200:
+                        logging.debug(f"Failed to send real-time update: {response.status}")
+        except Exception as e:
+            logging.debug(f"Failed to send real-time update: {e}")
 
 def cleanup_resources():
     """Cleanup resources on shutdown"""
@@ -103,116 +190,6 @@ class BronxBot(commands.AutoShardedBot):
             self.cog_load_times[cog_name] = load_time
             return False, load_time
 
-    @tasks.loop(seconds=10)  # More frequent updates for better real-time feel
-    async def update_stats(self):
-        """Update bot stats and send to dashboard"""
-        try:
-            # Calculate uptime
-            current_time = time.time()
-            uptime_seconds = int(current_time - self.start_time)
-            uptime_days = uptime_seconds // 86400
-            uptime_hours = (uptime_seconds % 86400) // 3600
-            uptime_minutes = (uptime_seconds % 3600) // 60
-            
-            # Get command metrics from tracker if available
-            command_stats = {}
-            daily_commands = 0
-            total_commands = 0
-            session_stats = {}
-            
-            try:
-                # Try to get command stats from tracker
-                if hasattr(usage_tracker, 'get_daily_stats'):
-                    daily_commands = usage_tracker.get_daily_stats()
-                if hasattr(usage_tracker, 'get_total_commands'):
-                    total_commands = usage_tracker.get_total_commands()
-                if hasattr(usage_tracker, 'get_command_breakdown'):
-                    command_stats = usage_tracker.get_command_breakdown()
-                if hasattr(usage_tracker, 'get_session_stats'):
-                    session_stats = usage_tracker.get_session_stats()
-            except:
-                pass
-            
-            stats = {
-                'uptime': {
-                    'days': uptime_days,
-                    'hours': uptime_hours,
-                    'minutes': uptime_minutes,
-                    'total_seconds': uptime_seconds,
-                    'start_time': self.start_time
-                },
-                'guilds': {
-                    'count': len(self.guilds),
-                    'list': [str(g.id) for g in self.guilds],
-                    'detailed': [
-                        {
-                            'id': str(g.id),
-                            'name': g.name,
-                            'member_count': g.member_count or 0
-                        } for g in self.guilds
-                    ]
-                },
-                'commands': {
-                    'daily_count': daily_commands,
-                    'total_executed': total_commands,
-                    'command_types': command_stats,
-                    'session': session_stats
-                },
-                'performance': {
-                    'latency': round(self.latency * 1000, 2),
-                    'user_count': sum((g.member_count or 0) for g in self.guilds),
-                    'shard_count': self.shard_count or 1
-                },
-                'timestamp': current_time
-            }
-            
-            # Store stats based on environment
-            if dev:
-                # Development: Store in JSON file
-                with open('data/stats.json', 'w') as f:
-                    json.dump(stats, f, indent=2)
-                logging.debug("Stats saved to local JSON file")
-            else:
-                # Production: Send to database via dashboard API
-                async with aiohttp.ClientSession() as session:
-                    dashboard_urls = ['https://bronxbot.onrender.com/api/stats/update']
-                    
-                    for url in dashboard_urls:
-                        try:
-                            async with session.post(url, json=stats, timeout=10) as resp:
-                                if resp.status == 200:
-                                    result = await resp.json()
-                                    logging.debug(f"Stats updated successfully to {url}")
-                                else:
-                                    error_text = await resp.text()
-                                    logging.warning(f"Failed to update stats to {url}: {resp.status} - {error_text}")
-                                    
-                        except asyncio.TimeoutError:
-                            logging.warning(f"Timeout updating stats to {url}")
-                        except Exception as e:
-                            logging.error(f"Error updating stats to {url}: {e}")
-            
-            # Always try to update localhost if available (for development testing)
-            if dev:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.post('http://localhost:5000/api/stats/update', 
-                                              json=stats, timeout=5) as resp:
-                            if resp.status == 200:
-                                logging.debug("Stats updated to localhost dashboard")
-                except:
-                    pass  # Localhost might not be running
-                        
-        except Exception as e:
-            logging.error(f"Error in update_stats loop: {e}")
-            import traceback
-            traceback.print_exc()
-
-    @update_stats.before_loop
-    async def before_update_stats(self):
-        """Wait until the bot is ready before starting the stats update loop"""
-        await self.wait_until_ready()
-
     @tasks.loop(minutes=5)  # Check every 5 minutes, no need to do it as frequently as stats
     async def update_guilds(self):
         """Update guild list for the web interface"""
@@ -231,6 +208,33 @@ class BronxBot(commands.AutoShardedBot):
     async def before_update_guilds(self):
         await self.wait_until_ready()
 
+    async def send_realtime_command_update(self, command_name: str, user_id: int, guild_id: int = None, execution_time: float = 0, error: bool = False):
+        """Send real-time command update to dashboard"""
+        try:
+            update_data = {
+                'type': 'command_update',
+                'command': command_name,
+                'user_id': str(user_id),
+                'guild_id': str(guild_id) if guild_id else None,
+                'execution_time': execution_time,
+                'error': error,
+                'timestamp': time.time()
+            }
+            
+            dashboard_urls = ['https://bronxbot.onrender.com/api/realtime'] if not dev else ['http://localhost:5000/api/realtime']
+            
+            async with aiohttp.ClientSession() as session:
+                for url in dashboard_urls:
+                    try:
+                        async with session.post(url, json=update_data, timeout=5) as resp:
+                            if resp.status == 200:
+                                logging.debug("Real-time command update sent successfully")
+                                break
+                    except Exception as e:
+                        logging.debug(f"Failed to send real-time update to {url}: {e}")
+        except Exception as e:
+            logging.debug(f"Error sending real-time command update: {e}")
+
     async def close(self):
         """Gracefully close bot connections"""
         logging.info("Shutting down bot...")
@@ -243,6 +247,21 @@ class BronxBot(commands.AutoShardedBot):
         if hasattr(self, 'update_guilds') and self.update_guilds.is_running():
             self.update_guilds.stop()
             logging.info("Stopped guild update loop")
+        
+        # Stop additional stats tasks
+        try:
+            if additional_stats_update.is_running():
+                additional_stats_update.stop()
+                logging.info("Stopped additional stats update loop")
+        except:
+            pass
+            
+        try:
+            if reset_daily_stats.is_running():
+                reset_daily_stats.stop()
+                logging.info("Stopped daily stats reset loop")
+        except:
+            pass
         
         # Shutdown scalability manager
         if hasattr(self, 'scalability_manager') and self.scalability_manager:
@@ -273,6 +292,10 @@ bot = BronxBot(
     application_id=config["CLIENT_ID"]  # <-- Add this line
 )
 bot.remove_command('help')
+
+# Initialize stats tracker
+dashboard_url = "https://bronxbot.onrender.com" if not dev else "http://localhost:5000"
+stats_tracker = StatsTracker(bot, dashboard_url)
 
 # loading config
 COG_DATA = {
@@ -513,6 +536,44 @@ async def on_ready():
         name=f"with {len(bot.guilds)} servers | .help"
     )
     await bot.change_presence(activity=activity)
+    
+    # Start additional stats tracker
+    if not additional_stats_update.is_running():
+        additional_stats_update.start()
+        logging.info("Started additional stats update loop")
+    
+    if not reset_daily_stats.is_running():
+        reset_daily_stats.start()
+        logging.info("Started daily stats reset loop")
+
+# Additional stats tasks
+@tasks.loop(minutes=5)  # Send stats every 5 minutes
+async def additional_stats_update():
+    """Send comprehensive stats to dashboard"""
+    try:
+        await stats_tracker.send_stats()
+    except Exception as e:
+        logging.error(f"Error in additional stats update: {e}")
+
+@additional_stats_update.before_loop
+async def before_additional_stats_update():
+    """Wait until the bot is ready before starting the additional stats update loop"""
+    await bot.wait_until_ready()
+
+# Reset daily commands at midnight
+@tasks.loop(hours=24)
+async def reset_daily_stats():
+    """Reset daily command count"""
+    try:
+        stats_tracker.daily_commands = 0
+        logging.info("Daily stats reset completed")
+    except Exception as e:
+        logging.error(f"Error resetting daily stats: {e}")
+
+@reset_daily_stats.before_loop
+async def before_reset_daily_stats():
+    """Wait until the bot is ready before starting the daily reset loop"""
+    await bot.wait_until_ready()
 
 @bot.event
 async def on_guild_join(guild):
@@ -584,12 +645,37 @@ async def on_command_completion(ctx):
     """Track successful command completion"""
     execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
     usage_tracker.track_command(ctx, ctx.command.qualified_name, execution_time, error=False)
+    
+    # Track command with stats tracker
+    try:
+        await stats_tracker.send_command_update(ctx.command.qualified_name)
+    except Exception as e:
+        logging.debug(f"Error tracking command with stats tracker: {e}")
+    
+    # Send real-time update to dashboard
+    await bot.send_realtime_command_update(
+        command_name=ctx.command.qualified_name,
+        user_id=ctx.author.id,
+        guild_id=ctx.guild.id if ctx.guild else None,
+        execution_time=execution_time,
+        error=False
+    )
 
 @bot.event
 async def on_command_error(ctx, error):
     """Track command errors and let Error cog handle the rest"""
     execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
-    usage_tracker.track_command(ctx, ctx.command.qualified_name if ctx.command else 'unknown', execution_time, error=True)
+    command_name = ctx.command.qualified_name if ctx.command else 'unknown'
+    usage_tracker.track_command(ctx, command_name, execution_time, error=True)
+    
+    # Send real-time error update to dashboard
+    await bot.send_realtime_command_update(
+        command_name=command_name,
+        user_id=ctx.author.id,
+        guild_id=ctx.guild.id if ctx.guild else None,
+        execution_time=execution_time,
+        error=True
+    )
     
     # Let the Error cog handle most errors first
     if hasattr(bot, 'get_cog') and bot.get_cog('Error'):
