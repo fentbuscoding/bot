@@ -1,8 +1,3 @@
-"""
-BronxBot Statistics Cog
-Consolidates all statistics tracking and dashboard communication functionality.
-"""
-
 import discord
 import aiohttp
 import logging
@@ -12,6 +7,7 @@ from datetime import datetime
 from discord.ext import commands, tasks
 from typing import Dict, List, Optional
 from utils.command_tracker import usage_tracker
+from utils.db import AsyncDatabase
 
 
 class Stats(commands.Cog):
@@ -19,6 +15,9 @@ class Stats(commands.Cog):
         self.bot = bot
         self.dashboard_url = "https://bronxbot.onrender.com" if not getattr(bot, 'dev_mode', False) else "http://localhost:5000"
         self.dashboard_url = self.dashboard_url.rstrip('/')
+        
+        # Setup database connection
+        self.db = AsyncDatabase.get_instance()
         
         # Stats tracking
         self.start_time = datetime.now()
@@ -30,6 +29,7 @@ class Stats(commands.Cog):
         # Start background tasks
         self.send_stats_task.start()
         self.reset_daily_stats_task.start()
+        self.load_stats_task.start()
         
         logging.info("Stats cog initialized")
 
@@ -37,13 +37,88 @@ class Stats(commands.Cog):
         """Clean up when cog is unloaded"""
         self.send_stats_task.cancel()
         self.reset_daily_stats_task.cancel()
+        self.load_stats_task.cancel()
+        # Save stats before unloading
+        self.bot.loop.create_task(self.save_stats_to_mongodb())
         logging.info("Stats cog unloaded")
+        
+    @tasks.loop(hours=1)
+    async def load_stats_task(self):
+        """Load stats from MongoDB periodically to ensure data consistency"""
+        try:
+            await self.load_stats_from_mongodb()
+            logging.debug("Stats loaded from MongoDB successfully")
+        except Exception as e:
+            logging.error(f"Error loading stats from MongoDB: {e}")
+    
+    @load_stats_task.before_loop
+    async def before_load_stats_task(self):
+        """Wait until the bot is ready before loading stats"""
+        await self.bot.wait_until_ready()
+        # Initial load of stats
+        await self.load_stats_from_mongodb()
+
+    async def load_stats_from_mongodb(self):
+        """Load stats from MongoDB"""
+        if not await self.db.ensure_connected():
+            logging.error("Failed to connect to MongoDB for stats loading")
+            return
+            
+        try:
+            # Load global stats document
+            stats_doc = await self.db.db.bot_stats.find_one({"_id": "global_stats"})
+            if stats_doc:
+                self.command_count = stats_doc.get("command_count", 0)
+                self.daily_commands = stats_doc.get("daily_commands", 0)
+                self.command_types = stats_doc.get("command_types", {})
+                self.last_stats_update = stats_doc.get("last_update", 0)
+                logging.info(f"Loaded stats from MongoDB: {self.command_count} commands")
+            else:
+                logging.info("No stats found in MongoDB, using default values")
+        except Exception as e:
+            logging.error(f"Error loading stats from MongoDB: {e}")
+            
+    async def save_stats_to_mongodb(self):
+        """Save stats to MongoDB"""
+        if not await self.db.ensure_connected():
+            logging.error("Failed to connect to MongoDB for stats saving")
+            return False
+            
+        try:
+            # Prepare stats document
+            stats_doc = {
+                "command_count": self.command_count,
+                "daily_commands": self.daily_commands,
+                "command_types": self.command_types,
+                "last_update": time.time(),
+                "updated_at": datetime.now()
+            }
+            
+            # Update or insert the global stats document
+            result = await self.db.db.bot_stats.update_one(
+                {"_id": "global_stats"},
+                {"$set": stats_doc},
+                upsert=True
+            )
+            
+            success = result.modified_count > 0 or result.upserted_id is not None
+            if success:
+                logging.debug("Stats saved to MongoDB successfully")
+            else:
+                logging.warning("Failed to save stats to MongoDB")
+                
+            return success
+        except Exception as e:
+            logging.error(f"Error saving stats to MongoDB: {e}")
+            return False
 
     @tasks.loop(minutes=5)
     async def send_stats_task(self):
         """Send comprehensive stats to dashboard every 5 minutes"""
         try:
             await self.send_comprehensive_stats()
+            # Save stats to MongoDB after sending to dashboard
+            await self.save_stats_to_mongodb()
         except Exception as e:
             logging.error(f"Error in stats update task: {e}")
 
@@ -57,6 +132,7 @@ class Stats(commands.Cog):
         """Reset daily command count at midnight"""
         try:
             self.daily_commands = 0
+            await self.save_stats_to_mongodb()
             logging.info("Daily stats reset completed")
         except Exception as e:
             logging.error(f"Error resetting daily stats: {e}")
@@ -123,6 +199,11 @@ class Stats(commands.Cog):
         self.command_count += 1
         self.daily_commands += 1
         self.command_types[command_name] = self.command_types.get(command_name, 0) + 1
+        
+        # Save stats to MongoDB periodically (not on every command to avoid excessive DB writes)
+        # Using a threshold of every 10 commands or when specific commands are used
+        if self.command_count % 10 == 0 or command_name in ['help', 'stats', 'invite']:
+            await self.save_stats_to_mongodb()
         
         # Prepare update data
         update_data = {
@@ -217,6 +298,7 @@ class Stats(commands.Cog):
             name="🔧 Configuration",
             value=f"**Dashboard URL:** {self.dashboard_url}\n"
                   f"**Update Interval:** 5 minutes\n"
+                  f"**MongoDB Storage:** Enabled\n"
                   f"**Tasks Running:** {self.send_stats_task.is_running()}",
             inline=False
         )
@@ -241,8 +323,15 @@ class Stats(commands.Cog):
         await ctx.send("🔄 Sending stats update...")
         
         try:
+            # Update dashboard
             await self.send_comprehensive_stats()
-            await ctx.send("✅ Stats update sent successfully!")
+            # Save to MongoDB
+            mongo_success = await self.save_stats_to_mongodb()
+            
+            if mongo_success:
+                await ctx.send("✅ Stats update sent to dashboard and saved to MongoDB successfully!")
+            else:
+                await ctx.send("⚠️ Stats update sent to dashboard but MongoDB save failed.")
         except Exception as e:
             await ctx.send(f"❌ Failed to send stats update: {e}")
 
@@ -265,7 +354,10 @@ class Stats(commands.Cog):
                 self.daily_commands = 0
                 self.command_types = {}
                 self.start_time = datetime.now()
-                await ctx.send("✅ Stats counters have been reset.")
+                
+                # Save reset stats to MongoDB
+                await self.save_stats_to_mongodb()
+                await ctx.send("✅ Stats counters have been reset and saved to MongoDB.")
             else:
                 await ctx.send("❌ Stats reset cancelled.")
                 

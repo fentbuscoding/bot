@@ -1654,6 +1654,23 @@ class AsyncDatabase:
             self.logger.error(f"Error cleaning up old reminders: {e}")
             return 0
 
+    async def save_stats(self, stats: dict, key: str = "global") -> None:
+        """Save stats to the MongoDB stats collection."""
+        if not await self.ensure_connected():
+            return
+        await self.db.stats.update_one(
+            {"_id": key},
+            {"$set": stats},
+            upsert=True
+        )
+
+    async def load_stats(self, key: str = "global") -> Optional[dict]:
+        """Load stats from the MongoDB stats collection."""
+        if not await self.ensure_connected():
+            return None
+        doc = await self.db.stats.find_one({"_id": key})
+        return doc if doc else None
+
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""
     _instance = None
@@ -1820,8 +1837,3 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
             return {}
-
-
-# Create global database instances
-async_db = AsyncDatabase.get_instance()  # For Discord bot
-db = SyncDatabase()  # For Flask web interface

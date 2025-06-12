@@ -3,7 +3,7 @@ import json
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
-from typing import Optional, List, Dict, Union
+from typing import Dict, List, Union
 
 logger = CogLogger('Help')
 with open('data/config.json', 'r') as f:
@@ -91,88 +91,80 @@ class Help(commands.Cog, ErrorHandler):
     def __init__(self, bot):
         ErrorHandler.__init__(self)
         self.bot = bot
+        
+        # Define category mappings and emojis
+        self.category_info = {
+            'Economy': {'emoji': '💰', 'description': 'Money, work, fishing, gambling'},
+            'Fun': {'emoji': '🎮', 'description': 'Games, entertainment, random fun'},
+            'Utility': {'emoji': '🔧', 'description': 'Server info, user tools, utilities'},
+            'Moderation': {'emoji': '🛡️', 'description': 'Admin tools, server management'},
+            'Music': {'emoji': '🎵', 'description': 'Music playback and queue'},
+            'Settings': {'emoji': '⚙️', 'description': 'Bot configuration and preferences'},
+            'Admin': {'emoji': '👑', 'description': 'Bot owner and admin commands'},
+            'Fishing': {'emoji': '🎣', 'description': 'Fishing system and related commands'},
+            'AutoFishing': {'emoji': '🤖', 'description': 'Automated fishing features'},
+            'Other': {'emoji': '📦', 'description': 'Miscellaneous commands'}
+        }
+        
+        # Define cog to category mappings
+        self.cog_categories = {
+            'Economy': ['Economy', 'Work', 'Gambling', 'Giveaway', 'Trading', 'Shop', 'Bazaar'],
+            'Fun': ['Fun', 'Text', 'Multiplayer', 'TicTacToe', 'Cypher', 'MathRace'],
+            'Utility': ['Utility', 'Reminders', 'Status'],
+            'Moderation': ['Moderation', 'VoteBans', 'Welcoming', 'Admin'],
+            'Music': ['MusicCore', 'MusicControls', 'MusicQueue', 'MusicPlayer'],
+            'Settings': ['GeneralSettings', 'ModerationSettings', 'EconomySettings', 'MusicSettings', 'WelcomeSettings', 'LoggingSettings'],
+            'Fishing': ['FishingCore', 'FishingInventory', 'FishingSelling', 'FishingStats'],
+            'AutoFishing': ['AutoFishing']
+        }
+        
         logger.info("Help cog initialized")
     
-    def _get_command_signature(self, command) -> str:
-        """Get a properly formatted command signature"""
+    def _get_command_signature(self, command: Union[commands.Command, commands.Group]) -> str:
+        """Get a formatted command signature"""
         if isinstance(command, commands.Group):
             return f"{command.name} <subcommand>"
         else:
-            signature = command.signature
-            if signature:
-                return f"{command.name} {signature}"
-            return command.name
+            return f"{command.name} {command.signature}".strip()
     
-    def _format_command_help(self, command, prefix: str = "", show_aliases: bool = True, max_length: int = 80) -> str:
-        """Format a command's help text with proper indentation and details"""
-        signature = self._get_command_signature(command)
-        help_text = command.help or "No description available"
+    def _format_command_help(self, command: Union[commands.Command, commands.Group]) -> str:
+        """Format command help text with proper truncation"""
+        if isinstance(command, commands.Group):
+            subcommands = [sub.name for sub in command.commands if not sub.hidden]
+            help_text = command.help or "Group command"
+            if subcommands:
+                help_text += f"\n**Subcommands:** {', '.join(subcommands[:5])}"
+                if len(subcommands) > 5:
+                    help_text += f" (+{len(subcommands) - 5} more)"
+        else:
+            help_text = command.help or "No description available"
         
-        # Truncate long descriptions for overview
-        if len(help_text) > max_length:
-            help_text = help_text[:max_length-3] + "..."
+        # Truncate if too long
+        if len(help_text) > 100:
+            help_text = help_text[:97] + "..."
         
-        result = f"`{prefix}{signature}`\n{help_text}"
-        
-        if show_aliases and command.aliases:
-            aliases_text = ", ".join(f"`{alias}`" for alias in command.aliases)
-            result += f"\n*Aliases: {aliases_text}*"
-        
-        return result
+        return help_text
     
-    def _get_group_commands(self, group: commands.Group) -> List[commands.Command]:
-        """Get all commands from a group, including nested groups"""
-        commands_list = []
-        for command in group.commands:
-            if isinstance(command, commands.Group):
-                commands_list.append(command)
-                commands_list.extend(self._get_group_commands(command))
-            else:
-                commands_list.append(command)
-        return commands_list
+    def _categorize_cog(self, cog_name: str) -> str:
+        """Determine which category a cog belongs to"""
+        for category, cogs in self.cog_categories.items():
+            if cog_name in cogs or cog_name.lower() in [c.lower() for c in cogs]:
+                return category
+        return 'Other'
     
-    def _organize_commands_by_category(self, commands_list: List[commands.Command]) -> Dict[str, List[commands.Command]]:
-        """Organize commands by category/module"""
-        categories = {
-            "Economy": [],
-            "Fishing": [],
-            "Fun & Games": [],
-            "Moderation": [],
-            "Settings": [],
-            "Utility": [],
-            "Music": [],
-            "Administration": [],
-            "Other": []
-        }
+    def _should_show_cog(self, cog_name: str, user_id: int) -> bool:
+        """Determine if a cog should be shown to the user"""
+        # Hidden cogs
+        hidden_cogs = ['help', 'jishaku', 'dev', 'performance', 'fishingmain', 'error']
+        if cog_name.lower() in hidden_cogs:
+            return False
         
-        for cmd in commands_list:
-            if hasattr(cmd, 'cog') and cmd.cog:
-                cog_name = cmd.cog.qualified_name.lower()
-                
-                # Categorize based on cog name/module
-                if any(keyword in cog_name for keyword in ['economy', 'shop', 'gambling', 'work', 'trading']):
-                    categories["Economy"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['fishing', 'rod', 'bait']):
-                    categories["Fishing"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['fun', 'game', 'misc', 'cypher', 'tictactoe']):
-                    categories["Fun & Games"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['moderation', 'mod', 'ban', 'kick']):
-                    categories["Moderation"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['settings', 'config', 'welcome', 'logging']):
-                    categories["Settings"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['utility', 'reminder', 'help']):
-                    categories["Utility"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['music', 'audio', 'voice']):
-                    categories["Music"].append(cmd)
-                elif any(keyword in cog_name for keyword in ['admin', 'owner', 'performance']):
-                    categories["Administration"].append(cmd)
-                else:
-                    categories["Other"].append(cmd)
-            else:
-                categories["Other"].append(cmd)
+        # Admin-only cogs
+        admin_cogs = ['admin']
+        if cog_name.lower() in admin_cogs and user_id not in BOT_ADMINS:
+            return False
         
-        # Remove empty categories
-        return {k: v for k, v in categories.items() if v}
+        return True
     
     @commands.command(aliases=['support'])
     async def invite(self, ctx):
@@ -181,15 +173,31 @@ class Help(commands.Cog, ErrorHandler):
     
     @discord.app_commands.command(name="invite", description="Get the bot's invite link and support server")
     async def invite_slash(self, interaction: discord.Interaction):
-        """Slash command version of invite"""
+        """Get the bot's invite link & support server."""
         await self._send_invite(interaction)
+    
+    async def _send_invite(self, ctx_or_interaction):
+        """Send invite information"""
+        embed = discord.Embed(
+            title="🔗 Invite & Support",
+            description=(
+                f"**[Add {self.bot.user.name} to your server]"
+                f"(https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot%20applications.commands)**\n\n"
+                "**[Join Support Server](https://discord.gg/jvyYWkj3ts)**\n"
+                "**[Source Code](https://github.com/bronxbot/bot)**\n\n"
+                "*Need help? Join our support server for assistance!*"
+            ),
+            color=self._get_color(ctx_or_interaction)
+        )
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        await self._respond(ctx_or_interaction, embed)
     
     async def _send_invite(self, ctx_or_interaction):
         """Shared logic for both command types"""
         embed = discord.Embed(
             title="invite bronx",
             url="https://bronxbot.onrender.com/invite",
-            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts) | [help](https://bronxbot.onrender.com)",
+            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts) | [website](https://bronxbot.onrender.com)",
             color=0x2b2d31
         )
         embed.set_footer(text="thanks for using bronx bot!")
@@ -213,176 +221,151 @@ class Help(commands.Cog, ErrorHandler):
     async def _send_help(self, ctx_or_interaction, command=None):
         """Shared logic for both command types"""
         if command:
-            return await self._send_specific_help(ctx_or_interaction, command)
-        
-        # Get all available commands
-        all_commands = []
-        user_id = ctx_or_interaction.user.id if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author.id
-        
-        for cog_name, cog in self.bot.cogs.items():
-            # Skip certain cogs from help
-            if cog_name.lower() in ['help', 'jishaku', 'dev']:
-                continue
+            # Check if it's a cog first
+            cog = self.bot.get_cog(command)
+            if cog:
+                # Help for a cog
+                commands_list = cog.get_commands()
+                if not commands_list:
+                    embed = discord.Embed(
+                        description=f"no commands found in `{cog.qualified_name}`",
+                        color=discord.Color.red()
+                    )
+                    return await self._respond(ctx_or_interaction, embed)
+                
+                embed = discord.Embed(
+                    title=f"{cog.qualified_name} commands",
+                    description="\n".join(
+                        f"`/{cmd.name} {cmd.signature}` - {cmd.help or 'no description'}"
+                        for cmd in sorted(commands_list, key=lambda x: x.name)
+                    ),
+                    color=self._get_color(ctx_or_interaction)
+                )
+                embed.set_footer(text=f"{len(commands_list)} commands")
+                return await self._respond(ctx_or_interaction, embed)
+
+            # Help for specific command
+            cmd = self.bot.get_command(command.lower())
+            if not cmd:
+                embed = discord.Embed(
+                    description=f"couldn't find command `{command}`",
+                    color=discord.Color.red()
+                )
+                return await self._respond(ctx_or_interaction, embed)
             
-            # Skip admin cogs for non-admins
-            if user_id not in BOT_ADMINS and cog_name.lower() in ['admin', 'owner', 'performance']:
-                continue
-            
-            # Get all commands from this cog
-            cog_commands = [cmd for cmd in cog.get_commands() if not cmd.hidden]
-            
-            # Include group subcommands
-            for cmd in cog_commands.copy():
-                if isinstance(cmd, commands.Group):
-                    subcommands = self._get_group_commands(cmd)
-                    cog_commands.extend(subcommands)
-            
-            all_commands.extend(cog_commands)
+            embed = discord.Embed(
+                description=(
+                    f"`/{cmd.name} {cmd.signature}`\n"
+                    f"{cmd.help or 'no description'}\n"
+                    + (f"\n**aliases:** {', '.join([f'`{a}`' for a in cmd.aliases])}" if cmd.aliases else "")
+                ),
+                color=self._get_color(ctx_or_interaction)
+            )
+            return await self._respond(ctx_or_interaction, embed)
         
-        # Organize commands by category
-        categories = self._organize_commands_by_category(all_commands)
-        
-        # Create pages for each category
+        # Paginated help menu
         pages = []
+        total_commands = 0
         cog_page_map = {}
+        page_index = 1  # Start at 1 because overview is at 0
         
+        # Group fishing-related cogs
+        fishing_commands = []
+        autofishing_commands = []
+        
+        for cog_name, cog in sorted(self.bot.cogs.items(), key=lambda x: x[0].lower()):
+            if cog_name.lower() in ['help', 'jishaku', 'dev', 'moderation', 'votebans', 'stats', 'welcoming', 'performance', 'fishingmain']:
+                continue
+
+            if isinstance(ctx_or_interaction, (discord.Interaction, commands.Context)):
+                user_id = ctx_or_interaction.user.id if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author.id
+                if user_id not in BOT_ADMINS and cog_name.lower() in ['admin', 'owner']:
+                    continue
+            
+            commands_list = [cmd for cmd in cog.get_commands() if not cmd.hidden]
+            if not commands_list:
+                continue
+
+            # Handle fishing modules specially
+            if cog_name.lower() == 'autofishing':
+                autofishing_commands.extend(commands_list)
+                continue
+            elif cog_name.lower() in ['fishingcore', 'fishinginventory', 'fishingselling', 'fishingstats'] or (hasattr(cog, '__module__') and 'fishing' in cog.__module__ and cog_name.lower() != 'autofishing'):
+                fishing_commands.extend(commands_list)
+                continue
+
+            # Regular cog processing
+            cog_page_map[cog_name] = page_index
+            page_index += 1
+
+            embed = discord.Embed(
+                description=f"**{cog_name.lower()}**\n\n",
+                color=self._get_color(ctx_or_interaction)
+            )
+            
+            for cmd in sorted(commands_list, key=lambda x: x.name):
+                usage = f"/{cmd.name} {cmd.signature}".strip()
+                description = cmd.help or "no description"
+                if len(description) > 80:
+                    description = description[:77] + "..."
+                embed.description += f"`{usage}`\n{description}\n\n"
+                total_commands += 1
+            
+            embed.set_footer(text=f"{len(commands_list)} commands")
+            pages.append(embed)
+        
+        # Create Fishing page if we have fishing commands
+        if fishing_commands:
+            cog_page_map["Fishing"] = page_index
+            page_index += 1
+            
+            embed = discord.Embed(
+                description=f"**fishing**\n\n",
+                color=self._get_color(ctx_or_interaction)
+            )
+            
+            for cmd in sorted(fishing_commands, key=lambda x: x.name):
+                usage = f"/{cmd.name} {cmd.signature}".strip()
+                description = cmd.help or "no description"
+                if len(description) > 80:
+                    description = description[:77] + "..."
+                embed.description += f"`{usage}`\n{description}\n\n"
+                total_commands += 1
+            
+            embed.set_footer(text=f"{len(fishing_commands)} commands")
+            pages.append(embed)
+        
+        # Create AutoFishing page if we have autofishing commands
+        if autofishing_commands:
+            cog_page_map["AutoFishing"] = page_index
+            page_index += 1
+            
+            embed = discord.Embed(
+                description=f"**autofishing**\n\n",
+                color=self._get_color(ctx_or_interaction)
+            )
+            
+            for cmd in sorted(autofishing_commands, key=lambda x: x.name):
+                usage = f"/{cmd.name} {cmd.signature}".strip()
+                description = cmd.help or "no description"
+                if len(description) > 80:
+                    description = description[:77] + "..."
+                embed.description += f"`{usage}`\n{description}\n\n"
+                total_commands += 1
+            
+            embed.set_footer(text=f"{len(autofishing_commands)} commands")
+            pages.append(embed)
+
         # Overview page
-        total_commands = len(all_commands)
         overview_embed = discord.Embed(
-            title="🤖 BronxBot Help",
             description=(
-                f"Welcome to BronxBot! Here's what I can do:\n\n"
-                f"**📊 Statistics:**\n"
-                f"• **{total_commands}** total commands\n"
-                f"• **{len(categories)}** categories\n"
-                f"• **{len(self.bot.guilds)}** servers\n\n"
-                f"**🔍 Navigation:**\n"
-                f"• Use the dropdown menu to jump to categories\n"
-                f"• Use `.help <command>` for detailed command info\n"
-                f"• Use `.help <category>` to see category commands\n\n"
-                f"**📚 Quick Start:**\n"
-                f"• `.balance` - Check your economy balance\n"
-                f"• `.fish` - Start fishing to earn money\n"
-                f"• `.help economy` - See all economy commands"
+                f"`/help <command>` for details\n\n"
+                f"**commands:** {total_commands}\n"
+                f"**categories:** {len(pages)}"
             ),
             color=self._get_color(ctx_or_interaction)
         )
-        overview_embed.set_thumbnail(url=self.bot.user.avatar.url if self.bot.user.avatar else None)
-        overview_embed.set_footer(text="💡 Tip: Commands work with both . and / prefixes!")
-        pages.append(overview_embed)
-        
-        # Create category pages with pagination (max 8 commands per page)
-        page_index = 1
-        for category_name, commands_list in categories.items():
-            if not commands_list:
-                continue
-                
-            cog_page_map[category_name] = page_index
-            
-            # Get category emoji
-            category_emojis = {
-                "Economy": "💰",
-                "Fishing": "🎣",
-                "Fun & Games": "🎮",
-                "Moderation": "🛡️",
-                "Settings": "⚙️",
-                "Utility": "🔧",
-                "Music": "🎵",
-                "Administration": "👑",
-                "Other": "📦"
-            }
-            
-            emoji = category_emojis.get(category_name, "📦")
-            
-            # Group commands by their parent command if they're subcommands
-            grouped_commands = {}
-            standalone_commands = []
-            
-            for cmd in sorted(commands_list, key=lambda x: x.qualified_name):
-                if '.' in cmd.qualified_name:
-                    # This is a subcommand
-                    parent_name = cmd.qualified_name.split('.')[0]
-                    if parent_name not in grouped_commands:
-                        grouped_commands[parent_name] = []
-                    grouped_commands[parent_name].append(cmd)
-                else:
-                    standalone_commands.append(cmd)
-            
-            # Combine standalone commands and group headers for pagination
-            display_items = []
-            
-            # Add standalone commands first
-            for cmd in standalone_commands:
-                if isinstance(cmd, commands.Group):
-                    # Show group with indication of subcommands
-                    subcommand_count = len(list(cmd.walk_commands()))
-                    display_items.append({
-                        'type': 'group',
-                        'command': cmd,
-                        'subcommand_count': subcommand_count
-                    })
-                else:
-                    display_items.append({
-                        'type': 'command',
-                        'command': cmd
-                    })
-            
-            # Add group command summaries
-            for parent_name, subcommands in grouped_commands.items():
-                if len(subcommands) > 0:
-                    display_items.append({
-                        'type': 'subcommand_group',
-                        'parent_name': parent_name,
-                        'subcommands': subcommands[:3]  # Show only first 3 subcommands
-                    })
-            
-            # Split into pages (max 8 items per page)
-            items_per_page = 8
-            total_pages = (len(display_items) + items_per_page - 1) // items_per_page
-            
-            for page_num in range(total_pages):
-                start_idx = page_num * items_per_page
-                end_idx = min(start_idx + items_per_page, len(display_items))
-                page_items = display_items[start_idx:end_idx]
-                
-                title = f"{emoji} {category_name} Commands"
-                if total_pages > 1:
-                    title += f" (Page {page_num + 1}/{total_pages})"
-                
-                embed = discord.Embed(
-                    title=title,
-                    description="",
-                    color=self._get_color(ctx_or_interaction)
-                )
-                
-                for item in page_items:
-                    if item['type'] == 'group':
-                        cmd = item['command']
-                        subcommand_count = item['subcommand_count']
-                        embed.description += f"**{self._format_command_help(cmd, show_aliases=False, max_length=60)}**\n"
-                        embed.description += f"*({subcommand_count} subcommands - use `.help {cmd.name}` for details)*\n\n"
-                    elif item['type'] == 'command':
-                        cmd = item['command']
-                        embed.description += f"{self._format_command_help(cmd, show_aliases=False, max_length=60)}\n\n"
-                    elif item['type'] == 'subcommand_group':
-                        parent_name = item['parent_name']
-                        subcommands = item['subcommands']
-                        embed.description += f"**{parent_name} subcommands:**\n"
-                        for subcmd in subcommands:
-                            help_text = (subcmd.help or 'No description')[:50] + "..." if len(subcmd.help or '') > 50 else (subcmd.help or 'No description')
-                            embed.description += f"  • `{subcmd.qualified_name}` - {help_text}\n"
-                        embed.description += f"  • *Use `.help {parent_name}` for all subcommands*\n\n"
-                
-                if total_pages > 1:
-                    embed.set_footer(text=f"Page {page_num + 1}/{total_pages} • {len(commands_list)} total commands in {category_name}")
-                else:
-                    embed.set_footer(text=f"{len(commands_list)} commands in this category")
-                
-                pages.append(embed)
-                if page_num > 0:  # Only update page_index for additional pages
-                    page_index += 1
-            
-            page_index += 1  # Move to next category
+        pages.insert(0, overview_embed)
         
         # Create and send paginator
         author = ctx_or_interaction.user if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author
@@ -390,256 +373,25 @@ class Help(commands.Cog, ErrorHandler):
         
         # Add select menu options
         select = view.select_category
-        select.add_option(label="📋 Overview", value="0", description="Main help page with navigation tips")
-        
-        for category_name, page_num in cog_page_map.items():
-            emoji = {"Economy": "💰", "Fishing": "🎣", "Fun & Games": "🎮", "Moderation": "🛡️", 
-                    "Settings": "⚙️", "Utility": "🔧", "Music": "🎵", "Administration": "👑", "Other": "📦"}.get(category_name, "📦")
-            
-            command_count = len(categories[category_name])
+        select.add_option(label="Overview", value="0", description="View all categories")
+        for cog_name, page_num in cog_page_map.items():
             select.add_option(
-                label=f"{emoji} {category_name}",
+                label=cog_name,
                 value=str(page_num),
-                description=f"{command_count} commands available"
+                description=f"View {cog_name.lower()} commands"
             )
         
         view.update_buttons()
-        message = await self._send_paginated_help(ctx_or_interaction, pages[0], view)
+        if isinstance(ctx_or_interaction, discord.Interaction):
+            message = await ctx_or_interaction.response.send_message(embed=pages[0], view=view)
+            if isinstance(message, discord.InteractionResponse):
+                # Need to fetch the message if it's an interaction response
+                message = await ctx_or_interaction.original_response()
+        else:
+            message = await ctx_or_interaction.reply(embed=pages[0], view=view)
+        
         view.message = message
         view.cog_page_map = cog_page_map
-    
-    async def _send_specific_help(self, ctx_or_interaction, command_name: str):
-        """Send help for a specific command or category"""
-        # First check if it's a category
-        categories = {
-            "economy": "Economy",
-            "fishing": "Fishing", 
-            "fun": "Fun & Games",
-            "games": "Fun & Games",
-            "moderation": "Moderation",
-            "mod": "Moderation",
-            "settings": "Settings",
-            "utility": "Utility",
-            "util": "Utility",
-            "music": "Music",
-            "admin": "Administration",
-            "administration": "Administration",
-            "other": "Other"
-        }
-        
-        category_name = categories.get(command_name.lower())
-        if category_name:
-            # Send category help
-            await self._send_category_help(ctx_or_interaction, category_name)
-            return
-        
-        # Look for specific command
-        command = self.bot.get_command(command_name)
-        if not command:
-            # Try to find by alias
-            for cmd in self.bot.walk_commands():
-                if command_name.lower() in [alias.lower() for alias in cmd.aliases]:
-                    command = cmd
-                    break
-        
-        if not command:
-            embed = discord.Embed(
-                title="❌ Command Not Found",
-                description=f"No command or category named `{command_name}` was found.\n\nUse `.help` to see all available commands.",
-                color=0xe74c3c
-            )
-            await self._respond(ctx_or_interaction, embed)
-            return
-        
-        # Create detailed help for the command
-        embed = discord.Embed(
-            title=f"📖 Help: {command.qualified_name}",
-            color=self._get_color(ctx_or_interaction)
-        )
-        
-        # Command signature
-        signature = self._get_command_signature(command)
-        embed.add_field(
-            name="💬 Usage",
-            value=f"`{signature}`",
-            inline=False
-        )
-        
-        # Description
-        description = command.help or "No description available"
-        embed.add_field(
-            name="📝 Description", 
-            value=description,
-            inline=False
-        )
-        
-        # Aliases
-        if command.aliases:
-            aliases_text = ", ".join(f"`{alias}`" for alias in command.aliases)
-            embed.add_field(
-                name="🔄 Aliases",
-                value=aliases_text,
-                inline=False
-            )
-        
-        # Subcommands for groups
-        if isinstance(command, commands.Group):
-            subcommands = list(command.commands)
-            if subcommands:
-                subcommand_list = []
-                for subcmd in sorted(subcommands, key=lambda x: x.name)[:10]:  # Show max 10
-                    subcmd_help = (subcmd.help or 'No description')[:50] + "..." if len(subcmd.help or '') > 50 else (subcmd.help or 'No description')
-                    subcommand_list.append(f"`{subcmd.name}` - {subcmd_help}")
-                
-                embed.add_field(
-                    name="📋 Subcommands",
-                    value="\n".join(subcommand_list),
-                    inline=False
-                )
-                
-                if len(subcommands) > 10:
-                    embed.add_field(
-                        name="➕ More",
-                        value=f"... and {len(subcommands) - 10} more subcommands",
-                        inline=False
-                    )
-        
-        # Permissions
-        if hasattr(command, 'checks') and command.checks:
-            perms = []
-            for check in command.checks:
-                if hasattr(check, '__qualname__'):
-                    if 'has_permissions' in check.__qualname__:
-                        perms.append("Requires specific permissions")
-                    elif 'is_owner' in check.__qualname__:
-                        perms.append("Bot Owner only")
-                    elif 'guild_only' in check.__qualname__:
-                        perms.append("Server only (no DMs)")
-            
-            if perms:
-                embed.add_field(
-                    name="🔒 Requirements",
-                    value="\n".join(perms),
-                    inline=False
-                )
-        
-        # Category/Cog
-        if command.cog:
-            embed.add_field(
-                name="📁 Category",
-                value=command.cog.qualified_name,
-                inline=True
-            )
-        
-        embed.set_footer(text="💡 Use .help to see all commands")
-        await self._respond(ctx_or_interaction, embed)
-    
-    async def _send_category_help(self, ctx_or_interaction, category_name: str):
-        """Send help for a specific category with better formatting"""
-        # Get all commands for this category
-        all_commands = []
-        user_id = ctx_or_interaction.user.id if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author.id
-        
-        for cog_name, cog in self.bot.cogs.items():
-            if cog_name.lower() in ['help', 'jishaku', 'dev']:
-                continue
-            if user_id not in BOT_ADMINS and cog_name.lower() in ['admin', 'owner', 'performance']:
-                continue
-            
-            cog_commands = [cmd for cmd in cog.get_commands() if not cmd.hidden]
-            for cmd in cog_commands.copy():
-                if isinstance(cmd, commands.Group):
-                    subcommands = self._get_group_commands(cmd)
-                    cog_commands.extend(subcommands)
-            all_commands.extend(cog_commands)
-        
-        # Organize and filter for this category
-        categories = self._organize_commands_by_category(all_commands)
-        commands_list = categories.get(category_name, [])
-        
-        if not commands_list:
-            embed = discord.Embed(
-                title="❌ Category Not Found",
-                description=f"No category named `{category_name}` was found.",
-                color=0xe74c3c
-            )
-            await self._respond(ctx_or_interaction, embed)
-            return
-        
-        # Create paginated category help
-        category_emojis = {
-            "Economy": "💰", "Fishing": "🎣", "Fun & Games": "🎮", "Moderation": "🛡️",
-            "Settings": "⚙️", "Utility": "🔧", "Music": "🎵", "Administration": "👑", "Other": "📦"
-        }
-        emoji = category_emojis.get(category_name, "📦")
-        
-        # Split commands into pages (6 commands per page for detailed view)
-        commands_per_page = 6
-        total_pages = (len(commands_list) + commands_per_page - 1) // commands_per_page
-        pages = []
-        
-        for page_num in range(total_pages):
-            start_idx = page_num * commands_per_page
-            end_idx = min(start_idx + commands_per_page, len(commands_list))
-            page_commands = commands_list[start_idx:end_idx]
-            
-            title = f"{emoji} {category_name} Commands"
-            if total_pages > 1:
-                title += f" (Page {page_num + 1}/{total_pages})"
-                
-            embed = discord.Embed(
-                title=title,
-                description=f"Detailed help for {category_name.lower()} commands:",
-                color=self._get_color(ctx_or_interaction)
-            )
-            
-            for cmd in page_commands:
-                # More detailed formatting for category help
-                signature = self._get_command_signature(cmd)
-                help_text = cmd.help or "No description available"
-                
-                # Limit help text length but allow more than overview
-                if len(help_text) > 120:
-                    help_text = help_text[:117] + "..."
-                
-                value = f"`{signature}`\n{help_text}"
-                
-                if cmd.aliases:
-                    aliases_text = ", ".join(f"`{alias}`" for alias in cmd.aliases[:3])
-                    if len(cmd.aliases) > 3:
-                        aliases_text += f" +{len(cmd.aliases) - 3} more"
-                    value += f"\n*Aliases: {aliases_text}*"
-                
-                embed.add_field(
-                    name=f"📌 {cmd.name}",
-                    value=value,
-                    inline=False
-                )
-            
-            if total_pages > 1:
-                embed.set_footer(text=f"Page {page_num + 1}/{total_pages} • {len(commands_list)} total commands • Use .help <command> for details")
-            else:
-                embed.set_footer(text=f"{len(commands_list)} commands • Use .help <command> for details")
-            
-            pages.append(embed)
-        
-        if len(pages) == 1:
-            await self._respond(ctx_or_interaction, pages[0])
-        else:
-            # Use paginator for multiple pages
-            author = ctx_or_interaction.user if isinstance(ctx_or_interaction, discord.Interaction) else ctx_or_interaction.author
-            view = HelpPaginator(pages, author)
-            view.update_buttons()
-            message = await self._send_paginated_help(ctx_or_interaction, pages[0], view)
-            view.message = message
-    
-    async def _send_paginated_help(self, ctx_or_interaction, embed, view):
-        """Send paginated help with view components"""
-        if isinstance(ctx_or_interaction, discord.Interaction):
-            await ctx_or_interaction.response.send_message(embed=embed, view=view)
-            return await ctx_or_interaction.original_response()
-        else:
-            return await ctx_or_interaction.reply(embed=embed, view=view)
     
     def _get_color(self, ctx_or_interaction):
         """Get the color based on context or interaction"""
