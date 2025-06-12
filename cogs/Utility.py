@@ -506,10 +506,10 @@ class Utility(commands.Cog, ErrorHandler):
 
         return pages
 
-    @commands.command()
+    @commands.command(name='botrestart', aliases=['reboot'])
     @commands.is_owner()
     async def restart(self, ctx):
-        """Smart restart that waits for optimal conditions"""
+        """Smart bot restart that waits for optimal conditions (renamed from restart for music priority)"""
         await self._smart_restart(ctx)
 
     async def _smart_restart(self, ctx):

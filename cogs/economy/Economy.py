@@ -323,7 +323,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Withdraw error: {e}")
             await ctx.reply("An error occurred while processing your withdrawal.")
 
-    @commands.command(name="pay", aliases=["transfer", 'p'])
+    @commands.command(name="pay", aliases=["transfer"])
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def pay(self, ctx, member: discord.Member, amount: str = None):
         """Transfer money to another user"""

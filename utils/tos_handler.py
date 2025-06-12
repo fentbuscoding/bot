@@ -54,8 +54,9 @@ By using BronxBot, you agree to the following terms:
 class TOSModal(discord.ui.Modal):
     """Terms of Service acceptance modal"""
     
-    def __init__(self):
+    def __init__(self, original_user_id: int):
         super().__init__(title="Terms of Service Agreement")
+        self.original_user_id = original_user_id
     
     agreement = discord.ui.TextInput(
         label="Type 'I AGREE' to accept the Terms of Service",
@@ -65,6 +66,16 @@ class TOSModal(discord.ui.Modal):
     )
     
     async def on_submit(self, interaction: discord.Interaction):
+        # Check if the user interacting is the original user
+        if interaction.user.id != self.original_user_id:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="You cannot accept terms for someone else. Use `.tos` to accept your own terms.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         if self.agreement.value.upper() == "I AGREE":
             # Check if user exists to avoid resetting existing data
             existing_user = await async_db.db.users.find_one({"_id": str(interaction.user.id)})
@@ -136,8 +147,21 @@ class TOSModal(discord.ui.Modal):
 class TOSView(discord.ui.View):
     """Terms of Service view with buttons"""
     
-    def __init__(self):
+    def __init__(self, original_user_id: int):
         super().__init__(timeout=300)
+        self.original_user_id = original_user_id
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Check if the user interacting is the original user"""
+        if interaction.user.id != self.original_user_id:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="This is not your Terms of Service prompt. Use `.tos` to accept your own terms.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return False
+        return True
     
     @discord.ui.button(label="📋 Read Full Terms", style=discord.ButtonStyle.secondary)
     async def read_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -150,7 +174,7 @@ class TOSView(discord.ui.View):
     
     @discord.ui.button(label="✅ Accept Terms", style=discord.ButtonStyle.success)
     async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = TOSModal()
+        modal = TOSModal(self.original_user_id)
         await interaction.response.send_modal(modal)
     
     @discord.ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
@@ -201,7 +225,7 @@ async def prompt_tos_acceptance(ctx) -> bool:
         inline=False
     )
     
-    view = TOSView()
+    view = TOSView(ctx.author.id)
     await ctx.reply(embed=embed, view=view)
     return False
 
@@ -230,9 +254,19 @@ class TOSCommands(commands.Cog):
                 inline=False
             )
             
-            view = discord.ui.View()
+            view = discord.ui.View(timeout=300)
             
             async def show_full_terms(interaction):
+                # Only allow the original user to interact
+                if interaction.user.id != ctx.author.id:
+                    embed = discord.Embed(
+                        title="❌ Access Denied",
+                        description="This is not your Terms of Service display. Use `.tos` to view your own terms.",
+                        color=discord.Color.red()
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    return
+                
                 terms_embed = discord.Embed(
                     title="📋 Full Terms of Service",
                     description=TermsOfService.TOS_TEXT,

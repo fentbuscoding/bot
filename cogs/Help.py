@@ -105,7 +105,9 @@ class Help(commands.Cog, ErrorHandler):
     async def _send_invite(self, ctx_or_interaction):
         """Shared logic for both command types"""
         embed = discord.Embed(
-            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts)",
+            title="invite bronx",
+            url="https://bronxbot.onrender.com/invite",
+            description="[invite](https://bronxbot.onrender.com/invite) | [support](https://discord.gg/jvyYWkj3ts) | [website](https://bronxbot.onrender.com)",
             color=0x2b2d31
         )
         embed.set_footer(text="thanks for using bronx bot!")

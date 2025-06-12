@@ -103,7 +103,7 @@ class BronxBot(commands.AutoShardedBot):
             self.cog_load_times[cog_name] = load_time
             return False, load_time
 
-    @tasks.loop(seconds=30)
+    @tasks.loop(seconds=10)  # More frequent updates for better real-time feel
     async def update_stats(self):
         """Update bot stats and send to dashboard"""
         try:
@@ -118,6 +118,7 @@ class BronxBot(commands.AutoShardedBot):
             command_stats = {}
             daily_commands = 0
             total_commands = 0
+            session_stats = {}
             
             try:
                 # Try to get command stats from tracker
@@ -127,6 +128,8 @@ class BronxBot(commands.AutoShardedBot):
                     total_commands = usage_tracker.get_total_commands()
                 if hasattr(usage_tracker, 'get_command_breakdown'):
                     command_stats = usage_tracker.get_command_breakdown()
+                if hasattr(usage_tracker, 'get_session_stats'):
+                    session_stats = usage_tracker.get_session_stats()
             except:
                 pass
             
@@ -140,12 +143,20 @@ class BronxBot(commands.AutoShardedBot):
                 },
                 'guilds': {
                     'count': len(self.guilds),
-                    'list': [str(g.id) for g in self.guilds]
+                    'list': [str(g.id) for g in self.guilds],
+                    'detailed': [
+                        {
+                            'id': str(g.id),
+                            'name': g.name,
+                            'member_count': g.member_count or 0
+                        } for g in self.guilds
+                    ]
                 },
                 'commands': {
                     'daily_count': daily_commands,
                     'total_executed': total_commands,
-                    'command_types': command_stats
+                    'command_types': command_stats,
+                    'session': session_stats
                 },
                 'performance': {
                     'latency': round(self.latency * 1000, 2),
@@ -155,36 +166,42 @@ class BronxBot(commands.AutoShardedBot):
                 'timestamp': current_time
             }
             
-            # Store stats locally
-            with open('data/stats.json', 'w') as f:
-                json.dump(stats, f, indent=2)
+            # Store stats based on environment
+            if dev:
+                # Development: Store in JSON file
+                with open('data/stats.json', 'w') as f:
+                    json.dump(stats, f, indent=2)
+                logging.debug("Stats saved to local JSON file")
+            else:
+                # Production: Send to database via dashboard API
+                async with aiohttp.ClientSession() as session:
+                    dashboard_urls = ['https://bronxbot.onrender.com/api/stats/update']
+                    
+                    for url in dashboard_urls:
+                        try:
+                            async with session.post(url, json=stats, timeout=10) as resp:
+                                if resp.status == 200:
+                                    result = await resp.json()
+                                    logging.debug(f"Stats updated successfully to {url}")
+                                else:
+                                    error_text = await resp.text()
+                                    logging.warning(f"Failed to update stats to {url}: {resp.status} - {error_text}")
+                                    
+                        except asyncio.TimeoutError:
+                            logging.warning(f"Timeout updating stats to {url}")
+                        except Exception as e:
+                            logging.error(f"Error updating stats to {url}: {e}")
             
-            # Send stats to dashboard endpoints
-            async with aiohttp.ClientSession() as session:
-                # Determine the dashboard URL based on environment
-                dashboard_urls = []
-                
-                # Always try to update production dashboard
-                dashboard_urls.append('https://bronxbot.onrender.com/api/stats/update')
-                
-                # Also try localhost if in development
-                if dev:
-                    dashboard_urls.append('http://localhost:5000/api/stats/update')
-                
-                for url in dashboard_urls:
-                    try:
-                        async with session.post(url, json=stats, timeout=10) as resp:
+            # Always try to update localhost if available (for development testing)
+            if dev:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post('http://localhost:5000/api/stats/update', 
+                                              json=stats, timeout=5) as resp:
                             if resp.status == 200:
-                                result = await resp.json()
-                                logging.info(f"Stats updated successfully to {url}")
-                            else:
-                                error_text = await resp.text()
-                                logging.warning(f"Failed to update stats to {url}: {resp.status} - {error_text}")
-                                
-                    except asyncio.TimeoutError:
-                        logging.warning(f"Timeout updating stats to {url}")
-                    except Exception as e:
-                        logging.error(f"Error updating stats to {url}: {e}")
+                                logging.debug("Stats updated to localhost dashboard")
+                except:
+                    pass  # Localhost might not be running
                         
         except Exception as e:
             logging.error(f"Error in update_stats loop: {e}")
@@ -232,12 +249,14 @@ class BronxBot(commands.AutoShardedBot):
             await self.scalability_manager.shutdown()
             logging.info("Scalability manager shutdown complete")
         
-        # Close database connections
+        # Close database connections (only if db module exists)
         try:
             from utils.db import async_db
             if hasattr(async_db, '_client') and async_db._client:
                 async_db._client.close()
                 logging.info("Closed database connections")
+        except ImportError:
+            logging.debug("Database module not available, skipping cleanup")
         except Exception as e:
             logging.error(f"Error closing database: {e}")
         
@@ -286,6 +305,8 @@ COG_DATA = {
         "cogs.economy.Work": "success",
         "cogs.economy.Bazaar": "success",
         "cogs.Error": "success",  # Make sure Error cog is loaded
+        # Music system cogs
+        "cogs.music": "fun",                 # Music system (loads all music modules)
         #"cogs.Security": "success", disabled for now
         #"cogs.LastFm": "disabled",  disabled for now
     },
@@ -427,6 +448,8 @@ async def on_ready():
             logging.info(f"Cleaned up {cleaned_count} corrupted inventory items on startup")
         else:
             logging.info("No corrupted inventory items found during startup cleanup")
+    except ImportError:
+        logging.warning("Database module not available, skipping database initialization")
     except Exception as e:
         logging.error(f"Failed to initialize database or cleanup inventory: {e}")
 
@@ -671,7 +694,7 @@ if __name__ == "__main__":
         system("clear" if os.name == "posix" else "cls")
         if os.name == "posix":
             sys.stdout.write("\x1b]2;BronxBot (DEV)\x07")
-        bot.run(config['TOKEN'], log_handler=None)  # Disable default discord.py logging
+        bot.run(config['DEV_TOKEN'], log_handler=None)  # Disable default discord.py logging
     else:
         try:
             system("clear" if os.name == "posix" else "cls")

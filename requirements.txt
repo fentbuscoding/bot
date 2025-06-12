@@ -11,6 +11,13 @@ gunicorn==23.0.0
 discord.py==2.3.2
 aiohttp==3.11.0b0
 
+# Music functionality
+yt-dlp==2024.3.10
+PyNaCl==1.5.0
+wavelink==3.4.1
+spotipy==2.25.1
+lyricsgenius==3.6.4
+
 # Database
 pymongo==4.6.3
 motor==3.3.2
