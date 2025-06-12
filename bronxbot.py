@@ -1,64 +1,11 @@
-import discord
-import json
-import random
-import time
-import sys
-import os
-import asyncio
-import aiohttp
-import traceback
-import signal
-import atexit
-import requests
-from discord.ext import commands, tasks
-from typing import Dict, List, Tuple
-from os import system
-import logging
-from datetime import datetime
-from utils.command_tracker import usage_tracker
-from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
-from utils.scalability import initialize_scalability
+from imports import *
+from stats import StatsTracker
+import math
+# Note: bronxbot.py has most necessary imports for main & related files, so import bronxbot.py if you're too lazy to import everything
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Need to import specific functions for some odd reason
 
-# StatsTracker class moved to cogs/Stats.py for better organization and to avoid code duplication
-
-def cleanup_resources():
-    """Cleanup resources on shutdown"""
-    try:
-        if hasattr(bot, 'scalability_manager') and bot.scalability_manager:
-            asyncio.create_task(bot.scalability_manager.cleanup())
-            logging.info("Scalability manager cleanup initiated")
-    except:
-        pass
-    
-    try:
-        usage_tracker.cleanup()
-        logging.info("Command tracker cleanup completed")
-    except:
-        pass
-    
-    logging.info("Resource cleanup completed")
-
-# Register cleanup handler
-atexit.register(cleanup_resources)
-
-def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    logging.info(f"Received signal {signum}, shutting down gracefully...")
-    cleanup_resources()
-    sys.exit(0)
-
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
-# config
-with open("data/config.json", "r") as f:
-    config = json.load(f)
-
-dev = config.get('DEV', False)  # Check if running in development mode
+# Put BronxBot in a separate class, modularization and ease of use
 
 # List of guilds that have access to all features
 MAIN_GUILD_IDS = [
@@ -66,10 +13,6 @@ MAIN_GUILD_IDS = [
     1299747094449623111,  # South Bronx
     1142088882222022786   # Long Island
 ]
-
-# setup
-intents = discord.Intents.all()
-intents.message_content = True  # Enable message content intent
 
 class BronxBot(commands.AutoShardedBot):
     def __init__(self, *args, **kwargs):
@@ -92,8 +35,8 @@ class BronxBot(commands.AutoShardedBot):
         self.restart_channel = None
         self.restart_message = None
         self.MAIN_GUILD_IDS = MAIN_GUILD_IDS
-        self.guild_list = []  # Add this line to store guild IDs
-        self.dev_mode = dev  # Add dev mode flag for Stats cog
+        self.guild_list = []
+        self.stats_tracker = None  # Will be initialized later
 
     async def load_cog_with_timing(self, cog_name: str) -> Tuple[bool, float]:
         """Load a cog and measure its loading time"""
@@ -127,12 +70,31 @@ class BronxBot(commands.AutoShardedBot):
         await self.wait_until_ready()
 
     async def send_realtime_command_update(self, command_name: str, user_id: int, guild_id: int = None, execution_time: float = 0, error: bool = False):
-        """Send real-time command update to dashboard - now delegated to Stats cog"""
-        stats_cog = self.get_cog('Stats')
-        if stats_cog:
-            await stats_cog.send_realtime_command_update(command_name, user_id, guild_id, execution_time, error)
-        else:
-            logging.debug("Stats cog not loaded, cannot send real-time update")
+        """Send real-time command update to dashboard"""
+        try:
+            update_data = {
+                'type': 'command_update',
+                'command': command_name,
+                'user_id': str(user_id),
+                'guild_id': str(guild_id) if guild_id else None,
+                'execution_time': execution_time,
+                'error': error,
+                'timestamp': time.time()
+            }
+            
+            dashboard_urls = ['https://bronxbot.onrender.com/api/realtime'] if not dev else ['http://localhost:5000/api/realtime']
+            
+            async with aiohttp.ClientSession() as session:
+                for url in dashboard_urls:
+                    try:
+                        async with session.post(url, json=update_data, timeout=5) as resp:
+                            if resp.status == 200:
+                                logging.debug("Real-time command update sent successfully")
+                                break
+                    except Exception as e:
+                        logging.debug(f"Failed to send real-time update to {url}: {e}")
+        except Exception as e:
+            logging.debug(f"Error sending real-time command update: {e}")
 
     async def close(self):
         """Gracefully close bot connections"""
@@ -147,7 +109,20 @@ class BronxBot(commands.AutoShardedBot):
             self.update_guilds.stop()
             logging.info("Stopped guild update loop")
         
-        # Additional stats tasks now handled by Stats cog cleanup
+        # Stop additional stats tasks
+        try:
+            if additional_stats_update.is_running():
+                additional_stats_update.stop()
+                logging.info("Stopped additional stats update loop")
+        except:
+            pass
+            
+        try:
+            if reset_daily_stats.is_running():
+                reset_daily_stats.stop()
+                logging.info("Stopped daily stats reset loop")
+        except:
+            pass
         
         # Shutdown scalability manager
         if hasattr(self, 'scalability_manager') and self.scalability_manager:
@@ -169,467 +144,44 @@ class BronxBot(commands.AutoShardedBot):
         await super().close()
         logging.info("Bot shutdown complete")
 
+# setup
+intents = discord.Intents.all()
+intents.message_content = True
+
+with open("data/config.json", "r") as f:
+    config = json.load(f)
+
+dev = config.get('DEV', False)
 
 bot = BronxBot(
     command_prefix='.',
     intents=intents,
-    shard_count=round(config['GUILD_COUNT']/20),  # a shard for every 20 servers
+    shard_count=math.ceil(config["GUILD_COUNT"]/20),
     case_insensitive=True,
-    application_id=config["CLIENT_ID"]  # <-- Add this line
+    application_id=config["CLIENT_ID"]
 )
 bot.remove_command('help')
 
-# Stats tracking now handled by the Stats cog
+# Init statstracker after bot is created to avoid circular imports
+dashboard_url = "https://bronxbot.onrender.com" if not dev else "http://localhost:5000"
+bot.stats_tracker = StatsTracker(bot, dashboard_url)
 
-# loading config
-COG_DATA = {
-    "cogs": {
-        "cogs.admin.Admin": "warning",
-        "cogs.admin.Performance": "warning",  # Add performance monitoring
-        "cogs.misc.Cypher": "cog", 
-        "cogs.misc.MathRace": "cog", 
-        "cogs.misc.TicTacToe": "cog",
-        "cogs.Stats": "other", 
-        "cogs.bronx.VoteBans": "other", 
-        "cogs.bronx.Welcoming": "other",
-        "cogs.unique.Multiplayer": "fun", 
-        "cogs.fun.Fun": "fun",
-        "cogs.fun.Text": "fun",
-        "cogs.unique.SyncRoles": "success", 
-        "cogs.Help": "success", 
-        "cogs.ModMail": "success", 
-        "cogs.Reminders": "success",
-        "cogs.Utility": "cog",
-        "cogs.Reminders": "success",
-        "cogs.economy.Economy": "success",
-        "cogs.economy.fishing": "success",
-        "cogs.economy.fishing.AutoFishing": "success",
-        "cogs.economy.Shop": "success",
-        "cogs.economy.Giveaway": "success",
-        "cogs.economy.Trading": "success",
-        "cogs.economy.Gambling": "success",
-        "cogs.economy.Work": "success",
-        "cogs.economy.Bazaar": "success",
-        "cogs.settings.general": "success",
-        "cogs.settings.moderation": "success", 
-        "cogs.settings.economy": "success",
-        "cogs.settings.music": "success",
-        "cogs.settings.welcome": "success",
-        "cogs.settings.logging": "success",
-        "cogs.Error": "success",
-        "cogs.music": "fun",
-        #"cogs.Security": "success", disabled for now
-        #"cogs.LastFm": "disabled",  disabled for now
-    },
-    "colors": {
-        "error": "\033[31m",      # Red
-        "success": "\033[32m",    # Green
-        "warning": "\033[33m",    # Yellow
-        "info": "\033[34m",       # Blue
-        "default": "\033[37m",    # White
-        "disabled": "\033[90m",   # Bright Black (Gray)
-        "fun": "\033[35m",        # Magenta
-        "cog": "\033[36m",        # Cyan
-        "other": "\033[94m"       # Bright Blue
-    }
-}
-
-class CogLoader:
-    @staticmethod
-    def get_color_escape(color_name: str) -> str:
-        return COG_DATA['colors'].get(color_name, COG_DATA['colors']['default'])
-
-    @classmethod
-    async def load_extension_safe(cls, bot: BronxBot, cog: str) -> Tuple[bool, str, float]:
-        """Safely load an extension and return status, error (if any), and load time"""
-        start = time.time()
-        try:
-            await bot.load_extension(cog)
-            return True, "", time.time() - start
-        except Exception as e:
-            tb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-            return False, tb, time.time() - start
-
-    @classmethod
-    async def load_all_cogs(cls, bot: BronxBot) -> Tuple[int, int]:
-        """Load all cogs and display results grouped by type"""
-        results = []
-        errors = []
-
-        print(f"{cls.get_color_escape('info')}=== COG LOADING STATUS ===\033[0m".center(100))
-        
-        cog_groups = {}
-        for cog, cog_type in COG_DATA["cogs"].items():
-            if cog_type not in cog_groups:
-                cog_groups[cog_type] = []
-            cog_groups[cog_type].append(cog)
-
-        for cog_type in sorted(cog_groups.keys()):
-            cog_results = []
-            
-            for cog in cog_groups[cog_type]:
-                success, error, load_time = await cls.load_extension_safe(bot, cog)
-                
-                status = "LOADED" if success else "ERROR"
-                color = cls.get_color_escape('success' if success else 'error')
-                cog_color = cls.get_color_escape(cog_type)
-                
-                line = f"[bronxbot] {cog_color}{cog:<24}\033[0m : {color}{status}\033[0m ({load_time:.2f}s)"
-                cog_results.append(line)
-                
-                if not success:
-                    errors.append((cog, error))
-            
-            print('\n'.join(cog_results))
-            print()
-
-        # summary
-        success_count = len(COG_DATA["cogs"]) - len(errors)
-        total = len(COG_DATA["cogs"])
-        
-        print(f"{cls.get_color_escape('success' if not errors else 'warning')}[SUMMARY] Loaded {success_count}/{total} cogs ({len(errors)} errors)\033[0m")
-        
-        # detailed error report if needed
-        if errors:
-            print("\nDetailed error report:")
-            for cog, error in errors:
-                print(f"\n{cls.get_color_escape('error')}[ERROR] {cog}:\033[0m")
-                print(f"{error.strip()}")
-        
-        return success_count, len(errors)
-
-@bot.event
-async def on_ready():
-    """Called when the bot is ready"""
-    logging.info(f"Bot ready as {bot.user.name} ({bot.user.id})")
-    
-    # Load all cogs using CogLoader
+@tasks.loop(minutes=5)
+async def additional_stats_update():
     try:
-        logging.info("Loading cogs...")
-        success_count, error_count = await CogLoader.load_all_cogs(bot)
-        logging.info(f"Loaded {success_count} cogs with {error_count} errors")
+        await bot.stats_tracker.send_stats()
     except Exception as e:
-        logging.error(f"Error during cog loading: {e}")
-        traceback.print_exc()
-    
-    # Stats updates are now handled by the Stats cog which is loaded automatically
+        logging.error(f"Error in additional stats update: {e}")
 
-    # Start command usage tracker auto-save
+@tasks.loop(hours=24)
+async def reset_daily_stats():
     try:
-        usage_tracker.start_auto_save()
-        logging.info("Started command usage tracker auto-save")
+        bot.stats_tracker.daily_commands = 0
+        logging.info("Daily stats reset completed")
     except Exception as e:
-        logging.error(f"Failed to start command usage tracker: {e}")
+        logging.error(f"Error resetting daily stats: {e}")
 
-    # Initialize scalability manager
-    try:
-        bot.scalability_manager = await initialize_scalability(bot)
-        logging.info("Scalability manager initialized successfully")
-    except Exception as e:
-        logging.warning(f"Scalability manager initialization failed: {e}")
-        bot.scalability_manager = None
-
-    # Load additional cogs manually
-    try:
-        # Load TOS handler
-        await bot.load_extension('utils.tos_handler')
-        logging.info("TOS handler loaded successfully")
-        
-        # Load Setup wizard
-        await bot.load_extension('cogs.setup.SetupWizard') 
-        logging.info("Setup wizard loaded successfully")
-    except Exception as e:
-        logging.error(f"Failed to load additional cogs: {e}")
-
-    # Initialize database and clean up corrupted inventory data
-    try:
-        from utils.db import async_db
-        await async_db.ensure_connected()
-        logging.info("Database connection established")
-        
-        # Run inventory cleanup on startup to remove corrupted data
-        cleaned_count = await async_db.cleanup_corrupted_inventory()
-        if cleaned_count > 0:
-            logging.info(f"Cleaned up {cleaned_count} corrupted inventory items on startup")
-        else:
-            logging.info("No corrupted inventory items found during startup cleanup")
-    except ImportError:
-        logging.warning("Database module not available, skipping database initialization")
-    except Exception as e:
-        logging.error(f"Failed to initialize database or cleanup inventory: {e}")
-
-    guild_cache_start = time.time()
-    # Build guild cache
-    for guild in bot.guilds:
-        await guild.chunk()
-    bot.boot_metrics['guild_cache_time'] = time.time() - guild_cache_start
-    
-    # Update presence
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.playing,
-            name=f"with {len(bot.guilds)} servers | .help"
-        )
-    )
-    
-    if bot.restart_channel and bot.restart_message:
-        try:
-            channel = await bot.fetch_channel(bot.restart_channel)
-            message = await channel.fetch_message(bot.restart_message)
-            
-            bot.boot_metrics['total_boot_time'] = time.time() - bot.boot_metrics['start_time']
-            bot.boot_metrics['ready_time'] = time.time() - bot.start_time
-            bot.boot_metrics['total_cog_load_time'] = sum(bot.cog_load_times.values())
-            
-            boot_info = (
-                f"✅ Boot completed in `{bot.boot_metrics['total_boot_time']:.2f}s`\n\n"
-                f"**Boot Metrics:**\n"
-                f"• Config Load: `{bot.boot_metrics['config_load_time']:.2f}s`\n"
-                f"• Guild Cache: `{bot.boot_metrics['guild_cache_time']:.2f}s`\n"
-                f"• Total Cog Load: `{bot.boot_metrics['total_cog_load_time']:.2f}s`\n"
-                f"• Ready Time: `{bot.boot_metrics['ready_time']:.2f}s`\n\n"
-                f"**Individual Cog Load Times:**\n" + 
-                "\n".join([f"• `{cog.split('.')[-1]}: {time:.2f}s`" 
-                          for cog, time in sorted(bot.cog_load_times.items())])
-            )
-            
-            embed = discord.Embed(
-                description=boot_info,
-                color=discord.Color.green()
-            )
-            await message.edit(embed=embed)
-        except Exception as e:
-            print(f"Failed to update restart message: {e}")
-
-    """success, errors = await CogLoader.load_all_cogs(bot)
-    status_msg = (
-        f"[?] Logged in as {bot.user.name} (ID: {bot.user.id})\n"
-        f"[!] Shards: {bot.shard_count}, Latency: {round(bot.latency * 1000, 2)}ms\n"
-        f"[+] Cogs: {success} loaded, {errors} errors"
-    )
-    print(status_msg)"""
-    
-    activity = discord.Activity(
-        type=discord.ActivityType.playing,
-        name=f"with {len(bot.guilds)} servers | .help"
-    )
-    await bot.change_presence(activity=activity)
-    
-    # Stats tracking now handled by Stats cog - it will be loaded automatically in the COG_DATA
-
-# Additional stats tasks now handled by the Stats cog
-# These functions have been moved to cogs/Stats.py for better organization
-
-@bot.event
-async def on_guild_join(guild):
-    """Send welcome message when bot joins a new guild"""
-    # Find first available channel
-    channel = None
-    for ch in guild.text_channels:
-        try:
-            if ch.permissions_for(guild.me).send_messages:
-                channel = ch
-                break
-        except discord.HTTPException:
-            continue
-    
-    if not channel:
-        return
-
-    embed = discord.Embed(
-        description=(
-            f"Thanks for adding me! 👋\n\n"
-            "**What I can do:**\n"
-            "• Customizable welcome messages\n"
-            "• Economy & *Fake* Gambling\n"
-            "• Basic utility commands (.help)\n"
-            "• Fun commands and games\n"
-            "• Moderation tools\n\n"
-            "*The bot is still in [active development](https://github.com/bronxbot/bot) *which is open source btw*, so feel free to [suggest](https://github.com/bronxbot/bot) new features!*\n\n"
-           
-            "• Use .help to see available commands\n"
-            "• Use .help <command> for detailed info\n"
-            "• Join the [support server](https://discord.gg/jvyYWkj3ts)\n\n"
-            "Have fun! 🎉"
-        ),
-        color=discord.Color.blue()
-    )
-    
-    embed.set_thumbnail(url=bot.user.avatar.url)
-    embed.set_footer(text="made with 💜 by ks.net", icon_url=bot.user.avatar.url)
-    
-    try:
-        await channel.send(embed=embed)
-    except discord.HTTPException as e:
-        print(f"Failed to send welcome message in {guild.name}: {e}")
-
-@bot.event
-async def on_command(ctx):
-    """Track command usage and check TOS acceptance"""
-    start_time = time.time()
-    ctx.command_start_time = start_time
-    
-    # Skip TOS check for essential commands that users need access to
-    exempt_commands = [
-        'tos', 'terms', 'termsofservice', 'tosinfo', 'tosdetails',  # TOS related
-        'help', 'h', 'commands',  # Help command and aliases
-        'support', 'invite',  # Support commands
-        'ping', 'pong',  # Basic utility
-        'balance', 'bal', 'cash', 'bb'  # Balance commands - don't require ToS
-    ]
-    
-    if ctx.command.name not in exempt_commands:
-        # Check TOS acceptance for all other commands
-        accepted = await check_tos_acceptance(ctx.author.id)
-        if not accepted:
-            await prompt_tos_acceptance(ctx)
-            raise commands.CommandError("TOS not accepted")
-
-@bot.event 
-async def on_command_completion(ctx):
-    """Track successful command completion"""
-    execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
-    usage_tracker.track_command(ctx, ctx.command.qualified_name, execution_time, error=False)
-    
-    # Send real-time update to dashboard via Stats cog
-    await bot.send_realtime_command_update(
-        command_name=ctx.command.qualified_name,
-        user_id=ctx.author.id,
-        guild_id=ctx.guild.id if ctx.guild else None,
-        execution_time=execution_time,
-        error=False
-    )
-
-@bot.event
-async def on_command_error(ctx, error):
-    """Track command errors and let Error cog handle the rest"""
-    execution_time = time.time() - getattr(ctx, 'command_start_time', time.time())
-    command_name = ctx.command.qualified_name if ctx.command else 'unknown'
-    usage_tracker.track_command(ctx, command_name, execution_time, error=True)
-    
-    # Send real-time error update to dashboard
-    await bot.send_realtime_command_update(
-        command_name=command_name,
-        user_id=ctx.author.id,
-        guild_id=ctx.guild.id if ctx.guild else None,
-        execution_time=execution_time,
-        error=True
-    )
-    
-    # Let the Error cog handle most errors first
-    if hasattr(bot, 'get_cog') and bot.get_cog('Error'):
-        return  # Let the Error cog handle it
-    
-    # Fallback error handling if Error cog is not loaded
-    if isinstance(error, commands.CommandNotFound):
-        return
-    else:
-        print(f"Fallback error handler: {error}")
-        traceback.print_exception(type(error), error, error.__traceback__)
-
-@bot.command()
-@commands.is_owner()
-async def syncslash(ctx):
-    """Sync slash commands globally"""
-    try:
-        synced = await bot.tree.sync()
-        await ctx.send(f"Synced {len(synced)} commands globally")
-    except Exception as e:
-        await ctx.send(f"Failed to sync commands: {e}")
-
-@bot.event
-async def on_message(message):
-    """Handle messages"""
-    if message.author.bot:
-        return
-    if message.content.startswith(bot.command_prefix):
-        if message.guild in bot.MAIN_GUILD_IDS:
-            if message.channel.id in [1378156495144751147, 1260347806699491418]:
-                return await message.reply("<#1314685928614264852>")
-    await bot.process_commands(message)
-
-@bot.event
-async def on_message_edit(before, after):
-    """Handle message edits and re-process commands if edited"""
-    # Ignore bot messages
-    if after.author.bot:
-        return
-    
-    # Ignore if message content didn't change (e.g., embed updates)
-    if before.content == after.content:
-        return
-    
-    # Only process if the edited message starts with a command prefix
-    if not after.content.startswith(bot.command_prefix):
-        return
-    
-    # Add rate limiting to prevent spam processing
-    current_time = time.time()
-    user_id = after.author.id
-    
-    # Check if user has processed a command edit recently (within 2 seconds)
-    if not hasattr(bot, 'last_edit_times'):
-        bot.last_edit_times = {}
-    
-    if user_id in bot.last_edit_times:
-        if current_time - bot.last_edit_times[user_id] < 2.0:
-            return  # Skip if too recent
-    
-    bot.last_edit_times[user_id] = current_time
-    
-    # Check if the message is in a main guild and restricted channel
-    if after.guild and after.guild.id in bot.MAIN_GUILD_IDS:
-        if after.channel.id in [1378156495144751147, 1260347806699491418]:
-            return await after.reply("<#1314685928614264852>")
-    
-    try:
-        # Re-process the edited message as a command
-        await bot.process_commands(after)
-        
-        # Log the command edit for debugging
-        command_name = after.content.split()[0][1:] if after.content.split() else "unknown"
-        logging.info(f"Command edited and re-processed: {command_name} by {after.author} ({after.author.id}) in {after.guild.name if after.guild else 'DM'}")
-        
-    except Exception as e:
-        # Log any errors but don't crash
-        logging.error(f"Error processing edited command: {e}")
-        # Optionally, you could add a small reaction or reply to indicate the edit was processed
-        try:
-            await after.add_reaction("🔄")  # Indicate command was re-processed
-        except:
-            pass  # Ignore if we can't add reactions
-
-if os.path.exists("data/restart_info.json"):
-    try:
-        with open("data/restart_info.json", "r") as f:
-            restart_info = json.load(f)
-            bot.restart_channel = restart_info["channel_id"]
-            bot.restart_message = restart_info["message_id"]
-        os.remove("data/restart_info.json")
-    except Exception as e:
-        print(f"Failed to load restart info: {e}")
-
-if __name__ == "__main__":
-    import platform
-    
-    # Print startup info
-    logging.info(f"Python version: {platform.python_version()}")
-    logging.info(f"Discord.py version: {discord.__version__}")
-    logging.info(f"Starting BronxBot with {bot.shard_count} shards")
-    
-    # Run the Discord bot
-    if dev:
-        logging.info("Running in development mode")
-        system("clear" if os.name == "posix" else "cls")
-        if os.name == "posix":
-            sys.stdout.write("\x1b]2;BronxBot (DEV)\x07")
-        bot.run(config['DEV_TOKEN'], log_handler=None)  # Disable default discord.py logging
-    else:
-        try:
-            system("clear" if os.name == "posix" else "cls")
-            if os.name == "posix":
-                sys.stdout.write("\x1b]2;BronxBot\x07")
-            bot.run(config['TOKEN'], log_handler=None)  # Disable default discord.py logging
-        except Exception as e:
-            logging.error(f"Failed to start the bot: {e}")
-            traceback.print_exc()
+# Export objects needed by main.py
+additional_stats_update = additional_stats_update
+reset_daily_stats = reset_daily_stats
+stats_tracker = bot.stats_tracker

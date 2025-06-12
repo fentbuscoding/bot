@@ -444,3 +444,7 @@ More actions
 
 `.userinfo [user]`
 > Get information about the user (Accout creation, roles, ID, etc)
+
+
+
+# READ CHANGES.TXT
