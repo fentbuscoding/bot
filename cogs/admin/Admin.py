@@ -593,38 +593,38 @@ class Admin(commands.Cog):
         )
         await ctx.reply(embed=embed)
 
-    @commands.group(name="server", invoke_without_command=True)
+    @commands.group(name="servershop", invoke_without_command=True)
     @commands.has_permissions(administrator=True)
-    async def server(self, ctx):
+    async def servershop(self, ctx):
         """Server shop management commands"""
         embed = discord.Embed(
             title="Server Shop Management",
             description=(
                 "**Available Commands:**\n"
-                "`.server list` - List items in server shop\n"
-                "`.server add_potion <name> <price> <type> <multiplier> <duration> [description]` - Add potion to server shop\n\n"
+                "`.servershop list` - List items in server shop\n"
+                "`.servershop add_potion <name> <price> <type> <multiplier> <duration> [description]` - Add potion to server shop\n\n"
                 "**Example:**\n"
-                "`.server add_potion \"Lucky Boost\" 1000 economy 1.5 60 \"Boosts economy commands\"`"
+                "`.servershop add_potion \"Lucky Boost\" 1000 economy 1.5 60 \"Boosts economy commands\"`"
             ),
             color=0x2b2d31
         )
         await ctx.reply(embed=embed)
 
-    @server.command(name="list")
+    @servershop.command(name="list")
     @commands.has_permissions(administrator=True)
-    async def server_list_cmd(self, ctx):
+    async def servershop_list_cmd(self, ctx):
         """List items in server shop"""
         await self.server_list(ctx)
 
-    @server.command(name="add_potion")
+    @servershop.command(name="add_potion")
     @commands.has_permissions(administrator=True)
-    async def server_add_potion_cmd(self, ctx, name: str, price: int, type: str, multiplier: float, duration: int, description: str = None):
+    async def servershop_add_potion_cmd(self, ctx, name: str, price: int, type: str, multiplier: float, duration: int, description: str = None):
         """Add a potion to the server shop"""
         await self.server_add_potion(ctx, name, price, type, multiplier, duration, description)
 
-    @commands.command(name="server_list")
+    @commands.command(name="servershop_list")
     @commands.has_permissions(administrator=True)
-    async def server_list(self, ctx):
+    async def servershop_list(self, ctx):
         """List items in server shop"""
         shop_data = self.get_server_shop(ctx.guild.id)
         

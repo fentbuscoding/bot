@@ -727,7 +727,7 @@ class Stats(commands.Cog):
         embed.set_footer(text=f"Total: {len(guild_list)} guilds • Use .guildlist <page> to navigate")
         await ctx.send(embed=embed)
 
-    @commands.command(name='guildinfo', aliases=['serverinfo'])
+    @commands.command(name='guildinfo', aliases=['server'])
     @commands.is_owner()
     async def guild_info(self, ctx, *, guild_query: str):
         """Get detailed information about a specific guild"""
@@ -748,7 +748,7 @@ class Stats(commands.Cog):
             return
         
         embed = discord.Embed(
-            title=f"🏰 {guild.name}",
+            title=f"{guild.name}",
             color=discord.Color.green()
         )
         
@@ -756,7 +756,7 @@ class Stats(commands.Cog):
             embed.set_thumbnail(url=guild.icon.url)
         
         embed.add_field(
-            name="📊 Basic Info",
+            name="Basic Info",
             value=f"**ID:** `{guild.id}`\n"
                   f"**Owner:** <@{guild.owner_id}>\n"
                   f"**Created:** <t:{int(guild.created_at.timestamp())}:R>\n"
@@ -765,7 +765,7 @@ class Stats(commands.Cog):
         )
         
         embed.add_field(
-            name="👥 Members & Channels",
+            name="Members & Channels",
             value=f"**Members:** {guild.member_count or 0:,}\n"
                   f"**Channels:** {len(guild.channels):,}\n"
                   f"**Roles:** {len(guild.roles):,}\n"
@@ -774,7 +774,7 @@ class Stats(commands.Cog):
         )
         
         embed.add_field(
-            name="🎯 Features",
+            name="Features",
             value=f"**Verification:** {guild.verification_level}\n"
                   f"**Premium Tier:** {guild.premium_tier if hasattr(guild, 'premium_tier') else 0}\n"
                   f"**Large Guild:** {'Yes' if getattr(guild, 'large', False) else 'No'}\n"
@@ -784,7 +784,7 @@ class Stats(commands.Cog):
         
         if guild.description:
             embed.add_field(
-                name="📝 Description",
+                name="Description",
                 value=guild.description[:500] + ("..." if len(guild.description) > 500 else ""),
                 inline=False
             )
@@ -794,7 +794,7 @@ class Stats(commands.Cog):
             if len(guild.features) > 10:
                 features_str += f" (+{len(guild.features) - 10} more)"
             embed.add_field(
-                name="✨ Special Features",
+                name="Special Features",
                 value=f"`{features_str}`",
                 inline=False
             )
