@@ -1,0 +1,12 @@
+{
+    "TOKEN": "",
+    "OWNER_REPLY": ["REPLY"], 
+    "OWNER_IDS": ["OWNER_ID"], 
+    "GUILD_COUNT": 0, 
+    "MONGO_URI": "",
+    "CLIENT_ID": "",
+    "CLIENT_SECRET": "",
+    "OWNER_ID": "",
+    "lastfm_api_key": "",
+    "lastfm_api_secret": ""
+} 
