@@ -162,16 +162,20 @@ bot = BronxBot(
 )
 bot.remove_command('help')
 
-# Init statstracker after bot is created to avoid circular imports
-dashboard_url = "https://bronxbot.onrender.com" if not dev else "http://localhost:5000"
-bot.stats_tracker = StatsTracker(bot, dashboard_url)
-
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=10)  # Send additional stats every 10 minutes
 async def additional_stats_update():
+    """Send additional stats updates to dashboard"""
     try:
-        await bot.stats_tracker.send_stats()
+        if hasattr(bot, 'stats_tracker'):
+            await bot.stats_tracker.send_stats()
+            logging.debug("Additional stats update sent successfully")
     except Exception as e:
         logging.error(f"Error in additional stats update: {e}")
+
+@additional_stats_update.before_loop
+async def before_additional_stats_update():
+    """Wait until the bot is ready before starting additional stats updates"""
+    await bot.wait_until_ready()
 
 @tasks.loop(hours=24)
 async def reset_daily_stats():
