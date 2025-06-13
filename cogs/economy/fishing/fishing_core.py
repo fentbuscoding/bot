@@ -122,10 +122,25 @@ class FishingCore(commands.Cog, name="FishingCore"):
             self.logger.error(f"Failed to set active rod: {e}")
             return False
 
-    async def check_rod_durability(self, durability: float) -> bool:
-        """Check if rod survives this fishing attempt"""
-        break_chance = 1 - durability
-        return random.random() > break_chance
+    async def check_rod_durability(self, durability: float, rod_price: int = 0) -> bool:
+        """Check if rod survives this fishing attempt - Improved durability system"""
+        # Ensure minimum 95% durability (0.95 = 5% break chance maximum)
+        durability = max(0.95, min(0.998, durability))  # Cap durability at 99.8%
+        
+        base_break_chance = 1 - durability
+        
+        # High-end rods get durability bonuses (10-20% break chance reduction)
+        if rod_price >= 100000:  # Ultra expensive rods
+            base_break_chance *= 0.80  # 20% break chance reduction
+        elif rod_price >= 50000:  # Very expensive rods  
+            base_break_chance *= 0.85  # 15% break chance reduction
+        elif rod_price >= 20000:  # Expensive rods
+            base_break_chance *= 0.90  # 10% break chance reduction
+        
+        # Cap maximum break chance at 10% (was unlimited)
+        final_break_chance = min(0.10, base_break_chance)
+        
+        return random.random() > final_break_chance
 
     async def select_fish_from_rarity(self, rarity: str):
         """Select a random fish from the given rarity category"""
@@ -139,17 +154,31 @@ class FishingCore(commands.Cog, name="FishingCore"):
         return random.choice(fish_list)
 
     async def check_fish_escape(self, fish_template, rod_power: int):
-        """Check if fish escapes - More generous for expensive rods"""
+        """Check if fish escapes - Implements weight rule and balanced escape chances"""
         base_escape_chance = fish_template.get("escape_chance", 0.1)
         
-        # Reduce escape chance based on rod power (more generous scaling)
-        power_reduction = min(0.8, (rod_power - 1) * 0.15)  # Up to 80% reduction
-        final_escape_chance = max(0.01, base_escape_chance * (1 - power_reduction))
-        
-        # Generate fish weight
+        # Generate fish weight first
         min_weight = fish_template.get("min_weight", 0.1)
         max_weight = fish_template.get("max_weight", 1.0)
         fish_weight = random.uniform(min_weight, max_weight)
+        
+        # WEIGHT RULE: Fish under 100kg (220 lbs) CANNOT escape - guaranteed catch!
+        if fish_weight < 100.0:
+            return False, fish_weight  # Fish cannot escape
+        
+        # For fish over 100kg, apply escape chance calculations
+        # Reduce escape chance based on rod power (limited scaling)
+        power_reduction = min(0.30, (rod_power - 1) * 0.05)  # Max 30% reduction (was 80%)
+        final_escape_chance = max(0.01, base_escape_chance * (1 - power_reduction))
+        
+        # Value-based escape penalties for high-value fish
+        fish_value = fish_template.get("base_value", 0)
+        if fish_value >= 1000000:  # 1M+ coins
+            final_escape_chance = min(0.99, final_escape_chance + 0.50)
+        elif fish_value >= 100000:  # 100K+ coins
+            final_escape_chance = min(0.98, final_escape_chance + 0.30)
+        elif fish_value >= 50000:   # 50K+ coins
+            final_escape_chance = min(0.95, final_escape_chance + 0.20)
         
         # Check if fish escapes
         escaped = random.random() < final_escape_chance
@@ -250,6 +279,7 @@ class FishingCore(commands.Cog, name="FishingCore"):
             rod_multiplier = rod.get("multiplier", 1.0)
             rod_durability = rod.get("durability", 0.95)
             rod_power = rod.get("power", 1)
+            rod_price = rod.get("price", 0)
             bait_rates = current_bait.get("catch_rates", {})
             
             # Display suspense message
@@ -279,7 +309,7 @@ class FishingCore(commands.Cog, name="FishingCore"):
             await asyncio.sleep(random.uniform(2.5, 4.5))
             
             # Check rod durability first
-            if not await self.check_rod_durability(rod_durability):
+            if not await self.check_rod_durability(rod_durability, rod_price):
                 # Rod breaks!
                 break_embed = discord.Embed(
                     title="💥 Rod Broke!",
@@ -310,31 +340,43 @@ class FishingCore(commands.Cog, name="FishingCore"):
             # Determine what fish is hooked
             adjusted_rates = self._apply_rod_multiplier_properly(bait_rates, rod_multiplier)
             
-            total_weight = sum(adjusted_rates.values())
-            if total_weight == 0:
-                await message.edit(embed=discord.Embed(
-                    title="🌊 No Bite",
-                    description="Nothing seems interested in your bait...",
-                    color=0x6495ed
-                ))
-                return
+            # BEGINNER ROD SAFETY NET: 10% chance to catch ANY fish, even ultra-rare ones
+            beginner_luck = False
+            if rod.get("_id", "").lower() in ["basic_rod", "beginner_rod"]:
+                if random.random() < 0.10:  # 10% chance
+                    beginner_luck = True
+                    # Pick from ALL rarities equally
+                    all_rarities = list(self.fish_database.keys())
+                    caught_rarity = random.choice(all_rarities)
+                    fish_template = await self.select_fish_from_rarity(caught_rarity)
             
-            # Roll for fish rarity
-            roll = random.random() * total_weight
-            cumulative = 0
-            caught_rarity = "junk"
-            
-            for rarity, weight in adjusted_rates.items():
-                cumulative += weight
-                if roll <= cumulative:
-                    caught_rarity = rarity
-                    break
-            
-            # Select specific fish
-            fish_template = await self.select_fish_from_rarity(caught_rarity)
-            if not fish_template:
+            if not beginner_luck:
+                # Normal fishing logic
+                total_weight = sum(adjusted_rates.values())
+                if total_weight == 0:
+                    await message.edit(embed=discord.Embed(
+                        title="🌊 No Bite",
+                        description="Nothing seems interested in your bait...",
+                        color=0x6495ed
+                    ))
+                    return
+                
+                # Roll for fish rarity
+                roll = random.random() * total_weight
+                cumulative = 0
                 caught_rarity = "junk"
+                
+                for rarity, weight in adjusted_rates.items():
+                    cumulative += weight
+                    if roll <= cumulative:
+                        caught_rarity = rarity
+                        break
+                
+                # Select specific fish
                 fish_template = await self.select_fish_from_rarity(caught_rarity)
+                if not fish_template:
+                    caught_rarity = "junk"
+                    fish_template = await self.select_fish_from_rarity(caught_rarity)
             
             # Check if fish escapes
             escaped, fish_weight = await self.check_fish_escape(fish_template, rod_power)
@@ -407,6 +449,10 @@ class FishingCore(commands.Cog, name="FishingCore"):
                     description=f"You caught a **{fish['name']}**!",
                     color=config['color']
                 )
+                
+                # Add BEGINNER'S LUCK message if this was a miracle catch
+                if beginner_luck:
+                    success_embed.description += f"\n\n🍀 **BEGINNER'S LUCK!** 🍀\n*Your basic rod defied the odds!*"
                 
                 if fish_count > 1:
                     success_embed.description += f"\n*(You have **{fish_count}x** of this fish)*"

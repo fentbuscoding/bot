@@ -11,7 +11,6 @@ import aiohttp
 import os
 import traceback
 from typing import Optional, List
-from cogs.Help import HelpPaginator
 
 logger = CogLogger('Admin')
 
@@ -401,10 +400,13 @@ class Admin(commands.Cog):
                 pages.append(embed)
                 
             if len(pages) > 1:
-                view = HelpPaginator(pages, ctx.author)
-                view.update_buttons()
-                message = await ctx.reply(embed=pages[0], view=view)
-                view.message = message
+                # Simple pagination without complex view for now
+                for i, page in enumerate(pages):
+                    page.set_footer(text=f"Page {i+1}/{len(pages)}")
+                    if i == 0:
+                        await ctx.reply(embed=page)
+                    else:
+                        await ctx.send(embed=page)
             else:
                 await ctx.reply(embed=pages[0])
                 

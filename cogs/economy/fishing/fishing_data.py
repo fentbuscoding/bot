@@ -190,23 +190,23 @@ class FishingData:
                 {"name": "Mahi-Mahi", "min_weight": 5.0, "max_weight": 25.0, "base_value": 1200, "escape_chance": 0.38}
             ],
             "rare": [
-                {"name": "Giant Squid", "min_weight": 100.0, "max_weight": 800.0, "base_value": 7500, "escape_chance": 0.70},
-                {"name": "Blue Whale", "min_weight": 50000.0, "max_weight": 150000.0, "base_value": 45000, "escape_chance": 0.85},
-                {"name": "Colossal Octopus", "min_weight": 200.0, "max_weight": 1000.0, "base_value": 12750, "escape_chance": 0.75},
-                {"name": "Megalodon", "min_weight": 5000.0, "max_weight": 15000.0, "base_value": 33000, "escape_chance": 0.80}
+                {"name": "Giant Squid", "min_weight": 100.0, "max_weight": 800.0, "base_value": 7500, "escape_chance": 0.85},
+                {"name": "Blue Whale", "min_weight": 50000.0, "max_weight": 150000.0, "base_value": 25000, "escape_chance": 0.88},
+                {"name": "Colossal Octopus", "min_weight": 200.0, "max_weight": 1000.0, "base_value": 12750, "escape_chance": 0.85},
+                {"name": "Megalodon", "min_weight": 5000.0, "max_weight": 15000.0, "base_value": 20000, "escape_chance": 0.88}
             ],
             "epic": [
-                {"name": "Leviathan", "min_weight": 1000.0, "max_weight": 5000.0, "base_value": 75000, "escape_chance": 0.90},
-                {"name": "Kraken", "min_weight": 2000.0, "max_weight": 8000.0, "base_value": 120000, "escape_chance": 0.92},
-                {"name": "Sea Dragon", "min_weight": 500.0, "max_weight": 3000.0, "base_value": 90000, "escape_chance": 0.88}
+                {"name": "Leviathan", "min_weight": 1000.0, "max_weight": 5000.0, "base_value": 45000, "escape_chance": 0.90},
+                {"name": "Kraken", "min_weight": 2000.0, "max_weight": 8000.0, "base_value": 65000, "escape_chance": 0.92},
+                {"name": "Sea Dragon", "min_weight": 500.0, "max_weight": 3000.0, "base_value": 55000, "escape_chance": 0.92}
             ],
             "legendary": [
-                {"name": "Ancient Leviathan", "min_weight": 10000.0, "max_weight": 50000.0, "base_value": 500000, "escape_chance": 0.95},
-                {"name": "Primordial Kraken", "min_weight": 15000.0, "max_weight": 75000.0, "base_value": 750000, "escape_chance": 0.96}
+                {"name": "Ancient Leviathan", "min_weight": 10000.0, "max_weight": 50000.0, "base_value": 180000, "escape_chance": 0.94},
+                {"name": "Primordial Kraken", "min_weight": 15000.0, "max_weight": 75000.0, "base_value": 250000, "escape_chance": 0.95}
             ],
             "mythical": [
-                {"name": "World Serpent", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 2500000, "escape_chance": 0.98},
-                {"name": "Ocean God", "min_weight": 200000.0, "max_weight": 1000000.0, "base_value": 5000000, "escape_chance": 0.99}
+                {"name": "World Serpent", "min_weight": 100000.0, "max_weight": 500000.0, "base_value": 750000, "escape_chance": 0.96},
+                {"name": "Ocean God", "min_weight": 200000.0, "max_weight": 1000000.0, "base_value": 1200000, "escape_chance": 0.99}
             ],
             "ancient": [
                 {"name": "Fossil Megalodon", "min_weight": 25000.0, "max_weight": 100000.0, "base_value": 1500000, "escape_chance": 0.97},
@@ -217,20 +217,20 @@ class FishingData:
                 {"name": "Celestial Whale", "min_weight": 300000.0, "max_weight": 800000.0, "base_value": 6000000, "escape_chance": 0.997}
             ],
             "cosmic": [
-                {"name": "Stellar Whale", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 10000000, "escape_chance": 0.9985},
-                {"name": "Galactic Kraken", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 20000000, "escape_chance": 0.9992}
+                {"name": "Stellar Whale", "min_weight": 500000.0, "max_weight": 2000000.0, "base_value": 3500000, "escape_chance": 0.9985},
+                {"name": "Galactic Kraken", "min_weight": 1000000.0, "max_weight": 5000000.0, "base_value": 5500000, "escape_chance": 0.9992}
             ],
             "transcendent": [
-                {"name": "Reality Bender", "min_weight": 1.0, "max_weight": 10000000.0, "base_value": 40000000, "escape_chance": 0.9997},
-                {"name": "Dimension Walker", "min_weight": 0.001, "max_weight": 1000000000.0, "base_value": 100000000, "escape_chance": 0.99995}
+                {"name": "Reality Bender", "min_weight": 1.0, "max_weight": 10000000.0, "base_value": 8000000, "escape_chance": 0.9997},
+                {"name": "Dimension Walker", "min_weight": 0.001, "max_weight": 1000000000.0, "base_value": 15000000, "escape_chance": 0.99995}
             ],
             "void": [
-                {"name": "Void Leviathan", "min_weight": 0.0, "max_weight": 1.0, "base_value": 200000000, "escape_chance": 0.99997},
-                {"name": "Nothingness Fish", "min_weight": -1.0, "max_weight": 0.0, "base_value": 300000000, "escape_chance": 0.99999}
+                {"name": "Void Leviathan", "min_weight": 0.0, "max_weight": 1.0, "base_value": 25000000, "escape_chance": 0.99997},
+                {"name": "Nothingness Fish", "min_weight": -1.0, "max_weight": 0.0, "base_value": 40000000, "escape_chance": 0.99999}
             ],
             "celestial": [
-                {"name": "Moon Fish", "min_weight": 384400.0, "max_weight": 7342000.0, "base_value": 120000000, "escape_chance": 0.9999},
-                {"name": "Solar Flare Eel", "min_weight": 1989000000.0, "max_weight": 1989000000000.0, "base_value": 400000000, "escape_chance": 0.99999}
+                {"name": "Moon Fish", "min_weight": 384400.0, "max_weight": 7342000.0, "base_value": 18000000, "escape_chance": 0.9999},
+                {"name": "Solar Flare Eel", "min_weight": 1989000000.0, "max_weight": 1989000000000.0, "base_value": 50000000, "escape_chance": 0.99999}
             ],
             "mutated": [
                 {"name": "Three-Eyed Bass", "min_weight": 2.0, "max_weight": 15.0, "base_value": 10000, "escape_chance": 0.48},
@@ -316,7 +316,7 @@ class FishingData:
         return None
     
     def apply_rod_multiplier(self, bait_rates, rod_multiplier):
-        """Apply rod multiplier to favor higher rarities - Fixed version"""
+        """Apply rod multiplier to favor higher rarities - NERFED VERSION per balance changes"""
         if rod_multiplier <= 1.0:
             return bait_rates.copy()
         
@@ -330,13 +330,13 @@ class FishingData:
                 
             if rarity in rarity_order:
                 rarity_index = rarity_order.index(rarity)
-                # Apply multiplier effect based on rarity tier
+                # Apply multiplier effect based on rarity tier - MASSIVELY NERFED
                 if rarity_index >= 15:  # Ultra rare fish (subatomic, super, etc.)
-                    multiplier_effect = 1 + ((rod_multiplier - 1) * 0.8)  # 80% of rod power
-                elif rarity_index >= 10:  # High tier fish (divine, cosmic, etc.)
-                    multiplier_effect = 1 + ((rod_multiplier - 1) * 1.2)  # 120% of rod power
-                elif rarity_index >= 6:  # Mid-high tier (epic, legendary, etc.)
-                    multiplier_effect = 1 + ((rod_multiplier - 1) * 1.5)  # 150% of rod power
+                    multiplier_effect = 1 + ((rod_multiplier - 1) * 0.10)  # Only 10% of rod power (was 80%)
+                elif rarity_index >= 10:  # Very rare fish (divine, cosmic, etc.)
+                    multiplier_effect = 1 + ((rod_multiplier - 1) * 0.15)  # Only 15% of rod power (was 120%)
+                elif rarity_index >= 6:  # High tier fish (epic, legendary, etc.)
+                    multiplier_effect = 1 + ((rod_multiplier - 1) * 0.25)  # Only 25% of rod power (was 150%)
                 elif rarity_index >= 3:  # Mid tier (uncommon, rare)
                     multiplier_effect = 1 + ((rod_multiplier - 1) * 1.0)  # Normal rod power
                 else:  # Low tier (junk, tiny, small, common)

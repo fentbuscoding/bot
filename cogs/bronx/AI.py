@@ -50,7 +50,7 @@ You should be:
 ⚠️ THESE ARE THE ONLY VALID COMMANDS - DO NOT INVENT OTHERS ⚠️
 
 🤖 AI COMMANDS:
-• `.ai <message>` - Chat with BronxBot AI (aliases: `.chat`, `.aiask`, `.ask`, `.bronxai`)
+• `.ai <message>` - Chat with BronxBot AI (aliases: `.chat`, `.aiask`, `.bronxai`)
 • `.ai --thinking <message>` - Shows AI reasoning process
 • `.aiclear` - Clear conversation history (aliases: `.clearai`, `.resetai`, `.clearconvo`, `.resetconvo`)
 • `.aistatus` - Check AI service status [Admin] (aliases: `.aiinfo`, `.checkai`)
@@ -105,7 +105,7 @@ You should be:
 • `.serverinfo` - Server information (aliases: `.si`, `.guildinfo`)
 • `.uptime` - How long bot has been running
 • `.botinfo` - Bot statistics and info
-• `.poll <question>` - Create yes/no poll (aliases: `.ask`, `.yn`)
+• `.poll <question>` - Create yes/no poll (aliases: `.ask`, `.yn`, `.yesno`)
 • `.multipoll <question> <option1> <option2>...` - Multi-option poll
 • `.timestamp [style]` - Generate Discord timestamps
 • `.hexcolor [code]` - Show color preview
@@ -149,7 +149,7 @@ You should be:
 ⚠️ IMPORTANT: Commands can be used with their aliases interchangeably ⚠️
 
 Main Command = Aliases:
-• `.ai` = `.chat`, `.aiask`, `.ask`, `.bronxai`
+• `.ai` = `.chat`, `.aiask`, `.bronxai`
 • `.balance` = `.bal`, `.money`
 • `.pay` = `.give`, `.send`
 • `.deposit` = `.dep`, `.d`
@@ -163,7 +163,7 @@ Main Command = Aliases:
 • `.avatar` = `.av`
 • `.userinfo` = `.ui`, `.whois`
 • `.serverinfo` = `.si`, `.guildinfo`
-• `.poll` = `.ask`, `.yn`
+• `.poll` = `.ask`, `.yn`, `.yesno`
 • `.emojisteal` = `.steal`
 • `.cleanup` = `.cu`
 • `.calculate` = `.calc`, `.math`
@@ -558,7 +558,7 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
         """Check response for potential command hallucinations and warn if found"""
         # List of valid commands and their aliases
         valid_commands = [
-            'ai', 'chat', 'aiask', 'ask', 'bronxai', 'aiclear', 'clearai', 'resetai', 
+            'ai', 'chat', 'aiask', 'bronxai', 'aiclear', 'clearai', 'resetai', 
             'clearconvo', 'resetconvo', 'aistatus', 'aiinfo', 'checkai',
             'balance', 'bal', 'money', 'pay', 'give', 'send', 'deposit', 'dep', 'd',
             'withdraw', 'with', 'w', 'daily', 'beg', 'rob', 'work', 'job', 'choosejob',
@@ -590,14 +590,14 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
         
         return response
 
-    @commands.command(name='ai', aliases=['chat', 'aiask', 'ask', 'bronxai'])
+    @commands.command(name='ai', aliases=['chat', 'aiask', 'bronxai'])
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def ai_chat(self, ctx, *, prompt: str):
         """Chat with BronxBot AI powered by Deepseek-8B
         
         Usage: .ai <your message>
         Usage: .ai --thinking <your message>  (shows AI reasoning process)
-        Aliases: .chat, .aiask, .ask, .bronxai
+        Aliases: .chat, .aiask, .bronxai
         Example: .ai What's the weather like in the Bronx?
         Example: .ai --thinking Explain quantum physics
         """
