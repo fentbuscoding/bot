@@ -1837,9 +1837,3 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
             return {}
-
-# Create an instance of AsyncDatabase to be imported elsewhere
-async_db = AsyncDatabase.get_instance()
-
-# Add a 'db' alias for backward compatibility
-db = async_db

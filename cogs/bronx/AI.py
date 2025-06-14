@@ -3,11 +3,16 @@ from discord.ext import commands
 import aiohttp
 import json
 import asyncio
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from cogs.logging.logger import CogLogger
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
 import time
+import re
+from langdetect import detect, DetectorFactory
+
+# Set seed for consistent language detection
+DetectorFactory.seed = 0
 
 logger = CogLogger('AI')
 
@@ -302,44 +307,84 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
         if not response or show_thinking:
             return response
         
-        # Common thinking patterns to filter out
-        thinking_patterns = [
-            # Deepseek-style thinking blocks
+        import re
+        filtered_response = response
+        
+        # FIRST: Handle complete thinking blocks (most important)
+        complete_block_patterns = [
+            # Most comprehensive patterns - handle multiline content with any whitespace
             r'<think>.*?</think>',
             r'<thinking>.*?</thinking>',
-            r'\*thinking\*.*?\*/thinking\*',
+            # Handle cases with explicit newlines and whitespace
+            r'<think>\s*\n.*?\n\s*</think>',
+            r'<thinking>\s*\n.*?\n\s*</thinking>',
+            # Handle cases with no content between tags
+            r'<think>\s*</think>',
+            r'<thinking>\s*</thinking>',
+            # Handle malformed or partial tags
+            r'<think[^>]*>.*?</think[^>]*>',
+            r'<thinking[^>]*>.*?</thinking[^>]*>',
+        ]
+        
+        # Apply complete block patterns first with comprehensive flags
+        for pattern in complete_block_patterns:
+            old_response = filtered_response
+            # Use re.DOTALL to make . match newlines, which is crucial for multiline thinking blocks
+            filtered_response = re.sub(pattern, '', filtered_response, flags=re.DOTALL | re.IGNORECASE | re.MULTILINE)
+            # Debug logging to see what's being filtered
+            if old_response != filtered_response:
+                logger.debug(f"Filtered complete thinking block - length reduced by {len(old_response) - len(filtered_response)} chars")
+        
+        # SECOND: Handle incomplete thinking blocks (for streaming)
+        # Only apply these if we still have incomplete blocks after the complete block filtering
+        if '<think>' in filtered_response or '<thinking>' in filtered_response:
+            # Handle incomplete opening tags
+            filtered_response = re.sub(r'<think>\s*$', '', filtered_response, flags=re.MULTILINE)
+            filtered_response = re.sub(r'<thinking>\s*$', '', filtered_response, flags=re.MULTILINE)
             
-            # Other common reasoning patterns
+            # Remove incomplete thinking blocks (where closing tag hasn't arrived yet)
+            filtered_response = re.sub(r'<think>(?!.*</think>).*$', '', filtered_response, flags=re.DOTALL)
+            filtered_response = re.sub(r'<thinking>(?!.*</thinking>).*$', '', filtered_response, flags=re.DOTALL)
+            
+            # Advanced cleanup for streaming artifacts
+            # Remove any remaining opening tags without closing tags
+            filtered_response = re.sub(r'<think[^>]*>(?!.*</think>)', '', filtered_response, flags=re.DOTALL)
+            filtered_response = re.sub(r'<thinking[^>]*>(?!.*</thinking>)', '', filtered_response, flags=re.DOTALL)
+        
+        # THIRD: Handle secondary thinking patterns
+        secondary_patterns = [
+            r'\*thinking\*.*?\*/thinking\*',
             r'\[thinking\].*?\[/thinking\]',
             r'\(thinking:.*?\)',
             r'Let me think.*?(?=\n\n|\n[A-Z]|$)',
             r'I need to think.*?(?=\n\n|\n[A-Z]|$)',
             r'Hmm, let me consider.*?(?=\n\n|\n[A-Z]|$)',
-            
             # Chain of thought patterns
             r'Step \d+:.*?(?=Step \d+:|$)',
             r'First,.*?Second,.*?(?=Third,|\n\n|$)',
-            
             # Internal monologue patterns
             r'\*.*?thinks.*?\*',
             r'\(.*?reasoning.*?\)',
         ]
         
-        import re
-        filtered_response = response
-        
-        # Apply all thinking patterns
-        for pattern in thinking_patterns:
+        # Apply secondary patterns
+        for pattern in secondary_patterns:
             filtered_response = re.sub(pattern, '', filtered_response, flags=re.DOTALL | re.IGNORECASE)
         
-        # Clean up multiple newlines and whitespace
+        # FINAL: Clean up whitespace and newlines
+        # Remove multiple consecutive newlines
         filtered_response = re.sub(r'\n{3,}', '\n\n', filtered_response)
-        filtered_response = re.sub(r'^\s+|\s+$', '', filtered_response)
+        # Remove leading/trailing whitespace
+        filtered_response = filtered_response.strip()
+        # Remove empty lines at the beginning
+        filtered_response = re.sub(r'^\n+', '', filtered_response)
+        # Remove trailing incomplete sentences that might be thinking artifacts
+        filtered_response = re.sub(r'\n[A-Za-z\s]*$', '', filtered_response)
         
-        # If filtering removed everything, return original (safety fallback)
+        # If filtering removed everything, return a safe message
         if not filtered_response.strip():
-            logger.warning("AI thinking filter removed entire response, returning original")
-            return response
+            logger.warning("AI thinking filter removed entire response, returning placeholder")
+            return "🤔 *AI is still thinking...*"
         
         return filtered_response
 
@@ -768,6 +813,118 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
         )
         
         await ctx.send(embed=embed)
+
+    @commands.command(name='test_filter', aliases=['testfilter'])
+    @commands.has_permissions(administrator=True)
+    async def test_filter(self, ctx, *, test_text: str = None):
+        """Test the AI thinking filter (Admin only)"""
+        if not test_text:
+            # Test the exact scenario from the user's report
+            test_scenarios = [
+                # The exact case that wasn't working
+                """<think>
+Okay, so the user just said "hi" - probably starting their interaction with me as BronxBot AI.
+
+Hmm, this is simple but important to greet them properly since they're initiating contact. The response should be friendly and match my assistant persona while reminding them about how I operate based on those strict anti-hallucination instructions.
+
+I notice the user didn't specify any command or ask anything specific - just a casual greeting. That means I shouldn't overcomplicate it, but keep it concise as per Discord's character limit.
+
+Let me structure this: First greet them warmly since they're being polite by saying hello first. Then remind them about my purpose and limitations in a natural way without sounding robotic. The key points to emphasize are:
+My role as an assistant
+Command accuracy (not making things up)
+Linking everything back to the help command
+
+The tone should be approachable but professional, with that slight playful edge BronxBot seems to have based on previous interactions. I'll use some emojis to make it more Discord-friendly.
+
+This feels like a good balance - welcoming while staying true to my purpose and limitations.
+</think>
+Hey there! 👋 How can I assist you today? Just so you know, I'm here to help with BronxBot commands or answer your questions based on the reference provided. You can always ask for .help if you're unsure about anything!""",
+                
+                # Complete thinking block
+                """<think>
+This is a thinking block that should be filtered out.
+It contains multiple lines of reasoning.
+</think>
+
+This is the actual response that should be shown to the user.""",
+                
+                # Incomplete thinking block (simulating streaming)
+                """<think>
+Okay, let's break this down carefully. The user is asking about my thickness with an emoji that seems playful or teasing""",
+                
+                # Mixed content
+                """Some initial text.
+
+<think>
+This should be hidden.
+</think>
+
+This should be visible.
+
+<think>
+Another hidden block."""
+            ]
+            
+            for i, scenario_text in enumerate(test_scenarios):
+                filtered = self.filter_ai_thinking(scenario_text, show_thinking=False)
+                
+                embed = discord.Embed(
+                    title=f"🧪 AI Filter Test #{i+1}" + (" (User's Exact Case)" if i == 0 else ""),
+                    color=discord.Color.blue()
+                )
+                
+                # Show character counts to help debug
+                embed.add_field(
+                    name=f"Original Text ({len(scenario_text)} chars)",
+                    value=f"```\n{scenario_text[:800]}{'...' if len(scenario_text) > 800 else ''}\n```",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name=f"Filtered Text ({len(filtered)} chars)",
+                    value=f"```\n{filtered[:800]}{'...' if len(filtered) > 800 else ''}\n```",
+                    inline=False
+                )
+                
+                # Show if filtering worked
+                thinking_removed = "<think>" not in filtered and "</think>" not in filtered
+                embed.add_field(
+                    name="Filter Status",
+                    value="✅ Think blocks removed" if thinking_removed else "❌ Think blocks still present",
+                    inline=True
+                )
+                
+                await ctx.send(embed=embed)
+        else:
+            # Test custom text
+            filtered = self.filter_ai_thinking(test_text, show_thinking=False)
+            
+            embed = discord.Embed(
+                title="🧪 AI Filter Test (Custom)",
+                color=discord.Color.blue()
+            )
+            
+            embed.add_field(
+                name=f"Original Text ({len(test_text)} chars)",
+                value=f"```\n{test_text[:1000]}{'...' if len(test_text) > 1000 else ''}\n```",
+                inline=False
+            )
+            
+            embed.add_field(
+                name=f"Filtered Text ({len(filtered)} chars)",
+                value=f"```\n{filtered[:1000]}{'...' if len(filtered) > 1000 else ''}\n```",
+                inline=False
+            )
+            
+            # Show if filtering worked
+            thinking_removed = "<think>" not in filtered and "</think>" not in filtered
+            embed.add_field(
+                name="Filter Status",
+                value="✅ Think blocks removed" if thinking_removed else "❌ Think blocks still present",
+                inline=True
+            )
+            
+            await ctx.send(embed=embed)
 
     @ai_chat.error
     async def ai_chat_error(self, ctx, error):
