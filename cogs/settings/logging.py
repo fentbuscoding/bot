@@ -7,7 +7,8 @@ from typing import Optional, List, Dict, Union
 import json
 import asyncio
 from datetime import datetime, timedelta
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -102,7 +103,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_logging_settings(self, ctx):
         """View current logging settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         
         embed = discord.Embed(
@@ -229,7 +230,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
             return await ctx.send(f"❌ I don't have permission to send messages in {channel.mention}!")
         
         # Save the channel assignment
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         channels = log_settings.get('channels', {})
         
@@ -241,7 +242,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
             log_settings['general'] = {}
         log_settings['general']['enabled'] = True
         
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         embed = discord.Embed(
             title="✅ Logging Channel Set",
@@ -259,7 +260,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
         if event not in LOGGING_EVENTS:
             return await ctx.send(f"❌ '{event}' is not a valid logging event. Use `logging events` to see available events.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         channels = log_settings.get('channels', {})
         
@@ -268,7 +269,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
         
         del channels[event]
         log_settings['channels'] = channels
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         embed = discord.Embed(
             title="✅ Logging Removed",
@@ -281,7 +282,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def list_log_channels(self, ctx):
         """List current channel assignments"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         channels = settings.get('logging', {}).get('channels', {})
         
         embed = discord.Embed(
@@ -402,7 +403,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def toggle_audit(self, ctx, enabled: bool = None):
         """Toggle audit trail monitoring"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         audit = log_settings.get('audit', {})
         
@@ -437,7 +438,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
             audit['time_window'] = 300  # 5 minutes
         
         log_settings['audit'] = audit
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         status = "enabled" if enabled else "disabled"
         embed = discord.Embed(
@@ -462,13 +463,13 @@ class LoggingSettings(commands.Cog, ErrorHandler):
         if threshold < 2 or threshold > 50:
             return await ctx.send("❌ Threshold must be between 2 and 50 actions!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         audit = log_settings.get('audit', {})
         
         audit['action_threshold'] = threshold
         log_settings['audit'] = audit
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         embed = discord.Embed(
             title="✅ Audit Threshold Updated",
@@ -484,13 +485,13 @@ class LoggingSettings(commands.Cog, ErrorHandler):
         if seconds < 60 or seconds > 3600:
             return await ctx.send("❌ Time window must be between 60 and 3600 seconds (1 hour)!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         audit = log_settings.get('audit', {})
         
         audit['time_window'] = seconds
         log_settings['audit'] = audit
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         minutes = seconds // 60
         embed = discord.Embed(
@@ -507,13 +508,13 @@ class LoggingSettings(commands.Cog, ErrorHandler):
         if not channel.permissions_for(ctx.guild.me).send_messages:
             return await ctx.send(f"❌ I don't have permission to send messages in {channel.mention}!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         log_settings = settings.get('logging', {})
         audit = log_settings.get('audit', {})
         
         audit['alert_channel'] = channel.id
         log_settings['audit'] = audit
-        await async_db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
+        await db.update_guild_settings(ctx.guild.id, {'logging': log_settings})
         
         embed = discord.Embed(
             title="✅ Audit Channel Set",
@@ -547,7 +548,7 @@ class LoggingSettings(commands.Cog, ErrorHandler):
 
     async def log_event(self, event_type: str, guild: discord.Guild, **kwargs):
         """Log an event to the appropriate channel"""
-        settings = await async_db.get_guild_settings(guild.id)
+        settings = await db.get_guild_settings(guild.id)
         log_settings = settings.get('logging', {})
         
         # Check if logging is enabled
@@ -686,7 +687,7 @@ class BulkChannelView(discord.ui.View):
             return
         
         # Apply the settings
-        settings = await async_db.get_guild_settings(self.guild_id)
+        settings = await db.get_guild_settings(self.guild_id)
         log_settings = settings.get('logging', {})
         channels = log_settings.get('channels', {})
         
@@ -714,7 +715,7 @@ class BulkChannelView(discord.ui.View):
             log_settings['general'] = {}
         log_settings['general']['enabled'] = True
         
-        await async_db.update_guild_settings(self.guild_id, {'logging': log_settings})
+        await db.update_guild_settings(self.guild_id, {'logging': log_settings})
         
         embed = discord.Embed(
             title="✅ Bulk Assignment Complete",

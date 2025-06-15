@@ -6,7 +6,8 @@ import random
 import asyncio
 import math
 from cogs.logging.logger import CogLogger
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from datetime import datetime, timedelta
 import hashlib

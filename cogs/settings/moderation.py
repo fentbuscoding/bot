@@ -6,7 +6,8 @@ from discord.ext import commands
 from typing import Optional, List, Dict, Union
 import json
 import asyncio
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -41,7 +42,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_moderation_settings(self, ctx):
         """View current moderation settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         mod_settings = settings.get('moderation', {})
         
         embed = discord.Embed(
@@ -121,7 +122,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_automod(self, ctx):
         """View current auto-moderation settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         automod = settings.get('moderation', {}).get('automod', {})
         
         embed = discord.Embed(
@@ -204,7 +205,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         Usage: automod spam [enabled] [max_messages] [time_window] [action]
         Actions: warn, mute, kick, ban
         """
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         mod_settings = settings.get('moderation', {})
         automod = mod_settings.get('automod', {})
         spam_settings = automod.get('anti_spam', {})
@@ -254,7 +255,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         # Save settings
         automod['anti_spam'] = spam_settings
         mod_settings['automod'] = automod
-        await async_db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
+        await db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
         
         embed = discord.Embed(
             title="✅ Anti-Spam Updated",
@@ -280,7 +281,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         
         Usage: automod mentions [enabled] [max_mentions] [action]
         """
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         mod_settings = settings.get('moderation', {})
         automod = mod_settings.get('automod', {})
         mention_settings = automod.get('anti_mention', {})
@@ -325,7 +326,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         # Save settings
         automod['anti_mention'] = mention_settings
         mod_settings['automod'] = automod
-        await async_db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
+        await db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
         
         embed = discord.Embed(
             title="✅ Anti-Mass Mention Updated",
@@ -369,7 +370,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_punishment(self, ctx):
         """View current punishment settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         punishment = settings.get('moderation', {}).get('punishment', {})
         
         warn_limits = punishment.get('warn_limits', {
@@ -424,7 +425,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         
         Usage: punishment limits [mute_warns] [kick_warns] [ban_warns]
         """
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         mod_settings = settings.get('moderation', {})
         punishment = mod_settings.get('punishment', {})
         warn_limits = punishment.get('warn_limits', {
@@ -480,7 +481,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         # Save settings
         punishment['warn_limits'] = warn_limits
         mod_settings['punishment'] = punishment
-        await async_db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
+        await db.update_guild_settings(ctx.guild.id, {'moderation': mod_settings})
         
         embed = discord.Embed(
             title="✅ Warning Limits Updated",
@@ -532,7 +533,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
                 }
             }
             
-            await async_db.update_guild_settings(ctx.guild.id, {'moderation': default_settings})
+            await db.update_guild_settings(ctx.guild.id, {'moderation': default_settings})
             
             embed = discord.Embed(
                 title="✅ Moderation Settings Reset",
@@ -553,7 +554,7 @@ class ModerationSettings(commands.Cog, ErrorHandler):
         if not message.guild or message.author.bot:
             return True
         
-        settings = await async_db.get_guild_settings(message.guild.id)
+        settings = await db.get_guild_settings(message.guild.id)
         automod = settings.get('moderation', {}).get('automod', {})
         
         # Check spam

@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 import discord
 import json
 import datetime

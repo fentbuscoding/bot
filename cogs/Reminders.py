@@ -4,7 +4,8 @@ import datetime
 import re
 from typing import Optional, List, Dict, Any
 import asyncio
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from utils.error_handler import ErrorHandler
 from cogs.logging.logger import CogLogger
 

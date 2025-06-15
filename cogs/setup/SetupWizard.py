@@ -3,7 +3,8 @@ from discord.ext import commands
 from typing import Dict, Any, List, Callable, Optional
 import asyncio
 import datetime
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 
 class SetupWizard:
@@ -388,7 +389,7 @@ class SetupWizard:
             'setup_completed': True
         }
         
-        await async_db.update_guild_settings(ctx.guild.id, settings)
+        await db.update_guild_settings(ctx.guild.id, settings)
         
         embed = discord.Embed(
             title="✅ Setup Complete!",
@@ -562,7 +563,7 @@ class SetupWizard:
         }
         
         # Update user in database
-        await async_db.db.users.update_one(
+        await db.db.users.update_one(
             {"_id": str(ctx.author.id)},
             {"$set": {"preferences": user_data}},
             upsert=True
@@ -663,7 +664,7 @@ class Setup(commands.Cog):
             'setup_completed': True
         }
         
-        await async_db.update_guild_settings(ctx.guild.id, settings)
+        await db.update_guild_settings(ctx.guild.id, settings)
         
         embed = discord.Embed(
             title="⚡ Quick Setup Complete!",

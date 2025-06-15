@@ -8,7 +8,8 @@ import json
 import re
 import asyncio
 from datetime import datetime, timedelta
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -108,7 +109,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_welcome_settings(self, ctx):
         """View current welcome settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         
         embed = discord.Embed(
@@ -168,7 +169,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def toggle_welcome(self, ctx, enabled: bool = None):
         """Toggle welcome messages on/off"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         
@@ -193,7 +194,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         
         general['enabled'] = enabled
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         status = "enabled" if enabled else "disabled"
         embed = discord.Embed(
@@ -250,7 +251,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         if channel_type.lower() not in valid_types:
             return await ctx.send(f"❌ Invalid channel type! Valid types: {', '.join(valid_types)}")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         channels = general.get('channels', [])
@@ -274,7 +275,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         channels.append(channel_data)
         general['channels'] = channels
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         embed = discord.Embed(
             title="✅ Welcome Channel Added",
@@ -293,7 +294,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_welcome_channel(self, ctx, channel: discord.TextChannel):
         """Remove a welcome channel"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         channels = general.get('channels', [])
@@ -311,7 +312,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         channels.remove(channel_to_remove)
         general['channels'] = channels
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         embed = discord.Embed(
             title="✅ Welcome Channel Removed",
@@ -324,7 +325,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def list_welcome_channels(self, ctx):
         """List current welcome channels"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         channels = settings.get('welcome', {}).get('general', {}).get('channels', [])
         
         embed = discord.Embed(
@@ -393,7 +394,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def set_welcome_message(self, ctx, channel: discord.TextChannel):
         """Set welcome message for a channel (Interactive)"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         channels = settings.get('welcome', {}).get('general', {}).get('channels', [])
         
         # Check if channel is a welcome channel
@@ -449,7 +450,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
             general = welcome_settings.get('general', {})
             general['channels'] = channels
             welcome_settings['general'] = general
-            await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+            await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
             
             embed = discord.Embed(
                 title="✅ Welcome Message Set",
@@ -475,7 +476,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def test_welcome_message(self, ctx, channel: discord.TextChannel):
         """Test a welcome message"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         channels = settings.get('welcome', {}).get('general', {}).get('channels', [])
         
         # Find channel data
@@ -630,7 +631,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         if not ctx.guild.me.guild_permissions.manage_roles:
             return await ctx.send("❌ I don't have permission to manage roles!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         auto_roles = general.get('auto_roles', [])
@@ -652,7 +653,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         auto_roles.append(role_data)
         general['auto_roles'] = auto_roles
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         embed = discord.Embed(
             title="✅ Auto-role Added",
@@ -670,7 +671,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_autorole(self, ctx, role: discord.Role):
         """Remove an auto-role"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         auto_roles = general.get('auto_roles', [])
@@ -688,7 +689,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         auto_roles.remove(role_to_remove)
         general['auto_roles'] = auto_roles
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         embed = discord.Embed(
             title="✅ Auto-role Removed",
@@ -701,7 +702,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def list_autoroles(self, ctx):
         """List current auto-roles"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         auto_roles = settings.get('welcome', {}).get('general', {}).get('auto_roles', [])
         
         embed = discord.Embed(
@@ -751,7 +752,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def toggle_dm(self, ctx, enabled: bool = None):
         """Toggle DM on join"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         
@@ -770,7 +771,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
         
         general['dm_enabled'] = enabled
         welcome_settings['general'] = general
-        await async_db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
+        await db.update_guild_settings(ctx.guild.id, {'welcome': welcome_settings})
         
         status = "enabled" if enabled else "disabled"
         embed = discord.Embed(
@@ -890,7 +891,7 @@ class WelcomeSettings(commands.Cog, ErrorHandler):
 
     async def send_welcome_message(self, member: discord.Member):
         """Send welcome message when member joins"""
-        settings = await async_db.get_guild_settings(member.guild.id)
+        settings = await db.get_guild_settings(member.guild.id)
         welcome_settings = settings.get('welcome', {})
         general = welcome_settings.get('general', {})
         

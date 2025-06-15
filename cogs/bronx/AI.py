@@ -51,181 +51,17 @@ You should be:
 - Friendly and approachable
 - ACCURATE and never make things up
 
-=== OFFICIAL BRONXBOT COMMAND REFERENCE ===
-⚠️ THESE ARE THE ONLY VALID COMMANDS - DO NOT INVENT OTHERS ⚠️
-
-🤖 AI COMMANDS:
-• `.ai <message>` - Chat with BronxBot AI (aliases: `.chat`, `.aiask`, `.bronxai`)
-• `.ai --thinking <message>` - Shows AI reasoning process
-• `.aiclear` - Clear conversation history (aliases: `.clearai`, `.resetai`, `.clearconvo`, `.resetconvo`)
-• `.aistatus` - Check AI service status [Admin] (aliases: `.aiinfo`, `.checkai`)
-
-🏦 ECONOMY COMMANDS:
-• `.balance [user]` - Check wallet, bank & net-worth (aliases: `.bal`, `.money`)
-• `.pay <user> <amount>` - Transfer money to another user (aliases: `.give`, `.send`)
-• `.deposit <amount>` - Put money in bank (aliases: `.dep`, `.d`)
-• `.withdraw <amount>` - Take money from bank (aliases: `.with`, `.w`)
-• `.daily` - Claim daily reward (1000-5000 coins)
-• `.beg` - Beg for small amounts (0-150 coins)
-• `.rob <user>` - Attempt to rob someone (60% fail rate)
-• `.work` - Work at your job for money (1min cooldown)
-• `.job` - View/manage your current job
-• `.choosejob <name>` - Select a new job
-• `.leavejob` - Quit your current job
-• `.useitem <item>` - Use potions/upgrades from inventory
-• `.activeeffects` - View active potion effects
-• `.leaderboard` - View richest users (aliases: `.lb`, `.rich`, `.top`)
-
-💰 AMOUNT FORMATS:
-• Numbers: `1000`, `5000`
-• Shortcuts: `1k`, `1.5m`, `2b`
-• Scientific: `1e3`, `2.5e5`
-• Percentages: `50%`, `25%`
-• Keywords: `all`, `half`
-
-🎰 GAMBLING COMMANDS:
-• `.coinflip <bet>` - Heads or tails (aliases: `.cf`, `.flip`)
-• `.slots <bet>` - 3-reel slot machine
-• `.blackjack <bet>` - Full blackjack with splitting (aliases: `.bj`)
-• `.crash <bet> [auto_cashout]` - Multiplier crash game
-• `.roulette <bet> <choice>` - Roulette wheel (aliases: `.rlt`)
-• `.plinko <bet>` - Ball drops through peg board
-• `.doubleornothing <items>` - Risk items for double (aliases: `.double`, `.don`)
-• `.bomb <channel> <amount>` - Channel-wide money bomb
-
-🎣 FISHING SYSTEM:
-• `.fish` - Cast your line and catch fish
-• `.inventory` - View your fish and items (aliases: `.inv`)
-• `.sell <fish>` - Sell fish for money
-• `.shop` - Buy rods, bait, and equipment
-• `.auto` - Autofishing system management
-• `.auto buy` - Purchase autofisher
-• `.auto upgrade` - Improve autofisher efficiency
-• `.auto deposit <amount>` - Fund autofisher balance
-
-🔧 UTILITY COMMANDS:
-• `.ping` - Show bot latency
-• `.avatar [user]` - Show user's avatar (aliases: `.av`)
-• `.userinfo [user]` - User details and stats (aliases: `.ui`, `.whois`)
-• `.serverinfo` - Server information (aliases: `.si`, `.guildinfo`)
-• `.uptime` - How long bot has been running
-• `.botinfo` - Bot statistics and info
-• `.poll <question>` - Create yes/no poll (aliases: `.ask`, `.yn`, `.yesno`)
-• `.multipoll <question> <option1> <option2>...` - Multi-option poll
-• `.timestamp [style]` - Generate Discord timestamps
-• `.hexcolor [code]` - Show color preview
-• `.emojisteal <emoji>` - Add emoji to server (aliases: `.steal`)
-• `.emojiinfo <emoji>` - Show emoji details
-• `.tinyurl <url>` - Shorten URLs
-• `.snipe` - Show last deleted message (1hr)
-• `.cleanup [limit]` - Delete bot/command messages (aliases: `.cu`)
-• `.afk [reason]` - Set AFK status
-• `.calculate <expression>` - Math calculator (aliases: `.calc`, `.math`)
-
-🎮 FUN COMMANDS:
-• `.pick <option1> <option2>...` - Random choice (aliases: `.choose`)
-• `.roll [dice]` - Roll dice (default 1d6)
-• `.flip` - Coin flip
-• `.8ball <question>` - Magic 8-ball
-• `.guess [max]` - Number guessing game
-• `.spongebob <text>` - mOcK tExT (aliases: `.mock`)
-• `.reverse <text>` - Flip text upside down
-• `.tinytext <text>` - ᵗⁱⁿʸ ˢᵘᵖᵉʳˢᶜʳⁱᵖᵗ
-
-🛡️ MODERATION COMMANDS:
-• `.ban <user> [reason]` - Ban user
-• `.unban <user>` - Unban user
-• `.kick <user> [reason]` - Kick user
-• `.timeout <user> <duration> [reason]` - Timeout user
-• `.warn <user> [reason]` - Warn user
-• `.purge <amount>` - Delete messages
-
-⚙️ SETTINGS & HELP:
-• `.help` - Command help menu (aliases: `.h`, `.commands`)
-• `.invite` - Bot invite link (aliases: `.support`)
-• Various server configuration commands for admins
-
-🎵 MUSIC COMMANDS:
-• Music playback and queue management
-• Voice channel controls
-• Playlist features
-
-=== COMMAND ALIASES REFERENCE ===
-⚠️ IMPORTANT: Commands can be used with their aliases interchangeably ⚠️
-
-Main Command = Aliases:
-• `.ai` = `.chat`, `.aiask`, `.bronxai`
-• `.balance` = `.bal`, `.money`
-• `.pay` = `.give`, `.send`
-• `.deposit` = `.dep`, `.d`
-• `.withdraw` = `.with`, `.w`
-• `.leaderboard` = `.lb`, `.rich`, `.top`
-• `.coinflip` = `.cf`, `.flip`
-• `.blackjack` = `.bj`
-• `.roulette` = `.rlt`
-• `.doubleornothing` = `.double`, `.don`
-• `.inventory` = `.inv`
-• `.avatar` = `.av`
-• `.userinfo` = `.ui`, `.whois`
-• `.serverinfo` = `.si`, `.guildinfo`
-• `.poll` = `.ask`, `.yn`, `.yesno`
-• `.emojisteal` = `.steal`
-• `.cleanup` = `.cu`
-• `.calculate` = `.calc`, `.math`
-• `.pick` = `.choose`
-• `.spongebob` = `.mock`
-• `.help` = `.h`, `.commands`
-• `.invite` = `.support`
-• `.aiclear` = `.clearai`, `.resetai`, `.clearconvo`, `.resetconvo`
-• `.aistatus` = `.aiinfo`, `.checkai`
-
-=== SPECIAL FEATURES ===
-
-💎 POTION SYSTEM:
-• Economy, Fishing, and XP boost potions available
-• Purchase from `.shop` or server shops
-• Use with `.useitem <potion_name>`
-
-🤖 AUTOFISHING:
-• Automated fishing while offline
-• Requires initial purchase and funding
-• Upgrades improve efficiency
-
-🎯 JOB SYSTEM:
-• Different jobs with unique minigames
-• Moderation, Reddit, Simp, Meme, NFT, Crypto, Twitter, Streaming
-• Each job has different pay rates and mechanics
-
-🎲 PROGRESSIVE BETTING:
-• Bet limits scale with your balance
-• Higher balance = higher maximum bets
-• Anti-inflation measures in place
-
 Keep responses under 2000 characters to fit Discord's message limit. If a response would be longer, break it into multiple messages or summarize appropriately.
 
 🚨 FINAL REMINDER - COMMAND ACCURACY:
-- NEVER suggest commands not in this reference
-- NEVER modify command syntax or parameters
+- NEVER suggest commands that don't exist in BronxBot
+- NEVER modify command syntax or parameters  
 - If asked about unknown commands, say "That command doesn't exist in BronxBot"
 - If unsure about any command details, say "I'm not certain about that specific detail"
-- Always use EXACT command names and syntax from the reference above
+- Always recommend `.help` for complete and accurate command information
 - Better to say "I don't know" than to provide incorrect information
 
-❌ EXAMPLES OF WHAT NOT TO DO:
-- DON'T make up commands like `.wallet` (use `.balance` instead)
-- DON'T suggest `.transfer` (use `.pay` instead)  
-- DON'T invent `.bank` command (use `.deposit`/`.withdraw`)
-- DON'T create fake aliases like `.bal` for `.balance` (wait, `.bal` IS real!)
-- DON'T suggest non-existent parameters or options
-- DON'T modify existing command syntax
-
-✅ EXAMPLES OF CORRECT RESPONSES:
-- "Use `.balance` to check your money (aliases: `.bal`, `.money`)"
-- "The `.pay` command transfers money (aliases: `.give`, `.send`)"
-- "I'm not sure about that specific command - let me recommend `.help` instead"
-- "That command doesn't exist in BronxBot, but you might want `.inventory` instead"
-
-When users ask about commands, provide ONLY accurate syntax from the reference above and explain any cooldowns or requirements that are documented. NEVER improvise or guess command details. If a user asks about a command that doesn't exist, clearly state it doesn't exist and suggest a similar real command if applicable."""
+When users ask about commands, direct them to use `.help` for the most up-to-date and accurate command list with proper syntax and descriptions."""
         
         # Rate limiting and conversation management
         self.user_conversations: Dict[int, deque] = defaultdict(lambda: deque(maxlen=10))  # Last 10 messages per user
@@ -599,25 +435,35 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
             logger.error(f"Error generating AI response: {e}")
             return None
 
+    def get_all_bot_commands(self) -> set:
+        """Get all valid commands and aliases from the bot dynamically"""
+        valid_commands = set()
+        
+        # Get all commands from the bot
+        for command in self.bot.commands:
+            # Add main command name
+            valid_commands.add(command.name.lower())
+            
+            # Add all aliases
+            if hasattr(command, 'aliases') and command.aliases:
+                for alias in command.aliases:
+                    valid_commands.add(alias.lower())
+        
+        # Get all group commands and subcommands
+        for command in self.bot.commands:
+            if hasattr(command, 'commands') and command.commands:
+                for subcommand in command.commands:
+                    valid_commands.add(subcommand.qualified_name.lower())
+                    if hasattr(subcommand, 'aliases') and subcommand.aliases:
+                        for alias in subcommand.aliases:
+                            valid_commands.add(f"{command.name} {alias}".lower())
+        
+        return valid_commands
+
     def validate_response_for_hallucinations(self, response: str) -> str:
         """Check response for potential command hallucinations and warn if found"""
-        # List of valid commands and their aliases
-        valid_commands = [
-            'ai', 'chat', 'aiask', 'bronxai', 'aiclear', 'clearai', 'resetai', 
-            'clearconvo', 'resetconvo', 'aistatus', 'aiinfo', 'checkai',
-            'balance', 'bal', 'money', 'pay', 'give', 'send', 'deposit', 'dep', 'd',
-            'withdraw', 'with', 'w', 'daily', 'beg', 'rob', 'work', 'job', 'choosejob',
-            'leavejob', 'useitem', 'activeeffects', 'leaderboard', 'lb', 'rich', 'top',
-            'coinflip', 'cf', 'flip', 'slots', 'blackjack', 'bj', 'crash', 'roulette',
-            'rlt', 'plinko', 'doubleornothing', 'double', 'don', 'bomb',
-            'fish', 'inventory', 'inv', 'sell', 'shop', 'auto',
-            'ping', 'avatar', 'av', 'userinfo', 'ui', 'whois', 'serverinfo', 'si',
-            'guildinfo', 'uptime', 'botinfo', 'poll', 'yn', 'multipoll', 'timestamp',
-            'hexcolor', 'emojisteal', 'steal', 'emojiinfo', 'tinyurl', 'snipe',
-            'cleanup', 'cu', 'afk', 'calculate', 'calc', 'math',
-            'pick', 'choose', 'roll', '8ball', 'guess', 'spongebob', 'mock',
-            'reverse', 'tinytext', 'help', 'h', 'commands', 'invite', 'support'
-        ]
+        # Get current valid commands dynamically
+        valid_commands = self.get_all_bot_commands()
         
         import re
         # Find all command-like patterns in the response
@@ -625,7 +471,7 @@ When users ask about commands, provide ONLY accurate syntax from the reference a
         
         hallucinated = []
         for cmd in command_patterns:
-            if cmd.lower() not in [c.lower() for c in valid_commands]:
+            if cmd.lower() not in valid_commands:
                 hallucinated.append(cmd)
         
         if hallucinated:
@@ -925,6 +771,47 @@ Another hidden block."""
             )
             
             await ctx.send(embed=embed)
+
+    @commands.command(name='test_validation', aliases=['testvalidation'])
+    @commands.has_permissions(administrator=True)
+    async def test_validation(self, ctx):
+        """Test the improved command validation system (Admin only)"""
+        # Get the current valid commands
+        valid_commands = self.get_all_bot_commands()
+        
+        embed = discord.Embed(
+            title="🧪 Command Validation Test",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="✅ Valid Commands Found",
+            value=f"**Total Commands:** {len(valid_commands)}\n**Sample:** {', '.join(list(valid_commands)[:10])}...",
+            inline=False
+        )
+        
+        # Test some example responses
+        test_responses = [
+            "Try using `.balance` to check your money!",  # Valid command
+            "Use `.wallet` to see your funds",  # Invalid command
+            "The `.nonexistent` command doesn't work"  # Invalid command
+        ]
+        
+        validation_results = []
+        for test_response in test_responses:
+            validated = self.validate_response_for_hallucinations(test_response)
+            has_disclaimer = "⚠️ **Note**:" in validated
+            validation_results.append(f"{'❌' if has_disclaimer else '✅'} `{test_response[:30]}...`")
+        
+        embed.add_field(
+            name="🔍 Validation Test Results",
+            value="\n".join(validation_results),
+            inline=False
+        )
+        
+        embed.set_footer(text="✅ = No hallucinations detected, ❌ = Hallucinations detected and warning added")
+        
+        await ctx.send(embed=embed)
 
     @ai_chat.error
     async def ai_chat_error(self, ctx, error):

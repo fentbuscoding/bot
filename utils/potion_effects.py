@@ -3,7 +3,8 @@ import datetime
 import json
 import os
 from typing import Dict, Optional, Any
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 
 class PotionEffects:
     def __init__(self, bot):

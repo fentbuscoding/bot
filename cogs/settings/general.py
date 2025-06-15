@@ -6,7 +6,8 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional, List, Union
 import json
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -43,7 +44,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_general_settings(self, ctx):
         """View current general settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         
         # Get prefixes
         prefixes = settings.get('prefixes', ['.'])
@@ -110,7 +111,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def prefix_settings(self, ctx):
         """Manage server prefixes"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         prefixes = settings.get('prefixes', ['.'])
         if isinstance(prefixes, str):
             prefixes = [prefixes]
@@ -138,7 +139,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if len(prefix) > 5:
             return await ctx.send("❌ Prefix cannot be longer than 5 characters!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         prefixes = settings.get('prefixes', ['.'])
         if isinstance(prefixes, str):
             prefixes = [prefixes]
@@ -150,7 +151,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             return await ctx.send("❌ Maximum of 5 prefixes allowed per server!")
         
         prefixes.append(prefix)
-        await async_db.update_guild_settings(ctx.guild.id, {'prefixes': prefixes})
+        await db.update_guild_settings(ctx.guild.id, {'prefixes': prefixes})
         
         embed = discord.Embed(
             title="✅ Prefix Added",
@@ -163,7 +164,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_prefix(self, ctx, prefix: str):
         """Remove a prefix from the server"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         prefixes = settings.get('prefixes', ['.'])
         if isinstance(prefixes, str):
             prefixes = [prefixes]
@@ -175,7 +176,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             return await ctx.send("❌ Cannot remove the last prefix! Add another prefix first.")
         
         prefixes.remove(prefix)
-        await async_db.update_guild_settings(ctx.guild.id, {'prefixes': prefixes})
+        await db.update_guild_settings(ctx.guild.id, {'prefixes': prefixes})
         
         embed = discord.Embed(
             title="✅ Prefix Removed",
@@ -188,7 +189,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def list_prefixes(self, ctx):
         """List all server prefixes"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         prefixes = settings.get('prefixes', ['.'])
         if isinstance(prefixes, str):
             prefixes = [prefixes]
@@ -227,7 +228,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_permissions(self, ctx):
         """View current permission settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         perms = settings.get('general_permissions', {})
         
         manage_roles = perms.get('manage_roles', [])
@@ -278,7 +279,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def add_role_permission(self, ctx, role: discord.Role):
         """Add role permission to edit settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         perms = settings.get('general_permissions', {})
         manage_roles = perms.get('manage_roles', [])
         
@@ -287,7 +288,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         manage_roles.append(role.id)
         perms['manage_roles'] = manage_roles
-        await async_db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
+        await db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
         
         embed = discord.Embed(
             title="✅ Permission Added",
@@ -300,7 +301,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def add_user_permission(self, ctx, user: discord.Member):
         """Add user permission to edit settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         perms = settings.get('general_permissions', {})
         manage_users = perms.get('manage_users', [])
         
@@ -309,7 +310,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         manage_users.append(user.id)
         perms['manage_users'] = manage_users
-        await async_db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
+        await db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
         
         embed = discord.Embed(
             title="✅ Permission Added",
@@ -328,7 +329,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_role_permission(self, ctx, role: discord.Role):
         """Remove role permission to edit settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         perms = settings.get('general_permissions', {})
         manage_roles = perms.get('manage_roles', [])
         
@@ -337,7 +338,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         manage_roles.remove(role.id)
         perms['manage_roles'] = manage_roles
-        await async_db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
+        await db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
         
         embed = discord.Embed(
             title="✅ Permission Removed",
@@ -350,7 +351,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_user_permission(self, ctx, user: discord.Member):
         """Remove user permission to edit settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         perms = settings.get('general_permissions', {})
         manage_users = perms.get('manage_users', [])
         
@@ -359,7 +360,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         manage_users.remove(user.id)
         perms['manage_users'] = manage_users
-        await async_db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
+        await db.update_guild_settings(ctx.guild.id, {'general_permissions': perms})
         
         embed = discord.Embed(
             title="✅ Permission Removed",
@@ -396,7 +397,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_whitelist(self, ctx):
         """View current command whitelists"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         
         embed = discord.Embed(
@@ -448,7 +449,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command.lower() != "all" and not await self._validate_command(command):
             return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         channel_whitelist = whitelist.get('channels', {})
         
@@ -459,7 +460,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command not in channel_whitelist[channel_id]:
             channel_whitelist[channel_id].append(command)
             whitelist['channels'] = channel_whitelist
-            await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+            await db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
             
             embed = discord.Embed(
                 title="✅ Command Whitelisted",
@@ -478,7 +479,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command.lower() != "all" and not await self._validate_command(command):
             return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         role_whitelist = whitelist.get('roles', {})
         
@@ -489,7 +490,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command not in role_whitelist[role_id]:
             role_whitelist[role_id].append(command)
             whitelist['roles'] = role_whitelist
-            await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+            await db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
             
             embed = discord.Embed(
                 title="✅ Command Whitelisted",
@@ -511,7 +512,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_whitelist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
         """Remove command from channel whitelist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         channel_whitelist = whitelist.get('channels', {})
         
@@ -532,7 +533,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             del channel_whitelist[channel_id]
         
         whitelist['channels'] = channel_whitelist
-        await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+        await db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
         
         embed = discord.Embed(
             title="✅ Whitelist Removed",
@@ -545,7 +546,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_whitelist_role(self, ctx, role: discord.Role, *, command: str):
         """Remove command from role whitelist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         whitelist = settings.get('command_whitelist', {})
         role_whitelist = whitelist.get('roles', {})
         
@@ -566,7 +567,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             del role_whitelist[role_id]
         
         whitelist['roles'] = role_whitelist
-        await async_db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
+        await db.update_guild_settings(ctx.guild.id, {'command_whitelist': whitelist})
         
         embed = discord.Embed(
             title="✅ Whitelist Removed",
@@ -605,7 +606,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_blacklist(self, ctx):
         """View current command blacklists"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         
         embed = discord.Embed(
@@ -675,7 +676,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command.lower() != "all" and not await self._validate_command(command):
             return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         channel_blacklist = blacklist.get('channels', {})
         
@@ -686,7 +687,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command not in channel_blacklist[channel_id]:
             channel_blacklist[channel_id].append(command)
             blacklist['channels'] = channel_blacklist
-            await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+            await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
             
             embed = discord.Embed(
                 title="❌ Command Blacklisted",
@@ -705,7 +706,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command.lower() != "all" and not await self._validate_command(command):
             return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         role_blacklist = blacklist.get('roles', {})
         
@@ -716,7 +717,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command not in role_blacklist[role_id]:
             role_blacklist[role_id].append(command)
             blacklist['roles'] = role_blacklist
-            await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+            await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
             
             embed = discord.Embed(
                 title="❌ Command Blacklisted",
@@ -735,7 +736,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command.lower() != "all" and not await self._validate_command(command):
             return await ctx.send(f"❌ Command `{command}` does not exist! Use `{ctx.prefix}help` to see available commands.")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         user_blacklist = blacklist.get('users', {})
         
@@ -746,7 +747,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         if command not in user_blacklist[user_id]:
             user_blacklist[user_id].append(command)
             blacklist['users'] = user_blacklist
-            await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+            await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
             
             embed = discord.Embed(
                 title="❌ Command Blacklisted",
@@ -768,7 +769,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_blacklist_channel(self, ctx, channel: discord.TextChannel, *, command: str):
         """Remove command from channel blacklist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         channel_blacklist = blacklist.get('channels', {})
         
@@ -789,7 +790,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             del channel_blacklist[channel_id]
         
         blacklist['channels'] = channel_blacklist
-        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
         
         embed = discord.Embed(
             title="✅ Blacklist Removed",
@@ -802,7 +803,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_blacklist_role(self, ctx, role: discord.Role, *, command: str):
         """Remove command from role blacklist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         role_blacklist = blacklist.get('roles', {})
         
@@ -823,7 +824,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             del role_blacklist[role_id]
         
         blacklist['roles'] = role_blacklist
-        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
         
         embed = discord.Embed(
             title="✅ Blacklist Removed",
@@ -836,7 +837,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_blacklist_user(self, ctx, user: discord.Member, *, command: str):
         """Remove command from user blacklist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         blacklist = settings.get('command_blacklist', {})
         user_blacklist = blacklist.get('users', {})
         
@@ -857,7 +858,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
             del user_blacklist[user_id]
         
         blacklist['users'] = user_blacklist
-        await async_db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
+        await db.update_guild_settings(ctx.guild.id, {'command_blacklist': blacklist})
         
         embed = discord.Embed(
             title="✅ Blacklist Removed",
@@ -893,7 +894,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_ignored(self, ctx):
         """View currently ignored users/roles"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         ignored = settings.get('ignored', {})
         
         ignored_roles = ignored.get('roles', [])
@@ -944,7 +945,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def add_ignore_role(self, ctx, role: discord.Role):
         """Add role to ignore list"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         ignored = settings.get('ignored', {})
         ignored_roles = ignored.get('roles', [])
         
@@ -953,7 +954,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         ignored_roles.append(role.id)
         ignored['roles'] = ignored_roles
-        await async_db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
+        await db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
         
         embed = discord.Embed(
             title="✅ Role Ignored",
@@ -966,7 +967,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def add_ignore_user(self, ctx, user: discord.Member):
         """Add user to ignore list"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         ignored = settings.get('ignored', {})
         ignored_users = ignored.get('users', [])
         
@@ -975,7 +976,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         ignored_users.append(user.id)
         ignored['users'] = ignored_users
-        await async_db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
+        await db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
         
         embed = discord.Embed(
             title="✅ User Ignored",
@@ -994,7 +995,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_ignore_role(self, ctx, role: discord.Role):
         """Remove role from ignore list"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         ignored = settings.get('ignored', {})
         ignored_roles = ignored.get('roles', [])
         
@@ -1003,7 +1004,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         ignored_roles.remove(role.id)
         ignored['roles'] = ignored_roles
-        await async_db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
+        await db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
         
         embed = discord.Embed(
             title="✅ Role Un-ignored",
@@ -1016,7 +1017,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_ignore_user(self, ctx, user: discord.Member):
         """Remove user from ignore list"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         ignored = settings.get('ignored', {})
         ignored_users = ignored.get('users', [])
         
@@ -1025,7 +1026,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
         
         ignored_users.remove(user.id)
         ignored['users'] = ignored_users
-        await async_db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
+        await db.update_guild_settings(ctx.guild.id, {'ignored': ignored})
         
         embed = discord.Embed(
             title="✅ User Un-ignored",
@@ -1088,7 +1089,7 @@ class GeneralSettings(commands.Cog, ErrorHandler):
 
     async def is_command_allowed(self, ctx, command_name: str) -> bool:
         """Check if a command is allowed based on whitelist/blacklist settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         
         # Check if user/role is ignored
         ignored = settings.get('ignored', {})

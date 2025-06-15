@@ -7,8 +7,11 @@ from datetime import timedelta
 import datetime
 import asyncio
 from cogs.logging.logger import CogLogger
-from utils.db import db
+from utils.db import AsyncDatabase
 from utils.error_handler import ErrorHandler
+
+# Initialize database instance
+db = AsyncDatabase.get_instance()
 
 # this is super wip
 class Moderation(commands.Cog, ErrorHandler):

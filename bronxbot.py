@@ -131,9 +131,10 @@ class BronxBot(commands.AutoShardedBot):
         
         # Close database connections (only if db module exists)
         try:
-            from utils.db import async_db
-            if hasattr(async_db, '_client') and async_db._client:
-                async_db._client.close()
+            from utils.db import AsyncDatabase
+            db = AsyncDatabase.get_instance()
+            if hasattr(db, '_client') and db._client:
+                db._client.close()
                 logging.info("Closed database connections")
         except ImportError:
             logging.debug("Database module not available, skipping cleanup")

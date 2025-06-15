@@ -7,7 +7,8 @@ from uuid import uuid4
 from discord.ext import commands, tasks
 from discord.utils import utcnow
 from cogs.logging.logger import CogLogger
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from utils.amount_parser import parse_amount
 
@@ -53,7 +54,7 @@ class Giveaway(commands.Cog):
     async def get_server_balance(self, guild_id: int) -> int:
         """Get the server's giveaway balance"""
         try:
-            settings = await async_db.get_guild_settings(guild_id)
+            settings = await db.get_guild_settings(guild_id)
             return settings.get('server_balance', 0)
         except Exception as e:
             self.logger.error(f"Error getting server balance: {e}")
@@ -66,7 +67,7 @@ class Giveaway(commands.Cog):
             new_balance = current_balance + amount
             if new_balance < 0:
                 return False
-            return await async_db.update_guild_settings(guild_id, {'server_balance': new_balance})
+            return await db.update_guild_settings(guild_id, {'server_balance': new_balance})
         except Exception as e:
             self.logger.error(f"Error updating server balance: {e}")
             return False
@@ -121,7 +122,7 @@ class Giveaway(commands.Cog):
     @giveaway_group.command(name='donate')
     async def donate_to_server(self, ctx: commands.Context, *, amount_str: str):
         """Donate money to the server giveaway balance"""
-        wallet_balance = await async_db.get_wallet_balance(ctx.author.id, ctx.guild.id)
+        wallet_balance = await db.get_wallet_balance(ctx.author.id, ctx.guild.id)
         
         # Parse the amount using the enhanced parser
         amount, error = parse_amount(amount_str, wallet_balance, context="wallet")
@@ -141,16 +142,16 @@ class Giveaway(commands.Cog):
         multiplier = multiplier_info['multiplier']
         boosted_amount = int(amount * multiplier)
 
-        if not await async_db.update_wallet(ctx.author.id, -amount, ctx.guild.id):
+        if not await db.update_wallet(ctx.author.id, -amount, ctx.guild.id):
             await ctx.reply("❌ Failed to deduct donation from your wallet!")
             return
 
         if not await self.update_server_balance(ctx.guild.id, boosted_amount):
-            await async_db.update_wallet(ctx.author.id, amount, ctx.guild.id)
+            await db.update_wallet(ctx.author.id, amount, ctx.guild.id)
             await ctx.reply("❌ Failed to update server balance!")
             return
 
-        await async_db.store_stats(ctx.guild.id, "donated")
+        await db.store_stats(ctx.guild.id, "donated")
 
         if ctx.guild.id == 1259717095382319215:
             role = discord.utils.get(ctx.guild.roles, id=1261514786311766106)
@@ -268,7 +269,7 @@ class Giveaway(commands.Cog):
             'participants': []
         }
 
-        await async_db.update_guild_settings(
+        await db.update_guild_settings(
             ctx.guild.id,
             {f'giveaway_{giveaway_id}': self.active_giveaways[giveaway_id]}
         )
@@ -383,7 +384,7 @@ class Giveaway(commands.Cog):
                 winner = random.choice(participants)
                 
                 # Award prize to winner
-                await async_db.update_wallet(winner.id, giveaway_data['amount'], giveaway_data['guild_id'])
+                await db.update_wallet(winner.id, giveaway_data['amount'], giveaway_data['guild_id'])
                 
                 embed.add_field(
                     name="🏆 Winner",
@@ -402,7 +403,7 @@ class Giveaway(commands.Cog):
                 )
 
                 # Store stats
-                await async_db.store_stats(giveaway_data['guild_id'], "giveaway_won")
+                await db.store_stats(giveaway_data['guild_id'], "giveaway_won")
 
             # Update the original message
             await message.edit(embed=embed)

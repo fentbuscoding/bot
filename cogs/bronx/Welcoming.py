@@ -3,7 +3,10 @@ import random
 import json
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
-from utils.db import db
+from utils.db import AsyncDatabase
+
+# Initialize database instance
+db = AsyncDatabase.get_instance()
 
 logger = CogLogger('Welcoming')
 

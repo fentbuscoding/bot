@@ -52,12 +52,13 @@ async def on_ready():
 
     # Initialize database and clean up corrupted inventory data
     try:
-        from utils.db import async_db
-        await async_db.ensure_connected()
+        from utils.db import AsyncDatabase
+        db = AsyncDatabase.get_instance()
+        await db.ensure_connected()
         logging.info("Database connection established")
         
         # Run inventory cleanup on startup to remove corrupted data
-        cleaned_count = await async_db.cleanup_corrupted_inventory()
+        cleaned_count = await db.cleanup_corrupted_inventory()
         if cleaned_count > 0:
             logging.info(f"Cleaned up {cleaned_count} corrupted inventory items on startup")
         else:

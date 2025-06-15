@@ -1,11 +1,17 @@
 import discord
 from discord.ext import commands
 from datetime import datetime
-from utils.db import async_db
+from utils.db import AsyncDatabase
 from cogs.logging.logger import CogLogger
+
+# Initialize database instance
+db = AsyncDatabase.get_instance()
 
 class TermsOfService:
     """Terms of Service handler"""
+    
+    def __init__(self):
+        self.db = AsyncDatabase.get_instance()
     
     TOS_VERSION = "1.0"
     TOS_TEXT = """
@@ -78,11 +84,11 @@ class TOSModal(discord.ui.Modal):
         
         if self.agreement.value.upper() == "I AGREE":
             # Check if user exists to avoid resetting existing data
-            existing_user = await async_db.db.users.find_one({"_id": str(interaction.user.id)})
+            existing_user = await db.db.users.find_one({"_id": str(interaction.user.id)})
             
             if existing_user:
                 # Existing user - only update TOS fields
-                await async_db.db.users.update_one(
+                await db.db.users.update_one(
                     {"_id": str(interaction.user.id)},
                     {
                         "$set": {
@@ -96,8 +102,8 @@ class TOSModal(discord.ui.Modal):
                 # Check if they already have a welcome bonus recorded
                 if not existing_user.get("tos_welcome_bonus_given", False):
                     # Give welcome bonus and mark as given
-                    await async_db.update_wallet(interaction.user.id, 1000)
-                    await async_db.db.users.update_one(
+                    await db.update_wallet(interaction.user.id, 1000)
+                    await db.db.users.update_one(
                         {"_id": str(interaction.user.id)},
                         {"$set": {"tos_welcome_bonus_given": True}}
                     )
@@ -106,7 +112,7 @@ class TOSModal(discord.ui.Modal):
                     welcome_bonus_text = "Welcome back! Your account is already set up."
             else:
                 # New user - initialize with default values
-                await async_db.db.users.update_one(
+                await db.db.users.update_one(
                     {"_id": str(interaction.user.id)},
                     {
                         "$set": {
@@ -189,7 +195,7 @@ class TOSView(discord.ui.View):
 
 async def check_tos_acceptance(user_id: int) -> bool:
     """Check if user has accepted current TOS version"""
-    user = await async_db.db.users.find_one({"_id": str(user_id)})
+    user = await db.db.users.find_one({"_id": str(user_id)})
     
     if not user:
         return False
@@ -305,7 +311,7 @@ class TOSCommands(commands.Cog):
         )
         
         if user_accepted:
-            user = await async_db.db.users.find_one({"_id": str(ctx.author.id)})
+            user = await db.db.users.find_one({"_id": str(ctx.author.id)})
             if user and user.get("tos_accepted_at"):
                 accepted_date = user["tos_accepted_at"][:10]  # Just the date
                 embed.add_field(

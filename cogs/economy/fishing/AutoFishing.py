@@ -4,7 +4,8 @@ import random
 import asyncio
 import uuid
 import datetime
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from utils.safe_reply import safe_reply
 
 class AutoFishing(commands.Cog):

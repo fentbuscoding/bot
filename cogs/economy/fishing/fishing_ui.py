@@ -3,7 +3,8 @@
 
 import discord
 import math
-from utils.db import async_db as db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 
 class FishInventoryPaginator(discord.ui.View):
     """Paginator for fish inventory with gear info on first page"""

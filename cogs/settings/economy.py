@@ -5,7 +5,8 @@ import discord
 from discord.ext import commands
 from typing import Optional, List, Dict, Union
 import json
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -41,7 +42,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_economy_settings(self, ctx):
         """View current economy settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         
         embed = discord.Embed(
@@ -100,7 +101,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
         When enabled, users will have separate balances for this server.
         When disabled, the global BronxBot economy is used.
         """
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         server_economy = eco_settings.get('server_economy', {})
         
@@ -133,7 +134,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
         
         server_economy['enabled'] = enabled
         eco_settings['server_economy'] = server_economy
-        await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+        await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
         
         if enabled:
             # Initialize server economy data if needed
@@ -194,13 +195,13 @@ class EconomySettings(commands.Cog, ErrorHandler):
         if amount < 0 or amount > 10000:
             return await ctx.send("❌ Starting balance must be between 0 and 10,000!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         server_economy = eco_settings.get('server_economy', {})
         
         server_economy['starting_balance'] = amount
         eco_settings['server_economy'] = server_economy
-        await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+        await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
         
         embed = discord.Embed(
             title="✅ Starting Balance Updated",
@@ -216,13 +217,13 @@ class EconomySettings(commands.Cog, ErrorHandler):
         if len(symbol) > 3:
             return await ctx.send("❌ Currency symbol cannot be longer than 3 characters!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         server_economy = eco_settings.get('server_economy', {})
         
         server_economy['currency_symbol'] = symbol
         eco_settings['server_economy'] = server_economy
-        await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+        await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
         
         embed = discord.Embed(
             title="✅ Currency Symbol Updated",
@@ -258,7 +259,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_shop(self, ctx):
         """View current server shop items"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         shop_settings = settings.get('economy', {}).get('shop', {})
         custom_items = shop_settings.get('custom_items', [])
         
@@ -373,7 +374,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
             }
             
             # Save the item
-            settings = await async_db.get_guild_settings(ctx.guild.id)
+            settings = await db.get_guild_settings(ctx.guild.id)
             eco_settings = settings.get('economy', {})
             shop_settings = eco_settings.get('shop', {})
             custom_items = shop_settings.get('custom_items', [])
@@ -381,7 +382,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
             custom_items.append(new_item)
             shop_settings['custom_items'] = custom_items
             eco_settings['shop'] = shop_settings
-            await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+            await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
             
             # Confirmation
             embed = discord.Embed(
@@ -413,7 +414,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_shop_item(self, ctx, item_id: int):
         """Remove an item from the server shop"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         shop_settings = eco_settings.get('shop', {})
         custom_items = shop_settings.get('custom_items', [])
@@ -431,7 +432,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
         custom_items.remove(item_to_remove)
         shop_settings['custom_items'] = custom_items
         eco_settings['shop'] = shop_settings
-        await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+        await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
         
         embed = discord.Embed(
             title="✅ Shop Item Removed",
@@ -467,7 +468,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_rewards(self, ctx):
         """View current reward settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         rewards = settings.get('economy', {}).get('rewards', {})
         
         embed = discord.Embed(
@@ -509,13 +510,13 @@ class EconomySettings(commands.Cog, ErrorHandler):
         if amount < 0 or amount > 1000:
             return await ctx.send("❌ Daily reward must be between 0 and 1,000 coins!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         eco_settings = settings.get('economy', {})
         rewards = eco_settings.get('rewards', {})
         
         rewards['daily'] = amount
         eco_settings['rewards'] = rewards
-        await async_db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
+        await db.update_guild_settings(ctx.guild.id, {'economy': eco_settings})
         
         embed = discord.Embed(
             title="✅ Daily Reward Updated",
@@ -526,7 +527,7 @@ class EconomySettings(commands.Cog, ErrorHandler):
 
     async def _initialize_server_economy(self, guild_id: int):
         """Initialize server economy data"""
-        settings = await async_db.get_guild_settings(guild_id)
+        settings = await db.get_guild_settings(guild_id)
         eco_settings = settings.get('economy', {})
         
         # Set default values if not already set
@@ -554,11 +555,11 @@ class EconomySettings(commands.Cog, ErrorHandler):
                 'level_multiplier': 10
             }
         
-        await async_db.update_guild_settings(guild_id, {'economy': eco_settings})
+        await db.update_guild_settings(guild_id, {'economy': eco_settings})
 
     async def _get_shop_items(self, guild_id: int) -> List[Dict]:
         """Get all shop items for a guild"""
-        settings = await async_db.get_guild_settings(guild_id)
+        settings = await db.get_guild_settings(guild_id)
         return settings.get('economy', {}).get('shop', {}).get('custom_items', [])
 
     async def cog_command_error(self, ctx, error):

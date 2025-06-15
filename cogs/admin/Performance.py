@@ -5,7 +5,8 @@ import time
 import datetime
 import psutil
 import asyncio
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from utils.command_tracker import usage_tracker
 from cogs.logging.logger import CogLogger
 
@@ -63,7 +64,7 @@ class Performance(commands.Cog):
         
         # Database health
         try:
-            db_health = await async_db.health_check()
+            db_health = await db.health_check()
             
             status_emoji = "✅" if db_health["connection"] else "❌"
             status_color = discord.Color.green() if db_health["connection"] else discord.Color.red()
@@ -167,7 +168,7 @@ class Performance(commands.Cog):
         message = await ctx.reply(embed=embed)
         
         try:
-            result = await async_db.optimize_database()
+            result = await db.optimize_database()
             
             if result["success"]:
                 embed.color = discord.Color.green()

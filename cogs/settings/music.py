@@ -5,7 +5,8 @@ import discord
 from discord.ext import commands
 from typing import Optional, List, Dict, Union
 import json
-from utils.db import async_db
+from utils.db import AsyncDatabase
+db = AsyncDatabase.get_instance()
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 
@@ -41,7 +42,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_music_settings(self, ctx):
         """View current music settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         
         embed = discord.Embed(
@@ -128,7 +129,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_playlists(self, ctx):
         """View all server playlists"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         playlists = settings.get('music', {}).get('playlists', [])
         
         embed = discord.Embed(
@@ -161,7 +162,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         if len(name) > 50:
             return await ctx.send("❌ Playlist name cannot be longer than 50 characters!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         playlists = music_settings.get('playlists', [])
         
@@ -180,7 +181,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         
         playlists.append(new_playlist)
         music_settings['playlists'] = playlists
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ Playlist Created",
@@ -199,7 +200,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def delete_playlist(self, ctx, *, name: str):
         """Delete a server playlist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         playlists = music_settings.get('playlists', [])
         
@@ -215,7 +216,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         
         playlists.remove(playlist_to_delete)
         music_settings['playlists'] = playlists
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ Playlist Deleted",
@@ -232,7 +233,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         if not any(domain in url.lower() for domain in ['youtube.com', 'youtu.be', 'spotify.com']):
             return await ctx.send("❌ Please provide a valid YouTube or Spotify URL!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         playlists = music_settings.get('playlists', [])
         
@@ -257,7 +258,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         
         target_playlist['songs'].append(song_data)
         music_settings['playlists'] = playlists
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ Song Added to Playlist",
@@ -276,7 +277,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def playlist_info(self, ctx, *, name: str):
         """View detailed information about a playlist"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         playlists = settings.get('music', {}).get('playlists', [])
         
         # Find playlist
@@ -349,7 +350,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_music_permissions(self, ctx):
         """View current music permissions"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         permissions = settings.get('music', {}).get('permissions', {})
         
         embed = discord.Embed(
@@ -439,7 +440,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def add_dj_role(self, ctx, role: discord.Role):
         """Add a DJ role"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         permissions = music_settings.get('permissions', {})
         dj_roles = permissions.get('dj_roles', [])
@@ -450,7 +451,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         dj_roles.append(role.id)
         permissions['dj_roles'] = dj_roles
         music_settings['permissions'] = permissions
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ DJ Role Added",
@@ -463,7 +464,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def remove_dj_role(self, ctx, role: discord.Role):
         """Remove a DJ role"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         permissions = music_settings.get('permissions', {})
         dj_roles = permissions.get('dj_roles', [])
@@ -474,7 +475,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
         dj_roles.remove(role.id)
         permissions['dj_roles'] = dj_roles
         music_settings['permissions'] = permissions
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ DJ Role Removed",
@@ -490,13 +491,13 @@ class MusicSettings(commands.Cog, ErrorHandler):
         if votes < 1 or votes > 20:
             return await ctx.send("❌ Skip votes must be between 1 and 20!")
         
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         music_settings = settings.get('music', {})
         permissions = music_settings.get('permissions', {})
         
         permissions['skip_votes_required'] = votes
         music_settings['permissions'] = permissions
-        await async_db.update_guild_settings(ctx.guild.id, {'music': music_settings})
+        await db.update_guild_settings(ctx.guild.id, {'music': music_settings})
         
         embed = discord.Embed(
             title="✅ Skip Votes Updated",
@@ -532,7 +533,7 @@ class MusicSettings(commands.Cog, ErrorHandler):
     @commands.has_permissions(manage_guild=True)
     async def view_channel_settings(self, ctx):
         """View current channel settings"""
-        settings = await async_db.get_guild_settings(ctx.guild.id)
+        settings = await db.get_guild_settings(ctx.guild.id)
         channels = settings.get('music', {}).get('channels', {})
         
         allowed_channels = channels.get('allowed_channels', [])

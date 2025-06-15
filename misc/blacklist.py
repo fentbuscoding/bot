@@ -1,6 +1,9 @@
-from utils.db import async_db
+from utils.db import AsyncDatabase
 from discord.ext import commands
 from bronxbot import bot
+
+# Initialize database instance
+db = AsyncDatabase.get_instance()
 
 @bot.check
 async def blacklist_check(ctx):
@@ -12,7 +15,7 @@ async def blacklist_check(ctx):
         channel_id = str(ctx.channel.id)
         user_id = str(ctx.author.id)
 
-        settings = await async_db.get_guild_settings(ctx.guild.id) or {}
+        settings = await db.get_guild_settings(ctx.guild.id) or {}
         blacklist = settings.get('command_blacklist', {})
         channel_blacklist = blacklist.get('channels', {})
         user_blacklist = blacklist.get('users', {})
