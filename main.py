@@ -7,6 +7,10 @@ from cogInfo import CogLoader
 from botEvents.onReady import *
 from botEvents.onCommand import *
 from botEvents.onMessage import *
+from misc._commands import setup
+from misc.blacklist import blacklist_check
+
+setup(bot)
 
 if os.path.exists("data/restart_info.json"):
     try:
