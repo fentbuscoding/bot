@@ -3,8 +3,7 @@
 
 from discord.ext import commands
 from cogs.logging.logger import CogLogger
-from utils.db import AsyncDatabase
-db = AsyncDatabase.get_instance()
+from utils.db import db
 from utils.safe_reply import safe_reply
 from utils.amount_parser import parse_amount
 import discord

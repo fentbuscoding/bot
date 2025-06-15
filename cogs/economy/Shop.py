@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
-from utils.db import AsyncDatabase
-db = AsyncDatabase.get_instance()
+from utils.db import db
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from typing import Optional, Dict, List, Union
 import os

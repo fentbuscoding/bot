@@ -1,11 +1,8 @@
 import discord
 from discord.ext import commands
-from utils.db import AsyncDatabase
+from utils.db import db
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
-
-# Initialize database instance
-db = AsyncDatabase.get_instance()
 
 logger = CogLogger('ServerSettings')
 

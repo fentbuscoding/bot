@@ -52,8 +52,7 @@ async def on_ready():
 
     # Initialize database and clean up corrupted inventory data
     try:
-        from utils.db import AsyncDatabase
-        db = AsyncDatabase.get_instance()
+        from utils.db import db
         await db.ensure_connected()
         logging.info("Database connection established")
         

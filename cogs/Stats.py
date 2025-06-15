@@ -9,7 +9,7 @@ from datetime import datetime
 from discord.ext import commands, tasks
 from typing import Dict, List, Optional
 from utils.command_tracker import usage_tracker
-from utils.db import AsyncDatabase
+from utils.db import db
 
 
 class Stats(commands.Cog):
@@ -19,7 +19,7 @@ class Stats(commands.Cog):
         self.dashboard_url = self.dashboard_url.rstrip('/')
         
         # Setup database connection
-        self.db = AsyncDatabase.get_instance()
+        self.db = db
         
         # Stats tracking
         self.start_time = datetime.now()

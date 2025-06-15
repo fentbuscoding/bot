@@ -6,8 +6,7 @@ from discord.ext import commands
 from typing import Optional, List, Dict, Union
 import json
 import asyncio
-from utils.db import AsyncDatabase
-db = AsyncDatabase.get_instance()
+from utils.db import db
 from cogs.logging.logger import CogLogger
 from utils.error_handler import ErrorHandler
 

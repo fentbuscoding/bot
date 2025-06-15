@@ -7,8 +7,7 @@ from uuid import uuid4
 from discord.ext import commands, tasks
 from discord.utils import utcnow
 from cogs.logging.logger import CogLogger
-from utils.db import AsyncDatabase
-db = AsyncDatabase.get_instance()
+from utils.db import db
 from utils.tos_handler import check_tos_acceptance, prompt_tos_acceptance
 from utils.amount_parser import parse_amount
 

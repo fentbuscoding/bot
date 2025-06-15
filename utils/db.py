@@ -1671,6 +1671,12 @@ class AsyncDatabase:
         doc = await self.db.stats.find_one({"_id": key})
         return doc if doc else None
 
+# Create an instance of AsyncDatabase to be imported elsewhere
+async_db = AsyncDatabase.get_instance()
+
+# Add a 'db' alias for backward compatibility
+db = async_db
+
 class SyncDatabase:
     """Synchronous database class for use with Flask web interface (SQLite & MongoDB)"""
     _instance = None

@@ -1,17 +1,14 @@
 import discord
 from discord.ext import commands
 from datetime import datetime
-from utils.db import AsyncDatabase
+from utils.db import db
 from cogs.logging.logger import CogLogger
-
-# Initialize database instance
-db = AsyncDatabase.get_instance()
 
 class TermsOfService:
     """Terms of Service handler"""
     
     def __init__(self):
-        self.db = AsyncDatabase.get_instance()
+        self.db = db
     
     TOS_VERSION = "1.0"
     TOS_TEXT = """

@@ -1,9 +1,6 @@
-from utils.db import AsyncDatabase
+from utils.db import db
 from discord.ext import commands
 from bronxbot import bot
-
-# Initialize database instance
-db = AsyncDatabase.get_instance()
 
 @bot.check
 async def blacklist_check(ctx):
