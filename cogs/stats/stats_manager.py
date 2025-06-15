@@ -7,6 +7,7 @@ import discord
 import time
 import json
 from datetime import datetime, timedelta
+from discord.utils import utcnow
 from typing import Dict, List, Optional
 
 from utils.db import db
@@ -351,7 +352,7 @@ class StatsManager:
         if not hasattr(self.bot, 'launch_time'):
             return "Unknown"
         
-        uptime = datetime.now() - self.bot.launch_time
+        uptime = utcnow() - self.bot.launch_time
         days = uptime.days
         hours, remainder = divmod(uptime.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -367,7 +368,7 @@ class StatsManager:
         """Get uptime in seconds"""
         if not hasattr(self.bot, 'launch_time'):
             return 0
-        return int((datetime.now() - self.bot.launch_time).total_seconds())
+        return int((utcnow() - self.bot.launch_time).total_seconds())
 
     def _format_last_updated(self) -> str:
         """Format last updated timestamp"""

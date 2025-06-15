@@ -43,8 +43,8 @@ class Bazaar(commands.Cog):
         self.visitors = set()
         self.total_spent = 0
         
-        # Initialize bazaar
-        self.reset_bazaar_items()
+        # Initialize bazaar (will be done async)
+        self.bot.loop.create_task(self.reset_bazaar_items())
         
         # Start background tasks
         self.reset_bazaar_task.start()

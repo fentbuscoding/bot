@@ -6,6 +6,6 @@ This file maintains backwards compatibility while loading the modular help syste
 # Import the modular help system
 from .help import Help
 
-def setup(bot):
+async def setup(bot):
     """Setup function for the help cog"""
-    bot.add_cog(Help(bot))
+    await bot.add_cog(Help(bot))

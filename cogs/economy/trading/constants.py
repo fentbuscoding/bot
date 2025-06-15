@@ -74,6 +74,27 @@ EMOJIS = {
     "error": "❌"
 }
 
+# Item value estimates (for balance checking)
+ITEM_VALUES = {
+    "beginner_rod": 0,
+    "advanced_rod": 500,
+    "pro_bait": 50,
+    "beginner_bait": 0,
+    "vip": 10000,
+    "color": 5000,
+    "bank_upgrade": 2500
+}
+
+# Trade system emojis
+TRADE_EMOJIS = {
+    "pending": "⏳",
+    "accepted": "✅",
+    "declined": "❌",
+    "expired": "⏰",
+    "cancelled": "🚫",
+    "completed": "🎉"
+}
+
 # Default trade notes
 DEFAULT_NOTES = {
     "fair_trade": "Looking for a fair trade!",

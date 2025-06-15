@@ -1671,6 +1671,47 @@ class AsyncDatabase:
         doc = await self.db.stats.find_one({"_id": key})
         return doc if doc else None
 
+    # Bazaar-related methods
+    async def get_guilds_with_bazaar_activity(self) -> list:
+        """Get list of guild IDs with bazaar activity"""
+        try:
+            await self.ensure_connected()
+            collection = self.db['guilds']
+            
+            # Get all guilds that exist in the database (have some activity)
+            cursor = collection.find({}, {'_id': 1})
+            guild_ids = []
+            async for doc in cursor:
+                if isinstance(doc['_id'], int):
+                    guild_ids.append(doc['_id'])
+            
+            return guild_ids
+        except Exception as e:
+            self.logger.error(f"Error getting guilds with bazaar activity: {e}")
+            return []
+
+    async def save_bazaar_stats(self, stats_data: dict) -> bool:
+        """Save bazaar statistics to database"""
+        try:
+            await self.ensure_connected()
+            collection = self.db['bazaar_stats']
+            
+            # Add timestamp
+            stats_data['timestamp'] = datetime.datetime.now()
+            
+            # Insert the stats
+            result = await collection.insert_one(stats_data)
+            
+            # Clean up old stats (keep only last 30 days)
+            cutoff_date = datetime.datetime.now() - datetime.timedelta(days=30)
+            await collection.delete_many({'timestamp': {'$lt': cutoff_date}})
+            
+            self.logger.debug(f"Saved bazaar stats: {stats_data}")
+            return bool(result.inserted_id)
+        except Exception as e:
+            self.logger.error(f"Error saving bazaar stats: {e}")
+            return False
+
 # Create an instance of AsyncDatabase to be imported elsewhere
 async_db = AsyncDatabase.get_instance()
 

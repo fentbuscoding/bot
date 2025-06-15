@@ -289,7 +289,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Leaderboard error: {e}")
             await safe_reply(ctx, "❌ An error occurred while fetching the leaderboard")
 
-    @commands.command(aliases=['interest', 'i'])
+    @commands.command(aliases=['hourly', 'getinterest'])
     @commands.cooldown(1, COOLDOWNS["interest"], commands.BucketType.user)
     @log_command
     async def collect_interest(self, ctx):
@@ -321,7 +321,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Interest collection error for {ctx.author.id}: {e}")
             await safe_reply(ctx, "An error occurred while collecting interest.")
 
-    @commands.command(aliases=['interest_info', 'ii'])
+    @commands.command(aliases=['interest', 'interestinfo'])
     @log_command
     async def interest_info(self, ctx):
         """Show information about interest rates and upgrades"""
@@ -366,7 +366,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Interest info error for {ctx.author.id}: {e}")
             await safe_reply(ctx, "An error occurred while fetching interest information.")
 
-    @commands.command(aliases=['upgrade_interest', 'iu'])
+    @commands.command(aliases=['interestup', 'iup'])
     @log_command
     async def upgrade_interest(self, ctx):
         """Upgrade your interest rate"""
@@ -413,7 +413,7 @@ class Economy(commands.Cog):
             self.logger.error(f"Interest upgrade error for {ctx.author.id}: {e}")
             await safe_reply(ctx, "An error occurred while upgrading interest rate.")
 
-    @commands.command(aliases=['upgrade_bank', 'bu'])
+    @commands.command(aliases=['bankup', 'bup'])
     @log_command
     async def upgrade_bank(self, ctx):
         """Upgrade your bank capacity"""

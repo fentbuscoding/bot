@@ -280,7 +280,7 @@ class Admin(commands.Cog):
     
     @commands.command(name="botstats")
     @commands.has_permissions(administrator=True)
-    async def bot_stats(self, ctx):
+    async def get_bot_stats(self, ctx):
         """Get comprehensive bot statistics"""
         stats = await self.system_admin.get_bot_stats()
         

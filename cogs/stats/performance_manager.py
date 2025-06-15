@@ -7,6 +7,7 @@ import discord
 import psutil
 import time
 from datetime import datetime, timedelta
+from discord.utils import utcnow
 from typing import Dict, List, Optional
 
 from utils.db import db
@@ -64,8 +65,8 @@ class PerformanceManager:
                 'response_times': self.performance_data.get('response_times', [])[-10:],  # Last 10
                 'active_connections': active_connections,
                 'uptime_seconds': uptime_seconds,
-                'last_restart': getattr(self.bot, 'launch_time', datetime.now()).isoformat(),
-                'timestamp': datetime.now().isoformat()
+                'last_restart': getattr(self.bot, 'launch_time', utcnow()).isoformat(),
+                'timestamp': utcnow().isoformat()
             }
             
             # Update stored performance data
@@ -87,12 +88,12 @@ class PerformanceManager:
             
             # Add timestamp if not present
             if 'timestamp' not in data:
-                data['timestamp'] = datetime.now()
+                data['timestamp'] = utcnow()
             
             await collection.insert_one(data)
             
             # Clean up old performance logs
-            cutoff_time = datetime.now() - timedelta(hours=RETENTION_SETTINGS.get('performance_logs_hours', 24))
+            cutoff_time = utcnow() - timedelta(hours=RETENTION_SETTINGS.get('performance_logs_hours', 24))
             await collection.delete_many({'timestamp': {'$lt': cutoff_time}})
             
             logger.debug("Performance data saved to database")
@@ -164,7 +165,7 @@ class PerformanceManager:
                 title="🚨 Performance Alert",
                 description="\n".join(alerts),
                 color=COLORS['error'],
-                timestamp=datetime.now()
+                timestamp=utcnow()
             )
             
             embed.add_field(
@@ -198,7 +199,7 @@ class PerformanceManager:
         """Get bot uptime in seconds"""
         if not hasattr(self.bot, 'launch_time'):
             return 0
-        return int((datetime.now() - self.bot.launch_time).total_seconds())
+        return int((utcnow() - self.bot.launch_time).total_seconds())
 
     async def test_performance_update(self, ctx):
         """Test the performance monitoring system"""
@@ -269,7 +270,7 @@ class PerformanceManager:
         if not hasattr(self.bot, 'launch_time'):
             return "Unknown"
         
-        uptime = datetime.now() - self.bot.launch_time
+        uptime = utcnow() - self.bot.launch_time
         days = uptime.days
         hours, remainder = divmod(uptime.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)

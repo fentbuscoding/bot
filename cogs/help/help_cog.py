@@ -66,7 +66,7 @@ class Help(commands.Cog, ErrorHandler):
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    @commands.command(name='help', aliases=['h', 'commands'])
+    @commands.command(name='helpme', aliases=['h', 'commands'])
     async def help(self, ctx, *, command_or_cog: str = None):
         """
         Show help information for commands and cogs
@@ -89,11 +89,6 @@ class Help(commands.Cog, ErrorHandler):
         except Exception as e:
             self.logger.error(f"Error in help command: {e}")
             await ctx.reply("❌ An error occurred while generating help. Please try again.")
-
-    @commands.command(name="help", aliases=["h", "commands"])
-    async def help_alt(self, ctx, *, command_or_cog: str = None):
-        """Alternative help command method"""
-        await self.help(ctx, command_or_cog=command_or_cog)
 
     async def _send_help(self, ctx, command_or_cog: str = None):
         """Main help logic"""
