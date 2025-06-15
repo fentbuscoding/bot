@@ -58,7 +58,7 @@ class BronxBot(commands.AutoShardedBot):
             self.guild_list = [str(g.id) for g in self.guilds]
             
             async with aiohttp.ClientSession() as session:
-                async with session.post('https://bronxbot.onrender.com/api/stats', 
+                async with session.post('https://bronxbot.xyz/api/stats', 
                                       json={'guilds': self.guild_list}) as resp:
                     if resp.status != 200:
                         print(f"Failed to update guild list: {resp.status}")
@@ -82,7 +82,7 @@ class BronxBot(commands.AutoShardedBot):
                 'timestamp': time.time()
             }
             
-            dashboard_urls = ['https://bronxbot.onrender.com/api/realtime'] if not dev else ['http://localhost:5000/api/realtime']
+            dashboard_urls = ['https://bronxbot.xyz/api/realtime'] if not dev else ['http://localhost:5000/api/realtime']
             
             async with aiohttp.ClientSession() as session:
                 for url in dashboard_urls:
