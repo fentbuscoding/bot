@@ -36,15 +36,7 @@ class ChanceGames(commands.Cog):
         self.active_games = set()
         self.stats_logger = StatsLogger()
         
-        # Progressive bet limits based on user balance (ANTI-INFLATION)
-        self.BET_LIMITS = {
-            0: 10000,           # 0-99k balance: max 10k bet
-            100000: 25000,      # 100k-499k: max 25k bet
-            500000: 50000,      # 500k-999k: max 50k bet
-            1000000: 100000,    # 1M-4.9M: max 100k bet
-            5000000: 200000,    # 5M-9.9M: max 200k bet
-            10000000: 500000,   # 10M+: max 500k bet (hard cap)
-        }
+
         
         # HEAVILY NERFED slot machine symbols and weights to combat inflation
         self.slot_symbols = [
@@ -70,12 +62,7 @@ class ChanceGames(commands.Cog):
             return False
         return True
     
-    def _get_max_bet_for_balance(self, balance: int) -> int:
-        """Get maximum bet allowed based on user balance (progressive limits)"""
-        for min_balance in sorted(self.BET_LIMITS.keys(), reverse=True):
-            if balance >= min_balance:
-                return self.BET_LIMITS[min_balance]
-        return self.BET_LIMITS[0]
+
     
     async def _parse_bet(self, bet_str: str, wallet: int) -> int:
         """Parse bet string (all, half, percentage, or number)"""
@@ -124,12 +111,6 @@ class ChanceGames(commands.Cog):
 
             if parsed_bet > wallet:
                 return await ctx.reply("❌ You don't have enough money for that bet!")
-                
-            # Check bet limits (ANTI-INFLATION)
-            max_bet = self._get_max_bet_for_balance(wallet)
-            if parsed_bet > max_bet:
-                return await ctx.reply(f"❌ Maximum bet for your balance is **{max_bet:,}** {self.currency}!\n"
-                                     f"💡 This limit helps prevent extreme inflation in the economy.")
                 
             # Validate choice
             if not choice:
@@ -229,12 +210,6 @@ class ChanceGames(commands.Cog):
         
             if parsed_bet > wallet:
                 return await ctx.reply("❌ You don't have enough money for that bet!")
-                
-            # Check bet limits (ANTI-INFLATION)
-            max_bet = self._get_max_bet_for_balance(wallet)
-            if parsed_bet > max_bet:
-                return await ctx.reply(f"❌ Maximum bet for your balance is **{max_bet:,}** {self.currency}!\n"
-                                     f"💡 This limit helps prevent extreme inflation in the economy.")
                 
             # Deduct bet
             await db.update_wallet(ctx.author.id, -parsed_bet, ctx.guild.id)

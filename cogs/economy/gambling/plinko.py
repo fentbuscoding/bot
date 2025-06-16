@@ -38,15 +38,7 @@ class Plinko(commands.Cog):
         self.multipliers = [0.1, 0.3, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 2.0, 1.5, 1.2, 1.0, 0.8, 0.5, 0.3, 0.1]
         self.rows = 10  # Number of peg rows
         
-        # Progressive bet limits based on user balance
-        self.BET_LIMITS = {
-            0: 10000,           # 0-99k balance: max 10k bet
-            100000: 25000,      # 100k-499k: max 25k bet
-            500000: 50000,      # 500k-999k: max 50k bet
-            1000000: 100000,    # 1M-4.9M: max 100k bet
-            5000000: 200000,    # 5M-9.9M: max 200k bet
-            10000000: 500000,   # 10M+: max 500k bet (hard cap)
-        }
+
         
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
     
@@ -58,7 +50,7 @@ class Plinko(commands.Cog):
         return True
     
     async def _parse_bet(self, bet_str: str, wallet: int) -> int:
-        """Parse bet string (all, half, percentage, or number) with progressive limits"""
+        """Parse bet string (all, half, percentage, or number)"""
         try:
             if bet_str.lower() == "all":
                 parsed_bet = wallet
@@ -72,19 +64,10 @@ class Plinko(commands.Cog):
             else:
                 parsed_bet = int(bet_str.replace(",", ""))
             
-            # Apply progressive bet limits
-            max_bet = self._get_max_bet_for_balance(wallet)
-            return min(parsed_bet, max_bet)
+            return parsed_bet
             
         except (ValueError, TypeError):
             return None
-    
-    def _get_max_bet_for_balance(self, balance: int) -> int:
-        """Get maximum bet allowed based on user's balance"""
-        for min_balance in sorted(self.BET_LIMITS.keys(), reverse=True):
-            if balance >= min_balance:
-                return self.BET_LIMITS[min_balance]
-        return self.BET_LIMITS[0]  # Default to lowest limit
 
     @commands.command(aliases=['plink', 'ball'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -119,12 +102,6 @@ class Plinko(commands.Cog):
             if parsed_bet > wallet:
                 self.active_games.remove(ctx.author.id)
                 return await ctx.reply("❌ You don't have enough money for that bet!")
-            
-            # Check if bet exceeds the limit for their balance
-            max_bet = self._get_max_bet_for_balance(wallet)
-            if parsed_bet > max_bet:
-                self.active_games.remove(ctx.author.id)
-                return await ctx.reply(f"❌ Bet exceeds limit! Maximum bet for your balance: **{max_bet:,}** {self.currency}")
                 
             # Deduct bet
             await db.update_wallet(ctx.author.id, -parsed_bet, ctx.guild.id)
