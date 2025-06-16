@@ -129,7 +129,8 @@ class Error(commands.Cog):
             self.logger.error(f"Error while handling error {error_id}: {handling_error}")
             try:
                 await ctx.reply(f"❌ Multiple errors occurred! Error ID: `{error_id}`")
-            except:
+            except Exception as reply_error:
+                self.logger.error(f"Failed to send error message: {reply_error}")
                 pass  # Give up if we can't even send a basic message
 
 async def setup(bot):

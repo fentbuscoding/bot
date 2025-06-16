@@ -118,14 +118,14 @@ class HelpUtils:
         
         return help_text
 
-    def search_commands(self, query: str) -> List[Tuple[commands.Command, str]]:
+    def search_commands(self, query: str, user_id: int = None) -> List[Tuple[commands.Command, str]]:
         """Search for commands matching the query"""
         results = []
         query_lower = query.lower()
         
         for command in self.bot.commands:
             # Check if cog should be shown
-            if command.cog and not self.should_show_cog(command.cog.__class__.__name__, 0):
+            if command.cog and not self.should_show_cog(command.cog.__class__.__name__, user_id or 0):
                 continue
             
             # Search in command name

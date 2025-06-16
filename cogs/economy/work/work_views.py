@@ -252,11 +252,9 @@ class GiftSelectionView(discord.ui.View):
             gift_info = BOSS_GIFTS[gift_id]
             
             # Check if user has enough money
-            user_data = await db.execute_fetchone(
-                "SELECT wallet FROM users WHERE id = ?", (self.user_id,)
-            )
+            wallet_balance = await db.get_wallet_balance(self.user_id, interaction.guild_id)
             
-            if not user_data or user_data['wallet'] < gift_info['cost']:
+            if wallet_balance < gift_info['cost']:
                 embed = discord.Embed(
                     title="❌ Insufficient Funds",
                     description=f"You need {gift_info['cost']:,} {CURRENCY} to buy {gift_info['name']}!",

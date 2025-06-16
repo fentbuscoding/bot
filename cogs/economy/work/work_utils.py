@@ -11,50 +11,69 @@ from utils.db import db
 async def get_user_job(user_id: int) -> Optional[Dict[str, Any]]:
     """Get user's current job information"""
     try:
-        user_data = await db.execute_fetchone(
-            "SELECT job, boss_hostile, boss_loyalty, last_work, last_raise FROM users WHERE id = ?",
-            (user_id,)
-        )
-        if user_data and user_data['job']:
+        if not await db.ensure_connected():
+            return None
+        
+        user_data = await db.db.users.find_one({"_id": str(user_id)})
+        if user_data and user_data.get('job'):
             return {
                 'job_id': user_data['job'],
                 'job_info': JOBS.get(user_data['job']),
-                'boss_hostile': user_data['boss_hostile'] or 0,
-                'boss_loyalty': user_data['boss_loyalty'] or 0,
-                'last_work': user_data['last_work'],
-                'last_raise': user_data['last_raise']
+                'boss_hostile': user_data.get('boss_hostile', 0),
+                'boss_loyalty': user_data.get('boss_loyalty', 0),
+                'last_work': user_data.get('last_work'),
+                'last_raise': user_data.get('last_raise')
             }
         return None
-    except Exception:
+    except Exception as e:
+        print(f"Error getting user job for {user_id}: {e}")
         return None
 
 async def set_user_job(user_id: int, job_id: str) -> bool:
     """Set user's job"""
     try:
-        await db.execute(
-            "UPDATE users SET job = ?, boss_hostile = 0, boss_loyalty = 0 WHERE id = ?",
-            (job_id, user_id)
+        if not await db.ensure_connected():
+            return False
+        
+        result = await db.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {
+                "job": job_id,
+                "boss_hostile": 0,
+                "boss_loyalty": 0
+            }},
+            upsert=True
         )
-        await db.commit()
-        return True
-    except Exception:
+        return result.modified_count > 0 or result.upserted_id is not None
+    except Exception as e:
+        print(f"Error setting user job for {user_id}: {e}")
         return False
 
 async def remove_user_job(user_id: int) -> bool:
     """Remove user's job"""
     try:
-        await db.execute(
-            "UPDATE users SET job = NULL, boss_hostile = 0, boss_loyalty = 0 WHERE id = ?",
-            (user_id,)
+        if not await db.ensure_connected():
+            return False
+        
+        result = await db.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$unset": {"job": ""},
+             "$set": {
+                "boss_hostile": 0,
+                "boss_loyalty": 0
+             }}
         )
-        await db.commit()
-        return True
-    except Exception:
+        return result.modified_count > 0
+    except Exception as e:
+        print(f"Error removing user job for {user_id}: {e}")
         return False
 
 async def update_boss_relationship(user_id: int, hostile_change: int = 0, loyalty_change: int = 0) -> bool:
     """Update boss relationship values"""
     try:
+        if not await db.ensure_connected():
+            return False
+        
         current_data = await get_user_job(user_id)
         if not current_data:
             return False
@@ -62,37 +81,48 @@ async def update_boss_relationship(user_id: int, hostile_change: int = 0, loyalt
         new_hostile = max(0, min(BOSS_HOSTILE_MAX, current_data['boss_hostile'] + hostile_change))
         new_loyalty = max(0, min(BOSS_LOYALTY_MAX, current_data['boss_loyalty'] + loyalty_change))
         
-        await db.execute(
-            "UPDATE users SET boss_hostile = ?, boss_loyalty = ? WHERE id = ?",
-            (new_hostile, new_loyalty, user_id)
+        result = await db.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {
+                "boss_hostile": new_hostile,
+                "boss_loyalty": new_loyalty
+            }}
         )
-        await db.commit()
-        return True
-    except Exception:
+        return result.modified_count > 0
+    except Exception as e:
+        print(f"Error updating boss relationship for {user_id}: {e}")
         return False
 
 async def update_work_timestamp(user_id: int) -> bool:
     """Update last work timestamp"""
     try:
-        await db.execute(
-            "UPDATE users SET last_work = ? WHERE id = ?",
-            (int(time.time()), user_id)
+        if not await db.ensure_connected():
+            return False
+        
+        result = await db.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"last_work": int(time.time())}},
+            upsert=True
         )
-        await db.commit()
-        return True
-    except Exception:
+        return result.modified_count > 0 or result.upserted_id is not None
+    except Exception as e:
+        print(f"Error updating work timestamp for {user_id}: {e}")
         return False
 
 async def update_raise_timestamp(user_id: int) -> bool:
     """Update last raise timestamp"""
     try:
-        await db.execute(
-            "UPDATE users SET last_raise = ? WHERE id = ?",
-            (int(time.time()), user_id)
+        if not await db.ensure_connected():
+            return False
+        
+        result = await db.db.users.update_one(
+            {"_id": str(user_id)},
+            {"$set": {"last_raise": int(time.time())}},
+            upsert=True
         )
-        await db.commit()
-        return True
-    except Exception:
+        return result.modified_count > 0 or result.upserted_id is not None
+    except Exception as e:
+        print(f"Error updating raise timestamp for {user_id}: {e}")
         return False
 
 def calculate_wage(job_info: Dict[str, Any], boss_hostile: int, boss_loyalty: int) -> int:
@@ -135,12 +165,24 @@ def get_boss_relationship_status(hostile: int, loyalty: int) -> Tuple[str, str]:
 async def get_coworkers(user_id: int, job_id: str, limit: int = 10) -> list:
     """Get list of coworkers with the same job"""
     try:
-        coworkers = await db.execute_fetchall(
-            "SELECT id, username FROM users WHERE job = ? AND id != ? ORDER BY RANDOM() LIMIT ?",
-            (job_id, user_id, limit)
-        )
-        return coworkers or []
-    except Exception:
+        if not await db.ensure_connected():
+            return []
+        
+        # Find users with the same job excluding the current user
+        cursor = db.db.users.find(
+            {"job": job_id, "_id": {"$ne": str(user_id)}}
+        ).limit(limit)
+        
+        coworkers = []
+        async for user in cursor:
+            coworkers.append({
+                "id": user["_id"],
+                "username": user.get("username", f"User {user['_id']}")
+            })
+        
+        return coworkers
+    except Exception as e:
+        print(f"Error getting coworkers for {user_id}: {e}")
         return []
 
 def format_currency(amount: int) -> str:

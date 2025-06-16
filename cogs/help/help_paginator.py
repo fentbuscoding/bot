@@ -113,12 +113,25 @@ class HelpPaginator(discord.ui.View):
                 )
         
         self.add_item(select)
+        
+        # Set the callback for the select
+        select.callback = self.category_select_callback
 
-    @discord.ui.select(placeholder="🗂️ Choose a category...", custom_id="category_select", row=0)
-    async def category_select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+    async def category_select_callback(self, interaction: discord.Interaction):
         """Handle category selection"""
         if interaction.user.id != self.author.id:
             await interaction.response.send_message("❌ This help menu is not for you!", ephemeral=True)
+            return
+        
+        # Get the select component that triggered this
+        select = None
+        for item in self.children:
+            if isinstance(item, discord.ui.Select) and item.custom_id == "category_select":
+                select = item
+                break
+        
+        if not select or not select.values:
+            await interaction.response.defer()
             return
         
         value = select.values[0]
@@ -189,7 +202,7 @@ class HelpPaginator(discord.ui.View):
             await interaction.response.send_message("❌ This help menu is not for you!", ephemeral=True)
             return
         
-        modal = SearchModal()
+        modal = SearchModal(self.utils, interaction.user)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="❌ Close", style=discord.ButtonStyle.red, row=1)
@@ -239,8 +252,10 @@ class HelpPaginator(discord.ui.View):
 class SearchModal(discord.ui.Modal, title="🔍 Search Commands"):
     """Modal for searching commands"""
     
-    def __init__(self):
+    def __init__(self, utils: HelpUtils, user: discord.Member):
         super().__init__()
+        self.utils = utils
+        self.user = user
     
     search_query = discord.ui.TextInput(
         label="Search Query",
@@ -257,8 +272,76 @@ class SearchModal(discord.ui.Modal, title="🔍 Search Commands"):
             await interaction.response.send_message("❌ Please enter a search query!", ephemeral=True)
             return
         
-        # This will trigger a search in the help system
-        await interaction.response.send_message(
-            f"🔍 Searching for: `{query}`\nUse `.help search {query}` for detailed results!",
-            ephemeral=True
+        # Perform the actual search
+        results = self.utils.search_commands(query, self.user.id)
+        
+        if not results:
+            await interaction.response.send_message(
+                f"❌ No commands found matching `{query}`\n"
+                "Try a different search term or use broader keywords.",
+                ephemeral=True
+            )
+            return
+        
+        # Create search results embed
+        embed = discord.Embed(
+            title=f"🔍 Search Results for '{query}'",
+            color=0x00ff00
         )
+        
+        # Group results by match type
+        name_matches = []
+        alias_matches = []
+        desc_matches = []
+        
+        for command, match_type in results:
+            if match_type == "name":
+                name_matches.append(command)
+            elif match_type == "alias":
+                alias_matches.append(command)
+            else:
+                desc_matches.append(command)
+        
+        # Add fields for different match types
+        if name_matches:
+            name_list = []
+            for cmd in name_matches[:5]:  # Limit to 5 per category
+                help_text = cmd.help or "No description"
+                if len(help_text) > 60:
+                    help_text = help_text[:57] + "..."
+                name_list.append(f"**`.{cmd.qualified_name}`** - {help_text}")
+            embed.add_field(
+                name="📌 Name Matches",
+                value="\n".join(name_list),
+                inline=False
+            )
+        
+        if alias_matches:
+            alias_list = []
+            for cmd in alias_matches[:3]:  # Limit to 3 per category
+                help_text = cmd.help or "No description"
+                if len(help_text) > 60:
+                    help_text = help_text[:57] + "..."
+                alias_list.append(f"**`.{cmd.qualified_name}`** - {help_text}")
+            embed.add_field(
+                name="🏷️ Alias Matches",
+                value="\n".join(alias_list),
+                inline=False
+            )
+        
+        if desc_matches:
+            desc_list = []
+            for cmd in desc_matches[:3]:  # Limit to 3 per category  
+                help_text = cmd.help or "No description"
+                if len(help_text) > 60:
+                    help_text = help_text[:57] + "..."
+                desc_list.append(f"**`.{cmd.qualified_name}`** - {help_text}")
+            embed.add_field(
+                name="📝 Description Matches",
+                value="\n".join(desc_list),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Found {len(results)} total matches • Use .help <command> for details")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)

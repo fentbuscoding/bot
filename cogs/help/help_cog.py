@@ -66,7 +66,7 @@ class Help(commands.Cog, ErrorHandler):
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    @commands.command(name='helpme', aliases=['h', 'commands'])
+    @commands.command(name='help', aliases=['h', 'commands', 'cmds'])
     async def help(self, ctx, *, command_or_cog: str = None):
         """
         Show help information for commands and cogs
@@ -99,7 +99,7 @@ class Help(commands.Cog, ErrorHandler):
                 await ctx.reply("❌ Please provide a search query. Example: `.help search fish`")
                 return
             
-            results = self.utils.search_commands(query)
+            results = self.utils.search_commands(query, ctx.author.id)
             if not results:
                 await ctx.reply(f"❌ No commands found matching '{query}'")
                 return

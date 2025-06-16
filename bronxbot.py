@@ -1,6 +1,7 @@
 from imports import *
 from stats import StatsTracker
 import math
+import os
 # Note: bronxbot.py has most necessary imports for main & related files, so import bronxbot.py if you're too lazy to import everything
 
 # Need to import specific functions for some odd reason
@@ -114,15 +115,15 @@ class BronxBot(commands.AutoShardedBot):
             if additional_stats_update.is_running():
                 additional_stats_update.stop()
                 logging.info("Stopped additional stats update loop")
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Error stopping additional stats update: {e}")
             
         try:
             if reset_daily_stats.is_running():
                 reset_daily_stats.stop()
                 logging.info("Stopped daily stats reset loop")
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Error stopping daily stats reset: {e}")
         
         # Shutdown scalability manager
         if hasattr(self, 'scalability_manager') and self.scalability_manager:
@@ -148,9 +149,46 @@ class BronxBot(commands.AutoShardedBot):
 intents = discord.Intents.all()
 intents.message_content = True
 
-with open("data/config.json", "r") as f:
-    config = json.load(f)
+# Load configuration from environment variables with fallback to config.json
+from dotenv import load_dotenv
+load_dotenv()
 
+def load_config():
+    """Load configuration from environment variables with JSON fallback"""
+    config = {}
+    
+    # Try environment variables first
+    env_config = {
+        'TOKEN': os.getenv('DISCORD_TOKEN'),
+        'DEV_TOKEN': os.getenv('DISCORD_DEV_TOKEN'),
+        'CLIENT_ID': os.getenv('DISCORD_CLIENT_ID'),
+        'CLIENT_SECRET': os.getenv('DISCORD_CLIENT_SECRET'),
+        'OWNER_ID': os.getenv('DISCORD_BOT_OWNER_ID'),
+        'MONGO_URI': os.getenv('MONGO_URI'),
+        'GUILD_COUNT': int(os.getenv('GUILD_COUNT', 75)),
+        'lastfm_api_key': os.getenv('LASTFM_API_KEY', ''),
+        'lastfm_api_secret': os.getenv('LASTFM_API_SECRET', ''),
+        'DEV': os.getenv('DEV', 'false').lower() == 'true',
+        'OWNER_REPLY': [os.getenv('OWNER_REPLY', 'REPLY')],
+        'OWNER_IDS': [os.getenv('DISCORD_BOT_OWNER_ID', '')]
+    }
+    
+    # Use environment variables if they exist, otherwise fall back to config.json
+    if env_config['TOKEN']:
+        config = env_config
+        logging.info("Configuration loaded from environment variables")
+    else:
+        try:
+            with open("data/config.json", "r") as f:
+                config = json.load(f)
+                logging.warning("Configuration loaded from config.json - consider using environment variables for security")
+        except FileNotFoundError:
+            logging.error("No configuration found! Please set environment variables or create data/config.json")
+            raise
+    
+    return config
+
+config = load_config()
 dev = config.get('DEV', False)
 
 bot = BronxBot(

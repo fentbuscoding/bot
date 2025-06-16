@@ -10,6 +10,9 @@ utils/__pycache__/
 cogs/admin/__pycache__
 __pycache__
 .env
+.env.local
+.env.production
+.env.development
 bronxbot-nginx.conf
 vercel.json
 vercel_requirements.txt
@@ -21,3 +24,18 @@ user_timezone.json
 fishing_simulation_results.json
 fishing_simulation_combined_data.json
 data/config.json
+
+# Additional security
+*.key
+*.pem
+*.p12
+secrets.json
+private.json
+
+# Database files  
+*.db
+*.sqlite
+*.sqlite3
+
+# Restart info
+data/restart_info.json
