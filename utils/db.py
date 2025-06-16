@@ -1712,6 +1712,57 @@ class AsyncDatabase:
             self.logger.error(f"Error saving bazaar stats: {e}")
             return False
 
+    async def get_leaderboard(self, guild_id: int = None, limit: int = 10) -> list:
+        """Get economy leaderboard for a guild or globally"""
+        try:
+            await self.ensure_connected()
+            collection = self.db['users']
+            
+            if guild_id:
+                # Server leaderboard - need to filter by guild members
+                # For now, return all users with economy data
+                # Note: Ideally we'd have guild membership data in the database
+                cursor = collection.find({
+                    "$or": [
+                        {"wallet": {"$gt": 0}},
+                        {"bank": {"$gt": 0}}
+                    ]
+                }).limit(limit * 5)  # Get more than needed to filter
+            else:
+                # Global leaderboard
+                cursor = collection.find({
+                    "$or": [
+                        {"wallet": {"$gt": 0}},
+                        {"bank": {"$gt": 0}}
+                    ]
+                }).limit(limit)
+            
+            users = []
+            async for user_doc in cursor:
+                try:
+                    user_id = int(user_doc["_id"])
+                    total_balance = user_doc.get("wallet", 0) + user_doc.get("bank", 0)
+                    
+                    if total_balance > 0:
+                        users.append({
+                            "user_id": user_id,
+                            "id": user_id,  # For backwards compatibility
+                            "total": round(total_balance),
+                            "net_worth": round(total_balance),  # For leaderboard format
+                            "wallet": user_doc.get("wallet", 0),
+                            "bank": user_doc.get("bank", 0)
+                        })
+                except (ValueError, TypeError):
+                    continue
+            
+            # Sort by total balance and limit results
+            users.sort(key=lambda x: x["total"], reverse=True)
+            return users[:limit]
+            
+        except Exception as e:
+            self.logger.error(f"Error getting leaderboard: {e}")
+            return []
+
 # Create an instance of AsyncDatabase to be imported elsewhere
 async_db = AsyncDatabase.get_instance()
 
@@ -1884,9 +1935,3 @@ class SyncDatabase:
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
             return {}
-
-# Create an instance of AsyncDatabase to be imported elsewhere
-async_db = AsyncDatabase.get_instance()
-
-# Add a 'db' alias for backward compatibility
-db = async_db

@@ -280,7 +280,7 @@ class Economy(commands.Cog):
                 )
                 return await safe_reply(ctx, embed=embed)
             
-            embed = format_leaderboard_embed(leaderboard_data, ctx.guild, page=1)
+            embed = await format_leaderboard_embed(leaderboard_data, ctx.guild, page=1, bot=self.bot)
             view = LeaderboardPaginationView(ctx.guild, leaderboard_data, current_page=1)
             
             await safe_reply(ctx, embed=embed, view=view)
@@ -327,7 +327,7 @@ class Economy(commands.Cog):
         """Show information about interest rates and upgrades"""
         try:
             interest_level = await db.get_interest_level(ctx.author.id, ctx.guild.id)
-            current_rate = calculate_interest(ctx.author.id, ctx.guild.id)[1]
+            _, current_rate = await calculate_interest(ctx.author.id, ctx.guild.id)
             
             embed = discord.Embed(
                 title="💹 Interest Information",

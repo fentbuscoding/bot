@@ -75,6 +75,7 @@ def get_bank_upgrade_info(current_level: int) -> Optional[Dict[str, Any]]:
 def get_interest_upgrade_info(current_level: int) -> Optional[Dict[str, Any]]:
     """Get information about the next interest upgrade"""
     next_level = current_level + 1
+    
     if next_level in INTEREST_UPGRADE_LEVELS:
         return {
             "level": next_level,
@@ -82,6 +83,33 @@ def get_interest_upgrade_info(current_level: int) -> Optional[Dict[str, Any]]:
             "rate": INTEREST_UPGRADE_LEVELS[next_level]["rate"],
             "current_rate": INTEREST_UPGRADE_LEVELS.get(current_level, {"rate": 0.01})["rate"]
         }
+    elif next_level > 20:
+        # For levels above 20, extrapolate costs and rates
+        # Level 20 is 11.5% rate and 50,000,000,000 cost
+        # Each level above 20 adds 0.5% rate and doubles the cost
+        base_cost = 50000000000  # Level 20 cost
+        base_rate = 0.115  # Level 20 rate
+        extra_levels = next_level - 20
+        
+        new_cost = int(base_cost * (2 ** extra_levels))  # Double cost each level
+        new_rate = base_rate + (extra_levels * 0.005)  # Add 0.5% per level
+        
+        # Get current rate for display
+        if current_level in INTEREST_UPGRADE_LEVELS:
+            current_rate = INTEREST_UPGRADE_LEVELS[current_level]["rate"]
+        elif current_level > 20:
+            current_extra_levels = current_level - 20
+            current_rate = base_rate + (current_extra_levels * 0.005)
+        else:
+            current_rate = 0.01
+        
+        return {
+            "level": next_level,
+            "cost": new_cost,
+            "rate": new_rate,
+            "current_rate": current_rate
+        }
+    
     return None
 
 async def calculate_interest(user_id: int, guild_id: int) -> Tuple[int, float]:
@@ -90,7 +118,18 @@ async def calculate_interest(user_id: int, guild_id: int) -> Tuple[int, float]:
     interest_level = await db.get_interest_level(user_id, guild_id)
     
     # Get interest rate from upgrade levels
-    rate = INTEREST_UPGRADE_LEVELS.get(interest_level, {"rate": 0.01})["rate"]
+    if interest_level in INTEREST_UPGRADE_LEVELS:
+        rate = INTEREST_UPGRADE_LEVELS[interest_level]["rate"]
+    elif interest_level > 20:
+        # For levels above 20, extrapolate the rate
+        # Level 20 is 11.5%, so each level adds 0.5%
+        base_rate = 0.115  # Level 20 rate
+        extra_levels = interest_level - 20
+        rate = base_rate + (extra_levels * 0.005)  # Add 0.5% per level above 20
+    else:
+        # Level 0 or below
+        rate = 0.01  # 1% base rate
+    
     interest = int(bank_balance * rate)
     
     return interest, rate
@@ -188,7 +227,7 @@ async def create_leaderboard_data(guild_id: int, limit: int = 10) -> list:
     except Exception:
         return []
 
-def format_leaderboard_embed(leaderboard: list, guild: discord.Guild, page: int = 1) -> discord.Embed:
+async def format_leaderboard_embed(leaderboard: list, guild: discord.Guild, page: int = 1, bot=None) -> discord.Embed:
     """Format leaderboard data into an embed"""
     embed = discord.Embed(
         title=f"💰 {guild.name} Economy Leaderboard",
@@ -216,12 +255,28 @@ def format_leaderboard_embed(leaderboard: list, guild: discord.Guild, page: int 
         else:
             medal = f"`{i:2d}.`"
         
-        # Try to get username
+        # Try to get username with multiple fallbacks
+        username = f"User {user_id}"  # Default fallback
+        
         try:
+            # First try to get member from guild
             user = guild.get_member(user_id)
-            username = user.display_name if user else f"User {user_id}"
-        except:
-            username = f"User {user_id}"
+            if user:
+                username = user.display_name
+            elif bot:
+                # If not in guild, try to get user from bot cache
+                user = bot.get_user(user_id)
+                if user:
+                    username = user.display_name
+                else:
+                    # Try to fetch user from Discord API
+                    try:
+                        user = await bot.fetch_user(user_id)
+                        username = user.display_name
+                    except:
+                        pass
+        except Exception as e:
+            pass  # Keep default fallback
         
         description += f"{medal} **{username}** - {net_worth:,} {CURRENCY}\n"
     

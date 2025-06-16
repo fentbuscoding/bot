@@ -123,12 +123,13 @@ class PaymentConfirmView(discord.ui.View):
 class LeaderboardPaginationView(discord.ui.View):
     """Pagination view for leaderboard"""
     
-    def __init__(self, guild: discord.Guild, leaderboard_data: list, current_page: int = 1):
+    def __init__(self, guild: discord.Guild, leaderboard_data: list, current_page: int = 1, bot=None):
         super().__init__(timeout=300)
         self.guild = guild
         self.leaderboard_data = leaderboard_data
         self.current_page = current_page
         self.max_pages = max(1, (len(leaderboard_data) + 9) // 10)  # Ceiling division
+        self.bot = bot
         
         # Update button states
         self.update_buttons()
@@ -149,7 +150,7 @@ class LeaderboardPaginationView(discord.ui.View):
             self.update_buttons()
             
             from .economy_utils import format_leaderboard_embed
-            embed = format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page)
+            embed = await format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page, self.bot)
             await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.primary)
@@ -165,7 +166,7 @@ class LeaderboardPaginationView(discord.ui.View):
             self.current_page = 1
         
         self.update_buttons()
-        embed = format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page)
+        embed = await format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page, self.bot)
         await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label="Next →", style=discord.ButtonStyle.secondary)
@@ -175,7 +176,7 @@ class LeaderboardPaginationView(discord.ui.View):
             self.update_buttons()
             
             from .economy_utils import format_leaderboard_embed
-            embed = format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page)
+            embed = await format_leaderboard_embed(self.leaderboard_data, self.guild, self.current_page, self.bot)
             await interaction.response.edit_message(embed=embed, view=self)
 
 class InventoryPaginationView(discord.ui.View):

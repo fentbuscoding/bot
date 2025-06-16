@@ -33,7 +33,17 @@ INTEREST_UPGRADE_LEVELS = {
     7: {"cost": 2500000, "rate": 0.05},  # 5% hourly
     8: {"cost": 5000000, "rate": 0.055}, # 5.5% hourly
     9: {"cost": 10000000, "rate": 0.06}, # 6% hourly
-    10: {"cost": 25000000, "rate": 0.065} # 6.5% hourly
+    10: {"cost": 25000000, "rate": 0.065}, # 6.5% hourly
+    11: {"cost": 50000000, "rate": 0.07}, # 7% hourly
+    12: {"cost": 100000000, "rate": 0.075}, # 7.5% hourly
+    13: {"cost": 200000000, "rate": 0.08}, # 8% hourly
+    14: {"cost": 500000000, "rate": 0.085}, # 8.5% hourly
+    15: {"cost": 1000000000, "rate": 0.09}, # 9% hourly
+    16: {"cost": 2000000000, "rate": 0.095}, # 9.5% hourly
+    17: {"cost": 5000000000, "rate": 0.10}, # 10% hourly
+    18: {"cost": 10000000000, "rate": 0.105}, # 10.5% hourly
+    19: {"cost": 25000000000, "rate": 0.11}, # 11% hourly
+    20: {"cost": 50000000000, "rate": 0.115} # 11.5% hourly
 }
 
 # Vote rewards
