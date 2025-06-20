@@ -5,6 +5,7 @@ import discord
 import random
 from utils.db import db
 from .constants import CURRENCY, MINIGAME_SUCCESS_MULTIPLIER, MINIGAME_FAILURE_MULTIPLIER
+from .work_utils import update_work_timestamp, calculate_wage
 
 class BaseMinigame(discord.ui.View):
     """Base class for all work minigames"""
@@ -17,20 +18,26 @@ class BaseMinigame(discord.ui.View):
 
     async def complete_work(self, interaction, action, multiplier):
         """Complete work with given multiplier"""
-        # Set cooldown
-        await self.work_cog.set_work_cooldown(interaction.user.id)
+        # Update work timestamp to set cooldown
+        await update_work_timestamp(interaction.user.id)
         
-        base_wage = random.randint(self.user_job["wage"]["min"], self.user_job["wage"]["max"])
+        # Calculate wage based on job and boss relationship
+        base_wage = calculate_wage(
+            self.user_job["job_info"], 
+            self.user_job["boss_hostile"], 
+            self.user_job["boss_loyalty"]
+        )
         final_wage = int(base_wage * multiplier)
         
-        await db.update_wallet(interaction.user.id, final_wage, interaction.guild_id)
+        # Update user's wallet
+        await db.update_wallet(interaction.user.id, final_wage, interaction.guild.id)
         
         # Disable all buttons
         for item in self.children:
             item.disabled = True
         
         embed = discord.Embed(
-            title=f"{self.user_job['emoji']} Work Complete",
+            title=f"{self.user_job['job_info']['emoji']} Work Complete",
             description=f"You {action} and earned **{final_wage:,}** {CURRENCY}!",
             color=0x2ecc71
         )

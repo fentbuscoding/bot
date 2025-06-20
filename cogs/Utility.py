@@ -10,15 +10,258 @@ from typing import Optional
 from utils.error_handler import ErrorHandler
 from utils.restart_manager import RestartConfirmView
 
+class AdminRoleSelect(discord.ui.Select):
+    """Select menu for admin roles"""
+    def __init__(self, admin_roles, page=0):
+        self.admin_roles = admin_roles
+        self.page = page
+        
+        # Calculate which roles to show (24 per page)
+        start_idx = page * 24
+        end_idx = min(start_idx + 24, len(admin_roles))
+        current_roles = admin_roles[start_idx:end_idx]
+        
+        options = []
+        for role in current_roles:
+            member_count = len(role.members)
+            bot_count = len([m for m in role.members if m.bot])
+            human_count = member_count - bot_count
+            
+            description = f"👥 {human_count} users, 🤖 {bot_count} bots"
+            if len(description) > 100:
+                description = description[:97] + "..."
+            
+            options.append(discord.SelectOption(
+                label=role.name[:100],  # Discord limit
+                value=str(role.id),
+                description=description,
+                emoji="🛡️"
+            ))
+        
+        super().__init__(
+            placeholder=f"Select an admin role (Page {page + 1})",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        role_id = int(self.values[0])
+        role = interaction.guild.get_role(role_id)
+        
+        if not role:
+            await interaction.response.send_message("❌ Role not found!", ephemeral=True)
+            return
+        
+        # Get the current filter from the view
+        view = self.view
+        filter_type = view.current_filter
+        
+        members = []
+        if filter_type == "bots":
+            members = [m for m in role.members if m.bot]
+        elif filter_type == "users":
+            members = [m for m in role.members if not m.bot]
+        else:  # all
+            members = role.members
+        
+        if not members:
+            member_type = {"bots": "bots", "users": "users", "all": "members"}[filter_type]
+            await interaction.response.send_message(f"❌ No {member_type} found in {role.mention}!", ephemeral=True)
+            return
+        
+        # Create embed for role members
+        embed = discord.Embed(
+            title=f"🛡️ {role.name}",
+            color=role.color or discord.Color.blue(),
+            description=f"Showing {filter_type} with administrator permissions"
+        )
+        
+        # Add members in chunks
+        member_list = []
+        for i, member in enumerate(members[:20]):  # Limit to 20 to avoid embed limits
+            status_emoji = "🤖" if member.bot else "👤"
+            member_list.append(f"{status_emoji} {member.display_name}")
+        
+        if len(members) > 20:
+            member_list.append(f"... and {len(members) - 20} more")
+        
+        embed.add_field(
+            name=f"Members ({len(members)})",
+            value="\n".join(member_list) if member_list else "None",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Role ID: {role.id}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class AdminView(discord.ui.View):
+    """View for admin listing with filters and role selection"""
+    def __init__(self, ctx):
+        super().__init__(timeout=300)
+        self.ctx = ctx
+        self.current_filter = "all"  # all, bots, users
+        self.role_page = 0
+        
+        # Get admin roles
+        self.admin_roles = [
+            role for role in ctx.guild.roles 
+            if role.permissions.administrator and role != ctx.guild.default_role and len(role.members) > 0
+        ]
+        self.admin_roles.sort(key=lambda r: len(r.members), reverse=True)
+        
+        self.update_components()
+    
+    def update_components(self):
+        """Update view components based on current state"""
+        self.clear_items()
+        
+        # Filter buttons
+        self.add_item(FilterButton("👥 Users", "users", self.current_filter == "users"))
+        self.add_item(FilterButton("🤖 Bots", "bots", self.current_filter == "bots"))  
+        self.add_item(FilterButton("🌐 All", "all", self.current_filter == "all"))
+        
+        # Role select menu (if there are admin roles)
+        if self.admin_roles:
+            self.add_item(AdminRoleSelect(self.admin_roles, self.role_page))
+            
+            # Next page button for roles (if needed)
+            total_pages = (len(self.admin_roles) + 23) // 24  # 24 roles per page
+            if total_pages > 1:
+                self.add_item(RolePageButton(self.role_page, total_pages))
+    
+    async def create_embed(self):
+        """Create the main embed showing admin overview"""
+        # Get all members with admin permissions
+        all_admins = []
+        for member in self.ctx.guild.members:
+            admin_roles = [role for role in member.roles if role.permissions.administrator and role != self.ctx.guild.default_role]
+            if admin_roles:
+                all_admins.append((member, admin_roles))
+        
+        # Filter based on current selection
+        if self.current_filter == "bots":
+            filtered_admins = [(m, r) for m, r in all_admins if m.bot]
+        elif self.current_filter == "users":
+            filtered_admins = [(m, r) for m, r in all_admins if not m.bot]
+        else:  # all
+            filtered_admins = all_admins
+        
+        embed = discord.Embed(
+            title="🛡️ Server Administrators",
+            color=discord.Color.blue(),
+            description=f"Showing **{self.current_filter}** with administrator permissions"
+        )
+        
+        if not filtered_admins:
+            embed.add_field(
+                name="No Results",
+                value=f"No {self.current_filter} found with administrator permissions",
+                inline=False
+            )
+        else:
+            # Show overview stats
+            total_users = len([m for m, r in all_admins if not m.bot])
+            total_bots = len([m for m, r in all_admins if m.bot])
+            
+            embed.add_field(
+                name="📊 Overview",
+                value=f"👥 **{total_users}** users\n🤖 **{total_bots}** bots\n🌐 **{len(all_admins)}** total",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🛡️ Admin Roles",
+                value=f"**{len(self.admin_roles)}** roles with admin permissions",
+                inline=True
+            )
+            
+            # List filtered admins (limited to avoid embed limits)
+            admin_list = []
+            for i, (member, roles) in enumerate(filtered_admins[:15]):  # Limit to 15
+                status_emoji = "🤖" if member.bot else "👤"
+                role_names = [role.name for role in roles[:3]]  # Show max 3 roles
+                if len(roles) > 3:
+                    role_names.append(f"+{len(roles) - 3} more")
+                
+                admin_list.append(f"{status_emoji} **{member.display_name}**\n└ {', '.join(role_names)}")
+            
+            if len(filtered_admins) > 15:
+                admin_list.append(f"... and **{len(filtered_admins) - 15}** more")
+            
+            embed.add_field(
+                name=f"{self.current_filter.title()} with Admin Permissions ({len(filtered_admins)})",
+                value="\n".join(admin_list) if admin_list else "None",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use the buttons below to filter results or select a role for details")
+        return embed
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Check if user can use this view"""
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("❌ You cannot use this menu!", ephemeral=True)
+            return False
+        return True
+
+class FilterButton(discord.ui.Button):
+    """Button for filtering admin list"""
+    def __init__(self, label: str, filter_type: str, is_active: bool):
+        style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style)
+        self.filter_type = filter_type
+    
+    async def callback(self, interaction: discord.Interaction):
+        view = self.view
+        view.current_filter = self.filter_type
+        view.update_components()
+        
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+class RolePageButton(discord.ui.Button):
+    """Button for navigating role pages"""
+    def __init__(self, current_page: int, total_pages: int):
+        self.current_page = current_page
+        self.total_pages = total_pages
+        
+        if current_page < total_pages - 1:
+            label = f"Role Page {current_page + 2}/{total_pages}"
+            emoji = "▶️"
+        else:
+            label = f"Role Page 1/{total_pages}"
+            emoji = "◀️"
+        
+        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.secondary)
+    
+    async def callback(self, interaction: discord.Interaction):
+        view = self.view
+        
+        if self.current_page < self.total_pages - 1:
+            view.role_page += 1
+        else:
+            view.role_page = 0
+        
+        view.update_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
+
 class Utility(commands.Cog, ErrorHandler):
     """Utility commands for server management and fun."""
 
+    # --- Snipe Command ---
     def __init__(self, bot):
         ErrorHandler.__init__(self)
         self.bot = bot
         self.logger = CogLogger(self.__class__.__name__)
         self.bot.launch_time = datetime.datetime.now()
         self.logger.info("Utility cog initialized")
+        
+        # Initialize instance variables
+        self.afk_users = {}
+        self.last_deleted = {}  # {guild_id: {channel_id: (message, deleted_at)}}
 
     @commands.command(name="ping", aliases=["pong"])
     async def ping(self, ctx):
@@ -370,7 +613,6 @@ class Utility(commands.Cog, ErrorHandler):
             await ctx.reply("This server has no banner.")
 
     # --- AFK System ---
-    afk_users = {}
 
     @commands.command()
     async def afk(self, ctx, *, reason="AFK"):
@@ -396,9 +638,6 @@ class Utility(commands.Cog, ErrorHandler):
                 await message.channel.send(f"<@{user_id}> is AFK: {reason}")
                 break
 
-    # --- Snipe Command ---
-    last_deleted = {}  # {guild_id: {channel_id: (message, deleted_at)}}
-
     @commands.Cog.listener()
     async def on_message_delete(self, message):
         if message.guild:
@@ -407,6 +646,20 @@ class Utility(commands.Cog, ErrorHandler):
             if guild_id not in self.last_deleted:
                 self.last_deleted[guild_id] = {}
             self.last_deleted[guild_id][channel_id] = (message, datetime.datetime.now())
+
+    @commands.command()
+    async def admins(self, ctx):
+        """List all server admins with interactive filters and role details.
+        
+        Features:
+        • Filter by users, bots, or all members
+        • Browse admin roles with member counts
+        • View detailed role member lists
+        • Paginated role selection (24 roles per page)
+        """
+        view = AdminView(ctx)
+        embed = await view.create_embed()
+        await ctx.reply(embed=embed, view=view)
 
     @commands.command()
     async def snipe(self, ctx):

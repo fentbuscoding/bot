@@ -85,11 +85,11 @@ class AsyncDatabase:
                 return False
         return True
 
-    async def get_wallet_balance(self, user_id: int, guild_id: int = None) -> int:
+    async def get_wallet_balance(self, user_id: int, guild_id: int = None, session=None) -> int:
         """Get user's wallet balance"""
         if not await self.ensure_connected():
             return 0
-        user = await self.db.users.find_one({"_id": str(user_id)})
+        user = await self.db.users.find_one({"_id": str(user_id)}, session=session)
         return user.get("wallet", 0) if user else 0
 
     async def get_badge(self, user_id: int, guild_id: int = None) -> Optional[str]:
@@ -349,32 +349,39 @@ class AsyncDatabase:
         user = await self.db.users.find_one({"_id": str(user_id)})
         return user.get("bank_limit", 10000) if user else 10000
 
-    async def update_wallet(self, user_id: int, amount: int, guild_id: int = None) -> bool:
+    async def update_wallet(self, user_id: int, amount: int, guild_id: int = None, session=None) -> bool:
         """Update user's wallet balance with overflow protection"""
         if not await self.ensure_connected():
             return False
             
-        # Get current balance
-        current = await self.get_wallet_balance(user_id)
+        # Get current balance (within the same transaction if provided)
+        current = await self.get_wallet_balance(user_id, guild_id, session=session)
         
         # Check for overflow/underflow
         MAX_BALANCE = 9223372036854775807  # PostgreSQL bigint max
         new_balance = current + amount
         
+        self.logger.debug(f"update_wallet: user {user_id}, current: {current}, amount: {amount}, new_balance: {new_balance}")
+        
         if new_balance > MAX_BALANCE:
+            self.logger.warning(f"update_wallet: Balance would exceed maximum for user {user_id}. Capping at {MAX_BALANCE}")
             new_balance = MAX_BALANCE
         elif new_balance < 0:
+            self.logger.error(f"update_wallet: Balance would go negative for user {user_id}. Current: {current}, amount: {amount}")
             return False
             
         # Update with the safe balance
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
             {"$set": {"wallet": new_balance}},
-            upsert=True
+            upsert=True,
+            session=session
         )
-        return result.modified_count > 0 or result.upserted_id is not None
+        success = result.modified_count > 0 or result.upserted_id is not None
+        self.logger.debug(f"update_wallet result for user {user_id}: success={success}, modified_count={result.modified_count}, upserted_id={result.upserted_id}")
+        return success
 
-    async def update_bank(self, user_id: int, amount: int, guild_id: int = None) -> bool:
+    async def update_bank(self, user_id: int, amount: int, guild_id: int = None, session=None) -> bool:
         """Update user's bank balance with overflow protection"""
         if not await self.ensure_connected():
             return False
@@ -391,7 +398,8 @@ class AsyncDatabase:
         result = await self.db.users.update_one(
             {"_id": str(user_id)},
             {"$set": {"bank": new_balance}},
-            upsert=True
+            upsert=True,
+            session=session
         )
         return result.modified_count > 0 or result.upserted_id is not None
 
@@ -471,20 +479,39 @@ class AsyncDatabase:
     async def transfer_money(self, from_id: int, to_id: int, amount: int, guild_id: int = None) -> bool:
         """Transfer money between users"""
         if not await self.ensure_connected():
+            self.logger.error("Database not connected for transfer_money")
             return False
             
+        # Check balance outside transaction first for quick validation
         from_balance = await self.get_wallet_balance(from_id, guild_id)
         if from_balance < amount:
+            self.logger.info(f"Transfer failed: insufficient funds. User {from_id} has {from_balance}, needs {amount}")
             return False
             
         async with await self.client.start_session() as session:
             async with session.start_transaction():
-                if not await self.update_wallet(from_id, -amount, guild_id):
+                try:
+                    # Both operations must succeed within the transaction
+                    self.logger.info(f"Transfer: Deducting {amount} from user {from_id}")
+                    if not await self.update_wallet(from_id, -amount, guild_id, session=session):
+                        self.logger.error(f"Transfer failed: could not deduct {amount} from user {from_id}")
+                        await session.abort_transaction()
+                        return False
+                    
+                    self.logger.info(f"Transfer: Adding {amount} to user {to_id}")
+                    if not await self.update_wallet(to_id, amount, guild_id, session=session):
+                        self.logger.error(f"Transfer failed: could not add {amount} to user {to_id}")
+                        await session.abort_transaction()
+                        return False
+                    
+                    # If we get here, both operations succeeded
+                    self.logger.info(f"Transfer successful: {amount} from {from_id} to {to_id}")
+                    await session.commit_transaction()
+                    return True
+                except Exception as e:
+                    self.logger.error(f"Transfer error: {e}")
+                    await session.abort_transaction()
                     return False
-                if not await self.update_wallet(to_id, amount, guild_id):
-                    await self.update_wallet(from_id, amount, guild_id)  # Rollback
-                    return False
-                return True
 
     async def increase_bank_limit(self, user_id: int, amount: int, guild_id: int = None) -> bool:
         """Increase user's bank storage limit"""

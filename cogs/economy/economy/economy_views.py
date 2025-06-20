@@ -29,34 +29,55 @@ class PaymentConfirmView(discord.ui.View):
         self.responded = True
         
         # Process the payment
-        success = await db.transfer_money(self.sender.id, self.receiver.id, self.amount, interaction.guild.id)
-        
-        if success:
-            embed = discord.Embed(
-                title="✅ Payment Accepted!",
-                description=f"Successfully transferred **{self.amount:,}** {CURRENCY}",
-                color=COLORS["success"]
-            )
-            embed.add_field(name="From:", value=self.sender.display_name, inline=True)
-            embed.add_field(name="To:", value=self.receiver.display_name, inline=True)
-            embed.add_field(name="Amount:", value=format_currency(self.amount), inline=True)
+        try:
+            success = await db.transfer_money(self.sender.id, self.receiver.id, self.amount, interaction.guild.id)
             
-            # Send a notification to the sender
-            try:
-                sender_embed = discord.Embed(
-                    title="💰 Payment Completed!",
-                    description=f"{self.receiver.display_name} accepted your payment of **{self.amount:,}** {CURRENCY}",
+            if success:
+                embed = discord.Embed(
+                    title="✅ Payment Accepted!",
+                    description=f"Successfully transferred **{self.amount:,}** {CURRENCY}",
                     color=COLORS["success"]
                 )
-                await self.sender.send(embed=sender_embed)
-            except discord.Forbidden:
-                pass  # Sender has DMs disabled
-        else:
+                embed.add_field(name="From:", value=self.sender.display_name, inline=True)
+                embed.add_field(name="To:", value=self.receiver.display_name, inline=True)
+                embed.add_field(name="Amount:", value=format_currency(self.amount), inline=True)
+                
+                # Send a notification to the sender
+                try:
+                    sender_embed = discord.Embed(
+                        title="💰 Payment Completed!",
+                        description=f"{self.receiver.display_name} accepted your payment of **{self.amount:,}** {CURRENCY}",
+                        color=COLORS["success"]
+                    )
+                    await self.sender.send(embed=sender_embed)
+                except discord.Forbidden:
+                    pass  # Sender has DMs disabled
+            else:
+                # Check why the transfer failed
+                sender_balance = await db.get_wallet_balance(self.sender.id, interaction.guild.id)
+                if sender_balance < self.amount:
+                    embed = discord.Embed(
+                        title="❌ Payment Failed!",
+                        description=f"The sender ({self.sender.display_name}) has insufficient funds.\nRequired: **{self.amount:,}** {CURRENCY}\nAvailable: **{sender_balance:,}** {CURRENCY}",
+                        color=COLORS["error"]
+                    )
+                else:
+                    embed = discord.Embed(
+                        title="❌ Payment Failed!",
+                        description=f"Transaction failed due to a database error. Please try again later.",
+                        color=COLORS["error"]
+                    )
+                    # Log the error for debugging
+                    print(f"Payment transfer failed: Sender {self.sender.id} has {sender_balance:,} but transfer of {self.amount:,} to {self.receiver.id} failed")
+        
+        except Exception as e:
             embed = discord.Embed(
                 title="❌ Payment Failed!",
-                description=f"The sender ({self.sender.display_name}) has insufficient funds.",
+                description=f"An unexpected error occurred while processing the payment.",
                 color=COLORS["error"]
             )
+            # Log the error for debugging
+            print(f"Payment error: {e}")
         
         # Disable all buttons
         for item in self.children:

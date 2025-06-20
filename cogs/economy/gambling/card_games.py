@@ -43,7 +43,7 @@ class CardGames(commands.Cog):
         self.values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
         
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
-        self.logger.info("Card games module initialized with anti-inflation measures")
+        self.logger.info("Card games module initialized")
     
     async def cog_check(self, ctx):
         """Global check for gambling commands"""
@@ -84,14 +84,14 @@ class CardGames(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     @requires_tos()
     async def blackjack(self, ctx, bet: str):
-        """Play blackjack against the dealer (NERFED PAYOUTS)
+        """Play blackjack against the dealer
         
         Usage: `.blackjack <bet>`
         Examples: `.blackjack 1000`, `.blackjack all`, `.blackjack 50%`
         
-        ⚠️ NEW Payouts (NERFED):
-        - Blackjack: 1.3x bet (was 1.5x - NERF!)
-        - Regular win: 0.9x bet (was 1x - NERF!)
+        Payouts:
+        - Blackjack: 1.3x bet
+        - Regular win: 0.9x bet
         """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
@@ -136,14 +136,14 @@ class CardGames(commands.Cog):
                     wallet
                 ))
             elif player_bj:
-                # Player wins blackjack (NERFED: 1.3x instead of 1.5x)
-                winnings = int(parsed_bet * 1.3)  # NERF: was 1.5x
+                # Player wins blackjack
+                winnings = int(parsed_bet * 1.3)
                 await db.update_wallet(ctx.author.id, winnings, ctx.guild.id)
                 self.stats_logger.log_command_usage("blackjack")
                 self.stats_logger.log_economy_transaction(ctx.author.id, "blackjack", winnings, True)
                 self.active_games.remove(ctx.author.id)
                 return await ctx.send(embed=self._blackjack_embed(
-                    "Blackjack! You win! (1.3x payout - NERFED from 1.5x)",
+                    "Blackjack! You win! (1.3x payout)",
                     player_hand,
                     dealer_hand,
                     parsed_bet,
@@ -248,11 +248,11 @@ class CardGames(commands.Cog):
             winnings = 0
             
             if dealer_total > 21:
-                outcome = f"Dealer busts! You win {int(bet * 0.9 * (split_count + 1)):,} {self.currency} (0.9x payout - NERFED)"
-                winnings = int(bet * 0.9 * (split_count + 1))  # NERF: 0.9x instead of 1x
+                outcome = f"Dealer busts! You win {int(bet * 0.9 * (split_count + 1)):,} {self.currency} (0.9x payout)"
+                winnings = int(bet * 0.9 * (split_count + 1))
             elif player_total > dealer_total:
-                outcome = f"You win {int(bet * 0.9 * (split_count + 1)):,} {self.currency}! (0.9x payout - NERFED)"
-                winnings = int(bet * 0.9 * (split_count + 1))  # NERF: 0.9x instead of 1x
+                outcome = f"You win {int(bet * 0.9 * (split_count + 1)):,} {self.currency}! (0.9x payout)"
+                winnings = int(bet * 0.9 * (split_count + 1))
             elif player_total < dealer_total:
                 outcome = f"You lose {bet * (split_count + 1):,} {self.currency}!"
                 winnings = -bet * (split_count + 1)

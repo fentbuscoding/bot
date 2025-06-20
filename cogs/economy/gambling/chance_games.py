@@ -38,22 +38,22 @@ class ChanceGames(commands.Cog):
         
 
         
-        # HEAVILY NERFED slot machine symbols and weights to combat inflation
+        # Slot machine symbols and weights
         self.slot_symbols = [
-            ("💎", 1),     # Diamond - Ultra rare (3x multiplier - NERFED from 100x)
-            ("7️⃣", 3),     # Lucky 7 - Very rare (2.5x multiplier - NERFED from 20x)
-            ("🔔", 8),     # Bell - Rare (2x multiplier - NERFED from 10x)
-            ("🍒", 15),    # Cherry - Uncommon (1.8x multiplier - NERFED from 5x)
-            ("🍋", 15),    # Lemon - Uncommon (1.8x multiplier - NERFED from 5x)
-            ("🍊", 15),    # Orange - Uncommon (1.8x multiplier - NERFED from 5x)
-            ("🍇", 15),    # Grape - Uncommon (1.8x multiplier - NERFED from 5x)
-            ("⭐", 20),    # Star - Common (1.5x multiplier - NERFED from 5x)
-            ("🎯", 25),    # Target - Common (1.5x multiplier - NERFED from 5x)
-            ("💫", 30),    # Dizzy - Very common (1.2x multiplier - NERFED from 5x)
+            ("💎", 1),     # Diamond - Ultra rare (3x multiplier)
+            ("7️⃣", 3),     # Lucky 7 - Very rare (2.5x multiplier)
+            ("🔔", 8),     # Bell - Rare (2x multiplier)
+            ("🍒", 15),    # Cherry - Uncommon (1.8x multiplier)
+            ("🍋", 15),    # Lemon - Uncommon (1.8x multiplier)
+            ("🍊", 15),    # Orange - Uncommon (1.8x multiplier)
+            ("🍇", 15),    # Grape - Uncommon (1.8x multiplier)
+            ("⭐", 20),    # Star - Common (1.5x multiplier)
+            ("🎯", 25),    # Target - Common (1.5x multiplier)
+            ("💫", 30),    # Dizzy - Very common (1.2x multiplier)
         ]
         
         self.blocked_channels = [1378156495144751147, 1260347806699491418]
-        self.logger.info("Chance games module initialized with anti-inflation measures")
+        self.logger.info("Chance games module initialized")
     
     async def cog_check(self, ctx):
         """Global check for gambling commands"""
@@ -91,12 +91,12 @@ class ChanceGames(commands.Cog):
     @commands.cooldown(1, 3, commands.BucketType.user)
     @requires_tos()
     async def coinflip(self, ctx, bet: str, choice: str = None):
-        """Flip a coin - heads or tails (HEAVILY NERFED PAYOUTS)
+        """Flip a coin - heads or tails
         
         Usage: `.coinflip <bet> <heads/tails>`
         Examples: `.coinflip 1000 heads`, `.coinflip all tails`
         
-        Payout: 0.9x bet (NERFED from 1x) - House edge increased to combat inflation
+        Payout: 0.9x bet
         """
         try:
             # Parse bet amount
@@ -120,7 +120,7 @@ class ChanceGames(commands.Cog):
                                f"Choose heads or tails:\n"
                                f"`{ctx.prefix}coinflip {bet} heads`\n"
                                f"`{ctx.prefix}coinflip {bet} tails`\n\n"
-                               f"⚠️ **New payout: 0.9x bet** (house edge increased)",
+                               f"Payout: 0.9x bet",
                     color=0xf1c40f
                 )
                 return await ctx.reply(embed=embed)
@@ -139,9 +139,9 @@ class ChanceGames(commands.Cog):
             result = random.choice(["heads", "tails"])
             win = choice == result
             
-            # Calculate winnings (NERFED - 0.9x payout instead of 1x)
+            # Calculate winnings
             if win:
-                winnings = int(parsed_bet * 0.9)  # HEAVY NERF: 0.9x instead of 1x
+                winnings = int(parsed_bet * 0.9)
                 outcome = f"**You won {winnings:,}** {self.currency}! (0.9x payout)"
                 self.stats_logger.log_economy_transaction(ctx.author.id, "coinflip", winnings, True)
             else:
@@ -168,13 +168,6 @@ class ChanceGames(commands.Cog):
                 inline=True
             )
             
-            if win:
-                embed.add_field(
-                    name="⚠️ Economy Rebalance",
-                    value="Payouts reduced to combat inflation",
-                    inline=True
-                )
-            
             await ctx.reply(embed=embed)
             
         except Exception as e:
@@ -185,17 +178,17 @@ class ChanceGames(commands.Cog):
     @commands.cooldown(1, 3, commands.BucketType.user)
     @requires_tos()
     async def slots(self, ctx, bet: str):
-        """Play the slot machine (HEAVILY NERFED PAYOUTS)
+        """Play the slot machine
         
         Usage: `.slots <bet>`
         Examples: `.slots 1000`, `.slots all`, `.slots 25%`
         
-        NEW Payouts (HEAVILY NERFED):
-        💎💎💎 = 3x bet (was 100x - MASSIVE NERF!)
-        7️⃣7️⃣7️⃣ = 2.5x bet (was 20x - MASSIVE NERF!)
-        🔔🔔🔔 = 2x bet (was 10x - MASSIVE NERF!)
-        Any other triple = 1.8x bet (was 5x - MASSIVE NERF!)
-        Any double = 1.2x bet (was 2x - NERF!)
+        Payouts:
+        💎💎💎 = 3x bet
+        7️⃣7️⃣7️⃣ = 2.5x bet
+        🔔🔔🔔 = 2x bet
+        Any other triple = 1.8x bet
+        Any double = 1.2x bet
         """
         try:
             # Parse bet amount
@@ -228,30 +221,30 @@ class ChanceGames(commands.Cog):
                         reels.append(symbol)
                         break
             
-            # Calculate winnings (HEAVILY NERFED MULTIPLIERS)
+            # Calculate winnings
             winnings = 0
             outcome = "You lost!"
             
             # Check for wins
             if reels[0] == reels[1] == reels[2]:
                 if reels[0] == "💎":
-                    multiplier = 3.0  # MASSIVE NERF: was 100x
-                    outcome = "JACKPOT! 💎💎💎 (NERFED: was 100x, now 3x)"
+                    multiplier = 3.0
+                    outcome = "JACKPOT! 💎💎💎"
                 elif reels[0] == "7️⃣":
-                    multiplier = 2.5  # MASSIVE NERF: was 20x
-                    outcome = "TRIPLE 7s! 🎰 (NERFED: was 20x, now 2.5x)"
+                    multiplier = 2.5
+                    outcome = "TRIPLE 7s! 🎰"
                 elif reels[0] == "🔔":
-                    multiplier = 2.0  # MASSIVE NERF: was 10x
-                    outcome = "TRIPLE BELLS! 🔔 (NERFED: was 10x, now 2x)"
+                    multiplier = 2.0
+                    outcome = "TRIPLE BELLS! 🔔"
                 else:
-                    multiplier = 1.8  # MASSIVE NERF: was 5x
-                    outcome = "TRIPLE MATCH! (NERFED: was 5x, now 1.8x)"
+                    multiplier = 1.8
+                    outcome = "TRIPLE MATCH!"
                     
                 winnings = int(parsed_bet * multiplier)
             elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                multiplier = 1.2  # NERF: was 2x
+                multiplier = 1.2
                 winnings = int(parsed_bet * multiplier)
-                outcome = "DOUBLE MATCH! (NERFED: was 2x, now 1.2x)"
+                outcome = "DOUBLE MATCH!"
                 
             # Update balance if won
             if winnings > 0:
@@ -264,7 +257,7 @@ class ChanceGames(commands.Cog):
             slot_display = " | ".join(reels)
             
             embed = discord.Embed(
-                title="🎰 Slot Machine (REBALANCED)",
+                title="🎰 Slot Machine",
                 description=f"**{slot_display}**\n\n"
                           f"**{outcome}**\n"
                           f"Bet: **{parsed_bet:,}** {self.currency}\n"
@@ -277,13 +270,6 @@ class ChanceGames(commands.Cog):
                 value=f"**{wallet - parsed_bet + winnings:,}** {self.currency}",
                 inline=True
             )
-            
-            if winnings > 0:
-                embed.add_field(
-                    name="⚠️ Economy Rebalance",
-                    value="All payouts heavily reduced to combat inflation",
-                    inline=True
-                )
             
             await ctx.reply(embed=embed)
             

@@ -34,7 +34,7 @@ class Plinko(commands.Cog):
         self.stats_logger = StatsLogger()
         
         # Plinko board configuration (16 slots at bottom)
-        # HEAVILY NERFED multipliers to prevent inflation
+        # Multipliers for each slot
         self.multipliers = [0.1, 0.3, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 2.0, 1.5, 1.2, 1.0, 0.8, 0.5, 0.3, 0.1]
         self.rows = 10  # Number of peg rows
         

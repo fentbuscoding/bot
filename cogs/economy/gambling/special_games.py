@@ -89,13 +89,12 @@ class SpecialGames(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     @requires_tos()
     async def crash(self, ctx, bet: str, auto_cashout: MultiplierConverter = None):
-        """Bet on a multiplier that can crash at any moment (HEAVILY NERFED)
+        """Bet on a multiplier that can crash at any moment
         
         Usage: `.crash <bet> [auto_cashout]`
         Examples: `.crash 1000`, `.crash all 1.5x`, `.crash 500 2.0`
         
         Auto-cashout must be at least 1.35x if specified.
-        ⚠️ Crash points HEAVILY NERFED: now 1.1x-2.0x (was much higher)
         """
         if ctx.author.id in self.active_games:
             return await ctx.reply("❌ You already have an active game!")
@@ -265,28 +264,27 @@ class SpecialGames(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     @requires_tos()
     async def roulette(self, ctx, bet: str = None, choice: str = None):
-        """Play roulette - bet on numbers, colors, or odd/even (NERFED PAYOUTS)
+        """Play roulette - bet on numbers, colors, or odd/even
         
         Usage: `.roulette <bet> <choice>`
         Examples: `.roulette 1000 red`, `.roulette all 17`, `.roulette 500 odd`
         
-        NEW Betting options (NERFED):
-        - Numbers (0-36): 15:1 payout (was 35:1 - MASSIVE NERF!)
-        - red/black: 1.8:1 payout (was 2:1 - NERF!)
-        - odd/even: 1.8:1 payout (was 2:1 - NERF!)
-        - green (0): 15:1 payout (was 35:1 - MASSIVE NERF!)
+        Betting options:
+        - Numbers (0-36): 15:1 payout
+        - red/black: 1.8:1 payout
+        - odd/even: 1.8:1 payout
+        - green (0): 15:1 payout
         """
         if not bet or not choice:
             embed = discord.Embed(
-                title="🎰 Roulette (REBALANCED)",
-                description="**NEW Betting Options (NERFED):**\n"
-                          "• Numbers `0-36` - **15:1 payout** (was 35:1)\n"
-                          "• `red` or `black` - 1.8:1 payout (was 2:1)\n"
-                          "• `odd` or `even` - 1.8:1 payout (was 2:1)\n"
-                          "• `green` (0) - **15:1 payout** (was 35:1)\n\n"
+                title="🎰 Roulette",
+                description="**Betting Options:**\n"
+                          "• Numbers `0-36` - **15:1 payout**\n"
+                          "• `red` or `black` - 1.8:1 payout\n"
+                          "• `odd` or `even` - 1.8:1 payout\n"
+                          "• `green` (0) - **15:1 payout**\n\n"
                           f"**Usage:** `{ctx.prefix}roulette <bet> <choice>`\n"
-                          f"**Example:** `{ctx.prefix}roulette 1000 red`\n\n"
-                          f"⚠️ **All payouts reduced to combat inflation**",
+                          f"**Example:** `{ctx.prefix}roulette 1000 red`",
                 color=0x9b59b6
             )
             return await ctx.reply(embed=embed)
@@ -321,29 +319,29 @@ class SpecialGames(commands.Cog):
             # Spin the wheel
             winning_number, winning_color = random.choice(self.roulette_wheel)
             
-            # Check win conditions (NERFED MULTIPLIERS)
+            # Check win conditions
             win = False
             multiplier = 0
             bet_name = choice
             
             if choice.isdigit():
-                # Number bet (NERFED: 15x instead of 35x)
+                # Number bet
                 if int(choice) == winning_number:
                     win = True
-                    multiplier = 15  # MASSIVE NERF: was 35
+                    multiplier = 15
                     bet_name = f"Number {choice}"
             elif choice in ["red", "black", "green"]:
-                # Color bet (NERFED payouts)
+                # Color bet
                 if choice == winning_color:
                     win = True
-                    multiplier = 15 if choice == "green" else 1.8  # NERF: green was 35, others were 2
+                    multiplier = 15 if choice == "green" else 1.8
                     bet_name = f"{choice.title()} color"
             elif choice in ["odd", "even"]:
-                # Odd/even bet (NERFED: 1.8x instead of 2x)
+                # Odd/even bet
                 if winning_number != 0:
                     if (choice == "odd" and winning_number % 2 == 1) or (choice == "even" and winning_number % 2 == 0):
                         win = True
-                        multiplier = 1.8  # NERF: was 2
+                        multiplier = 1.8
                         bet_name = f"{choice.title()} numbers"
             
             # Calculate winnings
