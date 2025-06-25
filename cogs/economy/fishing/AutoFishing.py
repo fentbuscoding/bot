@@ -28,7 +28,7 @@ class AutoFishing(commands.Cog):
         # Start the autofishing loop
         self.autofishing_task = self.bot.loop.create_task(self.autofishing_loop())
 
-    def cog_unload(self):
+    async def cog_unload(self):
         """Cancel the autofishing task when cog is unloaded"""
         if hasattr(self, 'autofishing_task'):
             self.autofishing_task.cancel()

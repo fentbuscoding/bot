@@ -21,11 +21,11 @@ def parse_duration(duration: str) -> timedelta | None:
     time_params = {name: int(val) for name, val in match.groupdict(default='0').items()}
     return timedelta(**time_params)
 
-def save_warn_fallback(guild_id, user_id, moderator_id, reason, timestamp):
+def save_warn_fallback(guild, user, moderator, reason, timestamp):
     """Fallback: Save warning to a JSON file if DB fails."""
     data_dir = os.path.join(os.getcwd(), "data")
     os.makedirs(data_dir, exist_ok=True)
-    warn_file = os.path.join(data_dir, f"warns_{guild_id}.json")
+    warn_file = os.path.join(data_dir, f"warns_{guild.id}.json")
     try:
         if os.path.exists(warn_file):
             with open(warn_file, "r", encoding="utf-8") as f:
@@ -35,10 +35,13 @@ def save_warn_fallback(guild_id, user_id, moderator_id, reason, timestamp):
     except Exception:
         warns = {}
 
-    warns.setdefault(str(user_id), []).append({
-        "moderator": str(moderator_id),
+    warns.setdefault(str(user.id), []).append({
+        "moderator": str(moderator.id),
+        "moderator_name": str(moderator),
         "reason": reason,
-        "timestamp": timestamp.isoformat()
+        "timestamp": timestamp.isoformat(),
+        "guild_name": guild.name,
+        "user_name": str(user)
     })
 
     with open(warn_file, "w", encoding="utf-8") as f:
@@ -271,10 +274,8 @@ class Moderation(commands.Cog, ErrorHandler):
         if not can:
             return await ctx.send(msg)
         timestamp = datetime.datetime.utcnow()
-        # Try to save to DB, fallback to JSON if fails
         db_failed = False
         try:
-            # Only attempt if db.add_warn exists and is callable
             add_warn_func = getattr(db, "add_warn", None)
             if callable(add_warn_func):
                 result = add_warn_func(ctx.guild.id, member.id, ctx.author.id, reason or "No reason provided", timestamp)
@@ -287,18 +288,18 @@ class Moderation(commands.Cog, ErrorHandler):
             self.logger.error(f"DB warn failed: {e}")
 
         if db_failed:
-            save_warn_fallback(ctx.guild.id, member.id, ctx.author.id, reason or "No reason provided", timestamp)
+            save_warn_fallback(ctx.guild, member, ctx.author, reason or "No reason provided", timestamp)
 
         embed = discord.Embed(
             title="⚠️ Member Warned",
-            description=f"{member.mention} has been warned.",
+            description=f"{member.mention} has been warned in **{ctx.guild.name}**.",
             color=discord.Color.gold(),
             timestamp=timestamp
         )
         embed.add_field(name="User", value=f"{member} (`{member.id}`)", inline=True)
         embed.add_field(name="Moderator", value=f"{ctx.author} (`{ctx.author.id}`)", inline=True)
         embed.add_field(name="Reason", value=reason or "No reason provided", inline=False)
-        embed.set_footer(text=f"Warned in {ctx.guild.name}", icon_url=getattr(ctx.guild.icon, 'url', None))
+        embed.set_footer(text=f"Guild: {ctx.guild.name}", icon_url=getattr(ctx.guild.icon, 'url', None))
 
         await ctx.send(embed=embed)
         await self.log_action(ctx.guild.id, embed)
@@ -321,9 +322,16 @@ class Moderation(commands.Cog, ErrorHandler):
     async def timeout_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
             if error.param.name == "member":
-                await ctx.reply("❌ You must mention a user to timeout!\nExample: `.timeout @user 1h30m [reason]`")
+                await ctx.reply(
+                    "❌ You must mention a user to timeout!\n"
+                    "Example: `.timeout @user 1h30m [reason]`"
+                )
             elif error.param.name == "duration":
-                await ctx.reply("❌ You must provide a duration!\nExample: `.timeout @user 1h30m [reason]`")
+                await ctx.reply(
+                    "❌ You must provide a duration for the timeout!\n"
+                    "Example: `.timeout @user 1h30m [reason]`\n"
+                    "Duration examples: `10m`, `2h`, `1d`, `1h30m`"
+                )
             else:
                 await self.generic_error(ctx, error, "timeout")
         else:
